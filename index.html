@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Note Atlas</title>
+    <meta
+      name="description"
+      content="A local-first note app prototype with thread mode, spatial recall, and smart bento layout."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Local-first thinking OS</p>
+          <h1>My Note Atlas</h1>
+          <p class="lede">
+            Capture instantly, organize by context, and review your ideas as if they were living on a map.
+          </p>
+        </div>
+        <div class="status-card">
+          <span class="status-dot"></span>
+          <div>
+            <strong id="noteCount">0 notes</strong>
+            <p id="syncState">Saved locally in your browser</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="command-bar">
+        <label class="search-box" for="searchInput">
+          <span>Search</span>
+          <input id="searchInput" type="search" placeholder="Search titles, content, tags, or threads" />
+        </label>
+        <button id="newNoteButton" class="primary-button">New note</button>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel notes-panel">
+          <div class="panel-header">
+            <h2>Notes</h2>
+            <span id="activeNoteLabel">Ready</span>
+          </div>
+          <div id="noteList" class="note-list" aria-live="polite"></div>
+        </aside>
+
+        <section class="panel editor-panel">
+          <div class="panel-header">
+            <h2>Editor</h2>
+            <span>Ctrl/⌘ + Enter to save</span>
+          </div>
+          <input id="titleInput" class="title-input" type="text" placeholder="Title your thought" />
+          <textarea
+            id="contentInput"
+            class="content-input"
+            placeholder="Write fast. Use #tags, - bullets, and @mentions to create structure automatically."
+          ></textarea>
+          <div class="editor-footer">
+            <div id="autoSignals" class="signal-row"></div>
+            <button id="saveButton" class="primary-button">Save note</button>
+          </div>
+        </section>
+
+        <aside class="panel insight-panel">
+          <div class="panel-header">
+            <h2>Context Deck</h2>
+            <span>Live from your notes</span>
+          </div>
+
+          <article class="insight-card">
+            <div class="insight-head">
+              <h3>Thread Mode</h3>
+              <span id="threadCount">0 branches</span>
+            </div>
+            <div id="threadView" class="thread-view"></div>
+          </article>
+
+          <article class="insight-card">
+            <div class="insight-head">
+              <h3>Spatial Recall</h3>
+              <span>Last snapshots</span>
+            </div>
+            <div id="recallView" class="recall-view"></div>
+          </article>
+
+          <article class="insight-card">
+            <div class="insight-head">
+              <h3>Smart Bento Grid</h3>
+              <span id="bentoSummary">0 clusters</span>
+            </div>
+            <div id="bentoGrid" class="bento-grid"></div>
+          </article>
+        </aside>
+      </section>
+    </main>
+
+    <template id="noteItemTemplate">
+      <button class="note-item" type="button">
+        <div class="note-item-top">
+          <strong class="note-item-title"></strong>
+          <span class="note-item-date"></span>
+        </div>
+        <p class="note-item-preview"></p>
+        <div class="note-item-tags"></div>
+      </button>
+    </template>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
