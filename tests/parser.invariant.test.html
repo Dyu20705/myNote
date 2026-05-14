@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parser Invariant Tests</title>
+  </head>
+  <body>
+    <pre id="result">Running...</pre>
+    <script type="module">
+      import { runParserInvariantTests } from "./parser.invariant.test.js";
+
+      const resultEl = document.getElementById("result");
+      try {
+        const message = runParserInvariantTests();
+        resultEl.textContent = message;
+      } catch (error) {
+        resultEl.textContent = `FAILED: ${error.message}`;
+        throw error;
+      }
+    </script>
+  </body>
+</html>
