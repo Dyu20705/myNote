@@ -17,6 +17,7 @@
         <div class="status-line">
           <span id="noteCount">0 notes</span>
           <span id="saveState">Saved locally</span>
+          <span id="metricsState" class="metrics-state">render:0.0ms search:0.0ms worker:0.0ms autosave:0.0ms mem:0.0MB</span>
         </div>
       </header>
 
@@ -40,15 +41,26 @@
         <section class="panel editor-panel">
           <div class="panel-header">
             <h2>Editor</h2>
-            <span>Ctrl/⌘+Enter saves</span>
+            <span>Markdown native</span>
           </div>
           <input id="titleInput" class="title-input" type="text" placeholder="Title" spellcheck="false" />
           <textarea id="contentInput" class="content-input" placeholder="Write here."></textarea>
+          <section class="backlinks-panel" aria-live="polite">
+            <h3>Backlinks</h3>
+            <div id="backlinksList" class="backlinks-list"></div>
+          </section>
           <div class="editor-footer">
-            <span class="hint">Ctrl/⌘+N new note</span>
+            <span class="hint">Ctrl/⌘+K command palette</span>
             <button id="saveButton" class="primary-button" type="button">Save</button>
           </div>
         </section>
+      </section>
+
+      <section id="commandPalette" class="command-palette" hidden>
+        <div class="command-panel" role="dialog" aria-modal="true" aria-label="Command palette">
+          <input id="commandInput" class="command-input" type="text" placeholder="Type a command" autocomplete="off" />
+          <div id="commandList" class="command-list"></div>
+        </div>
       </section>
     </main>
 
