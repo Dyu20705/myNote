@@ -44,6 +44,7 @@ The architecture baseline is frozen in docs:
 - [Performance Budget](docs/PERFORMANCE_BUDGET.md)
 - [Roadmap Phase 2](docs/ROADMAP_PHASE_2.md)
 - [AI Agent Rules](docs/AI_AGENT_RULES.md)
+- [Governance Contract](docs/GOVERNANCE.md)
 - [User Flow va Beta Test](docs/USER_FLOW_BETA_TEST.md)
 
 ## Bao mat va An toan van hanh (Security and Operational Safety)
