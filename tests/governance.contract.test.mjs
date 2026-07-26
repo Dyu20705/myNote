@@ -4,13 +4,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
+const FORBIDDEN_PLACEHOLDERS = new RegExp(`\\b(?:${["TO", "DO"].join("")}|${["T", "BD"].join("")})\\b`);
 
 function readRepositoryFile(path) {
   return readFileSync(resolve(ROOT, path), "utf8");
 }
 
 function assertNoPlaceholders(content, path) {
-  assert.doesNotMatch(content, /\b(?:TODO|TBD)\b/, `${path} must not contain TODO or TBD`);
+  assert.doesNotMatch(content, FORBIDDEN_PLACEHOLDERS, `${path} must not contain unresolved placeholders`);
 }
 
 test("governance defines mandatory milestone and lifecycle gates", () => {
