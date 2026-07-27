@@ -29,6 +29,12 @@ function isWithinRepository(filePath) {
   );
 }
 
+function decodeRequestPath(requestUrl) {
+  const pathEnd = requestUrl.search(/[?#]/);
+  const rawPath = pathEnd === -1 ? requestUrl : requestUrl.slice(0, pathEnd);
+  return decodeURIComponent(rawPath);
+}
+
 const server = createServer(async (request, response) => {
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
@@ -38,9 +44,7 @@ const server = createServer(async (request, response) => {
 
   let requestPath;
   try {
-    requestPath = decodeURIComponent(
-      new URL(request.url, `http://${host}:${port}`).pathname,
-    );
+    requestPath = decodeRequestPath(request.url ?? "/");
   } catch {
     response.writeHead(400);
     response.end("Bad Request");

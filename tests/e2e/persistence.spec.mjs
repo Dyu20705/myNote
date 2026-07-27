@@ -13,7 +13,7 @@ test("edited synthetic note survives a save-triggered reload", async ({ page }) 
   await page.locator("#contentInput").fill(content);
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
 
-  await page.locator("#saveButton").click();
+  await page.keyboard.press("Control+Enter");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
 
   await page.reload();
