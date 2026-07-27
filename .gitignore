@@ -50,3 +50,6 @@ user-data/
 
 # Package managers
 node_modules/
+
+# Local Git worktrees
+.worktrees/
