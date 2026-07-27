@@ -4,9 +4,11 @@ Ung dung ghi chu local-first, tap trung vao tinh xac dinh (deterministic), ro ra
 
 ## Verification
 
-Use Node `>=22.13 <23` and install the locked dependencies with `npm ci`. Before running the end-to-end suite, install Chromium with `npx playwright install --with-deps chromium`.
+Use Node `>=22.13 <23`. From a clean checkout, run the locked install and browser prerequisite before the four public verification commands:
 
 ```sh
+npm ci
+npx --no-install playwright install --with-deps chromium
 npm run lint
 npm run test:unit
 npm run test:integration
