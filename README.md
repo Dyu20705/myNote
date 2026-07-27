@@ -2,6 +2,17 @@
 
 Ung dung ghi chu local-first, tap trung vao tinh xac dinh (deterministic), ro rang kien truc, va an toan van hanh.
 
+## Verification
+
+Use Node 22 and install the locked dependencies with `npm ci`. Before running the end-to-end suite, install Chromium with `npx playwright install --with-deps chromium`.
+
+```sh
+npm run lint
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+```
+
 ## Triet ly (Philosophy)
 
 - Mac dinh local-first: du lieu o tren thiet bi.
