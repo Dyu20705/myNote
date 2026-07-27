@@ -2,18 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give issue #24 a reproducible Node 22 install, lint, unit, integration, E2E, and CI contract without changing shipped application behavior or persistence schema.
+**Goal:** Give issue #24 a reproducible Node `>=22.13 <23` install, lint, unit, integration, E2E, and CI contract without changing shipped application behavior or persistence schema.
 
-**Architecture:** Node's built-in runner owns unit and integration execution. `fake-indexeddb` provides the IndexedDB standard API to the real `core/storage.js`; one serial test file resets the canonical test database before and after every case. Playwright serves existing static assets through a repository-owned localhost server and proves the current focused-editor `Control+Enter` / `#saveState` / reload flow.
+**Architecture:** Node's built-in runner owns unit and integration execution. `fake-indexeddb` provides the IndexedDB standard API to the real `core/storage.js`; one serial test file resets the canonical test database before and after every case. Playwright serves an explicit application-asset allowlist through a repository-owned localhost server and proves the existing Save-button / `#saveState` / reload flow while the ordinary debounce is frozen.
 
 **Tech Stack:** Node 22, npm 11.7.0, ESLint, Node test runner, fake-indexeddb, @playwright/test, Chromium, GitHub Actions.
 
 ## Global Constraints
 
-- `package.json` is private ESM with `engines.node: >=22 <23` and `packageManager: npm@11.7.0`; runtime dependencies remain empty.
+- `package.json` is private ESM with `engines.node: >=22.13 <23` and `packageManager: npm@11.7.0`; runtime dependencies remain empty.
 - Public verification scripts are exactly `lint`, `test:unit`, `test:integration`, and `test:e2e`; script commands are Windows and Linux compatible.
 - No production runtime, persistence schema, parser behavior, migration, or UI behavior changes.
-- Server binds only to `127.0.0.1:4173`; it has no SPA fallback and rejects traversal.
+- Server binds only to `127.0.0.1:4173`; it serves only the application asset allowlist, caps reads at 1 MiB, has no SPA fallback, and rejects traversal, dotfiles, and repository tooling.
 - E2E uses one Chromium project, clean context, `retries: 0`, trace retain-on-failure, screenshot only-on-failure, and video off.
 - CI has `contents: read`, no secrets, and only uploads safe Playwright evidence after failure for three days.
 - Test fixtures are synthetic and test output must not contain personal note content.
@@ -55,7 +55,7 @@ test("existing parser invariants run unchanged under Node", () => {
 
 Run: `node --test tests/unit/parser.invariant.node.test.mjs`
 
-Expected: RED because `.js` imports are not yet treated as ESM without package metadata.
+Observed baseline: GREEN on Node 22.20.0 because Node syntax-detected the imported `.js` module as ESM, with a `MODULE_TYPELESS_PACKAGE_JSON` warning. This adapter therefore did not supply independent RED evidence; the absent package script, missing `fake-indexeddb`, missing Playwright, and deliberately unimplemented server contract supplied the required toolchain REDs.
 
 - [ ] **Step 3: Write real-storage integration contracts**
 
@@ -90,9 +90,12 @@ Expected: RED because `fake-indexeddb` is absent.
 test("edited synthetic note survives a save-triggered reload", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("textbox", { name: "Note title" }).fill("E2E synthetic title");
+  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now());
   await page.getByRole("textbox", { name: "Note content" }).fill("E2E synthetic body");
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
-  await page.keyboard.press("Control+Enter");
+  await page.locator("#saveButton").dispatchEvent("click");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Note content" })).toHaveValue("E2E synthetic body");
@@ -130,13 +133,13 @@ git commit -m "test: define deterministic toolchain contracts"
 {
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22 <23" },
+  "engines": { "node": ">=22.13 <23" },
   "packageManager": "npm@11.7.0",
   "scripts": {
     "lint": "eslint . --ext .js,.mjs",
-    "test:unit": "node --test tests/governance.contract.test.mjs tests/unit",
-    "test:integration": "node --test --test-concurrency=1 tests/integration",
-    "test:e2e": "playwright test"
+    "test:unit": "node --test tests/governance.contract.test.mjs tests/unit/parser.invariant.node.test.mjs tests/unit/static-server.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/storage.lifecycle.test.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs"
   }
 }
 ```
@@ -159,7 +162,7 @@ Expected: parser adapter and three governance tests pass; storage lifecycle and 
 
 - [ ] **Step 4: Document the local contract**
 
-Add concise README instructions for Node 22, `npm ci`, `npx playwright install --with-deps chromium`, and the four public verification commands.
+Add concise README instructions for Node `>=22.13 <23`, `npm ci`, `npx playwright install --with-deps chromium`, and the four public verification commands.
 
 - [ ] **Step 5: Commit package and test tooling**
 
@@ -172,27 +175,41 @@ git commit -m "build: add deterministic Node verification tooling"
 
 **Files:**
 - Modify: `scripts/serve-static.mjs`
+- Create: `scripts/run-e2e.mjs`
 - Modify: `playwright.config.mjs`
 - Modify: `tests/e2e/persistence.spec.mjs`
+- Create: `tests/unit/static-server.test.mjs`
 
 **Interfaces:**
-- Consumes: existing `index.html`, static JS/CSS assets, the focused-editor `Control+Enter` autosave flush behavior, and `#saveState`.
-- Produces: a clean Chromium reload-persistence smoke journey with no product code changes.
+- Consumes: existing `index.html`, application JS/CSS assets, the existing Save-button handler, and `#saveState`.
+- Produces: a fail-closed localhost asset server and a clean Chromium reload-persistence smoke journey with no product code changes.
 
-- [ ] **Step 1: Implement the smallest safe server**
+- [ ] **Step 1: Write and observe the static-server security RED**
 
-Use `node:http`, `node:fs/promises`, `node:path`, and `fileURLToPath`. Decode the request pathname, map `/` to `index.html`, resolve it below the repository root, reject resolved paths outside the root with 403, respond to unknown paths with 404, set MIME types for `.html`, `.js`, `.css`, `.json`, `.svg`, `.png`, `.ico`, and listen on `127.0.0.1:4173`. Print `Static server ready at http://127.0.0.1:4173` only after `listen` succeeds. On `SIGINT` and `SIGTERM`, close the server and exit. Convert `EADDRINUSE` to a clear non-zero error.
+Create `tests/unit/static-server.test.mjs` using a child process and real HTTP requests. Cover readiness, HTML/JS MIME types, HEAD, 405/Allow, malformed encoding, missing allowlisted assets, encoded traversal, and 403 responses for `package.json`, the lockfile, `.git`, tests, and scripts.
 
-- [ ] **Step 2: Verify the server test is GREEN**
+Run: `node --test tests/unit/static-server.test.mjs`
+
+Expected RED against the initial server: `/package.json` returns 200 instead of the required 403.
+
+- [ ] **Step 2: Implement the smallest safe server and verify GREEN**
+
+Use `node:http`, `node:fs/promises`, `node:path`, and `fileURLToPath`. Decode the request pathname, map `/` to `index.html`, and allow only `/index.html`, `/styles.css`, `/app.js`, and `.js` assets below `/core/` and `/ui/`. Reject every other path with 403. Retain lexical root containment and verify the canonical real path before opening a file. Reject non-files and assets over 1 MiB; read through a fixed 1 MiB-plus-one buffer so growth after `stat` remains bounded. Respond to missing allowlisted assets with 404, and listen on `127.0.0.1:4173`. Print `Static server ready at http://127.0.0.1:4173` only after `listen` succeeds. On `SIGINT` and `SIGTERM`, close the server and exit. Convert `EADDRINUSE` to a clear non-zero error.
+
+Run: `node --test tests/unit/static-server.test.mjs`
+
+Expected: GREEN.
+
+- [ ] **Step 3: Verify timer-isolated Save-button E2E and success cleanup**
 
 Run: `npm run test:e2e`
 
-Expected: one Chromium test passes after focused-editor `Control+Enter` triggers the existing autosave flush path, `#saveState` reports `Saved locally` after `putNoteToDb` completes, and reload verifies the title and content through the UI. Real Chromium execution showed that clicking `#saveButton` while `#contentInput` is focused triggers the blur handler's `autosave.flush()` before the click handler, so a click-based test could pass even if that handler were broken; the keyboard action avoids this blur masking. Playwright owns process startup/shutdown and preserves no success artifacts.
+Expected: one Chromium test passes after the title autosave settles, the Playwright page clock is installed and paused, the final content edit queues but cannot fire the 350 ms debounce, and a directly dispatched click reaches the existing `#saveButton` handler without pointer blur. `#saveState` reports `Saved locally` after persistence and search refresh complete, then reload verifies title and content through the UI. Configure `preserveOutput: failures-only`, trace and screenshots on failure, and line plus HTML reporters. A cross-platform Node wrapper removes `playwright-report` and `test-results` only after exit code 0; a failure retains both directories for CI upload.
 
-- [ ] **Step 3: Commit E2E support**
+- [ ] **Step 4: Commit E2E support**
 
 ```bash
-git add scripts/serve-static.mjs playwright.config.mjs tests/e2e/persistence.spec.mjs
+git add scripts/serve-static.mjs scripts/run-e2e.mjs playwright.config.mjs tests/e2e/persistence.spec.mjs tests/unit/static-server.test.mjs
 git commit -m "test: add persistence reload smoke coverage"
 ```
 
@@ -203,11 +220,11 @@ git commit -m "test: add persistence reload smoke coverage"
 
 **Interfaces:**
 - Consumes: `package-lock.json` and all four public npm scripts.
-- Produces: pull-request and main-push verification using Node 22 and Chromium.
+- Produces: pull-request and main-push verification using Node 22.20.0 and Chromium.
 
 - [ ] **Step 1: Write workflow contract**
 
-Create PR and `main` push triggers, `permissions: { contents: read }`, a finite job timeout, reviewed official full-SHA action pins with release comments, Node 22 setup, `npm ci`, lint, unit, integration, Playwright Chromium installation, and E2E. After E2E failure only, upload `playwright-report` and `test-results` with `retention-days: 3` and an artifact name based on `${{ github.run_id }}`. Do not upload a database, profile, secret, or fixture content.
+Create PR and `main` push triggers, `permissions: { contents: read }`, a finite job timeout, reviewed official full-SHA action pins with release comments, Node 22.20.0 setup, `npm ci`, lint, unit, integration, Playwright Chromium installation, and E2E. After E2E failure only, upload `playwright-report` and `test-results` with `retention-days: 3` and an artifact name based on `${{ github.run_id }}`. Do not upload a database, profile, secret, or fixture content.
 
 - [ ] **Step 2: Add a failing workflow contract check if necessary**
 

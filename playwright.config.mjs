@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: "./tests/e2e",
   workers: 1,
   retries: 0,
+  preserveOutput: "failures-only",
+  reporter: [["line"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://127.0.0.1:4173",
     browserName: "chromium",

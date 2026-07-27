@@ -4,7 +4,7 @@ Ung dung ghi chu local-first, tap trung vao tinh xac dinh (deterministic), ro ra
 
 ## Verification
 
-Use Node 22 and install the locked dependencies with `npm ci`. Before running the end-to-end suite, install Chromium with `npx playwright install --with-deps chromium`.
+Use Node `>=22.13 <23` and install the locked dependencies with `npm ci`. Before running the end-to-end suite, install Chromium with `npx playwright install --with-deps chromium`.
 
 ```sh
 npm run lint
