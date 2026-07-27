@@ -4,7 +4,7 @@
 
 **Goal:** Give issue #24 a reproducible Node 22 install, lint, unit, integration, E2E, and CI contract without changing shipped application behavior or persistence schema.
 
-**Architecture:** Node's built-in runner owns unit and integration execution. `fake-indexeddb` provides the IndexedDB standard API to the real `core/storage.js`; one serial test file resets the canonical test database before and after every case. Playwright serves existing static assets through a repository-owned localhost server and proves the current save-button/indicator/reload flow.
+**Architecture:** Node's built-in runner owns unit and integration execution. `fake-indexeddb` provides the IndexedDB standard API to the real `core/storage.js`; one serial test file resets the canonical test database before and after every case. Playwright serves existing static assets through a repository-owned localhost server and proves the current focused-editor `Control+Enter` / `#saveState` / reload flow.
 
 **Tech Stack:** Node 22, npm 11.7.0, ESLint, Node test runner, fake-indexeddb, @playwright/test, Chromium, GitHub Actions.
 
@@ -176,7 +176,7 @@ git commit -m "build: add deterministic Node verification tooling"
 - Modify: `tests/e2e/persistence.spec.mjs`
 
 **Interfaces:**
-- Consumes: existing `index.html`, static JS/CSS assets, and existing `#saveButton`/`#saveState` behavior.
+- Consumes: existing `index.html`, static JS/CSS assets, the focused-editor `Control+Enter` autosave flush behavior, and `#saveState`.
 - Produces: a clean Chromium reload-persistence smoke journey with no product code changes.
 
 - [ ] **Step 1: Implement the smallest safe server**
@@ -187,7 +187,7 @@ Use `node:http`, `node:fs/promises`, `node:path`, and `fileURLToPath`. Decode th
 
 Run: `npm run test:e2e`
 
-Expected: one Chromium test passes; Playwright owns process startup/shutdown and preserves no success artifacts.
+Expected: one Chromium test passes after focused-editor `Control+Enter` triggers the existing autosave flush path, `#saveState` reports `Saved locally` after `putNoteToDb` completes, and reload verifies the title and content through the UI. Real Chromium execution showed that clicking `#saveButton` while `#contentInput` is focused triggers the blur handler's `autosave.flush()` before the click handler, so a click-based test could pass even if that handler were broken; the keyboard action avoids this blur masking. Playwright owns process startup/shutdown and preserves no success artifacts.
 
 - [ ] **Step 3: Commit E2E support**
 
