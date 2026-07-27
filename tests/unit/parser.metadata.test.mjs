@@ -112,13 +112,29 @@ test("extractCodeBlocks handles defaults, normalized languages, empty blocks, an
   ]);
 });
 
-test("parseMarkdown preserves heading levels and ordinary paragraphs", () => {
-  assert.deepEqual(parseMarkdown("# One\n###### Six\n####### Seven\nordinary"), [
+test("parseMarkdown preserves heading levels one through six and ordinary paragraphs", () => {
+  assert.deepEqual(parseMarkdown("# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six\n####### Seven\nordinary"), [
     { type: "heading", level: 1, text: "One" },
+    { type: "heading", level: 2, text: "Two" },
+    { type: "heading", level: 3, text: "Three" },
+    { type: "heading", level: 4, text: "Four" },
+    { type: "heading", level: 5, text: "Five" },
     { type: "heading", level: 6, text: "Six" },
     { type: "paragraph", text: "####### Seven" },
     { type: "paragraph", text: "ordinary" },
   ]);
+});
+
+test("wiki link fragments on opposite sides of a fence do not form a synthetic link", () => {
+  const input = [
+    "[[Before",
+    "```txt",
+    "hidden",
+    "```",
+    "After]] [[Visible]]",
+  ].join("\n");
+
+  assert.deepEqual(parseWikiLinks(input), ["Visible"]);
 });
 
 test("metadata immediately before and after fences preserves first-seen order", () => {

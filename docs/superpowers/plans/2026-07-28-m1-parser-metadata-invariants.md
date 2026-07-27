@@ -27,6 +27,20 @@
 - `npm run test:e2e` outside sandbox: exit 0; 1 passed, 0 failed, 0 skipped; Playwright duration 4.2 s.
 - Runtime: Node v22.20.0 and npm 11.7.0.
 
+## Observed RED Evidence
+
+- Command: `node --test tests/unit/parser.metadata.test.mjs`.
+- Exit: 1; 15 tests total, 9 passed, 6 failed, 0 skipped; TAP duration 161.814 ms.
+- Intended failing tests:
+  - `extractTags excludes apparent tags inside a closed fenced code block`: actual tags included `inside`.
+  - `parseWikiLinks excludes apparent links inside a closed fenced code block`: actual links included `Hidden`.
+  - `parseMarkdown represents fenced code once without delimiter or body paragraphs`: actual AST also contained the opening delimiter, code body, and closing delimiter as paragraphs.
+  - `an unclosed fence is deterministic and excludes apparent metadata through end of input`: actual output exposed `inside`/`Hidden`, emitted body paragraphs, and returned no code block.
+  - `metadata immediately before and after fences preserves first-seen order`: actual tags included fenced `hidden`.
+  - `LF and CRLF inputs produce structurally identical parser output`: the CRLF result returned no code block/code node.
+- Every failure was an `ERR_ASSERTION` against current parser behavior; there were no syntax, import, or harness errors.
+- Review follow-up RED used the same command after adding `wiki link fragments on opposite sides of a fence do not form a synthetic link`: exit 1; 16 tests total, 15 passed, 1 failed, 0 skipped; TAP duration 152.690 ms. Actual links were `["Before\nAfter", "Visible"]` instead of `["Visible"]`, proving that the first implementation joined metadata fragments across a fence.
+
 ---
 
 ### Task 1: Define the parser metadata contract and observe RED
@@ -143,7 +157,7 @@ Keep `normalizeTag` private and preserve its ASCII/lowercase behavior.
 
 - [ ] **Step 2: Implement the line-oriented fenced-code scanner**
 
-Scan normalized lines exactly once. Outside a fence, recognize headings and paragraphs and append the original outside line to metadata-visible text. A trimmed line matching `/^```([a-z0-9_-]*)$/i` opens a fence; a trimmed line equal to `"```"` closes it. Inside a fence, collect code lines but never metadata-visible text or paragraph nodes. On close, emit `{ language: (language || "txt").toLowerCase(), code }`; at EOF emit the same shape for an unclosed fence. Preserve LF between body lines and the newline immediately before a closing delimiter, while an unclosed body preserves only newlines present in input.
+Scan normalized lines exactly once. Outside a fence, recognize headings and paragraphs and append the original outside line to the current metadata-visible segment. A trimmed line matching `/^```([a-z0-9_-]*)$/i` opens a fence and terminates that segment; a trimmed line equal to `"```"` closes it. Inside a fence, collect code lines but never metadata-visible text or paragraph nodes. On close, emit `{ language: (language || "txt").toLowerCase(), code }`; at EOF emit the same shape for an unclosed fence. Preserve LF between body lines and the newline immediately before a closing delimiter, while an unclosed body preserves only newlines present in input. Extract metadata from each segment separately, then deduplicate in first-seen order so malformed wiki-link fragments cannot join across a fence.
 
 - [ ] **Step 3: Derive all public helper results from one analysis result**
 

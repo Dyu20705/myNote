@@ -30,11 +30,19 @@ function parseWikiLinksFromSource(source) {
 function scanMarkdown(source) {
   const lines = source.split("\n");
   const textNodes = [];
-  const metadataLines = [];
+  const metadataSegments = [];
   const codeBlocks = [];
+  let metadataLines = [];
   let codeLines = [];
   let fenceLanguage = "txt";
   let inFence = false;
+
+  function appendMetadataSegment() {
+    if (metadataLines.length) {
+      metadataSegments.push(metadataLines.join("\n"));
+      metadataLines = [];
+    }
+  }
 
   function appendCodeBlock(closed) {
     const code = closed && codeLines.length ? codeLines.join("\n") + "\n" : codeLines.join("\n");
@@ -58,6 +66,7 @@ function scanMarkdown(source) {
 
     const fenceMatch = trimmed.match(/^```([a-z0-9_-]*)$/i);
     if (fenceMatch) {
+      appendMetadataSegment();
       inFence = true;
       fenceLanguage = (fenceMatch[1] || "txt").toLowerCase();
       continue;
@@ -80,19 +89,20 @@ function scanMarkdown(source) {
   if (inFence) {
     appendCodeBlock(false);
   }
+  appendMetadataSegment();
 
   return {
     codeBlocks,
-    metadataSource: metadataLines.join("\n"),
+    metadataSegments,
     textNodes,
   };
 }
 
 function analyzeMarkdown(value) {
   const source = normalizeSource(value);
-  const { codeBlocks, metadataSource, textNodes } = scanMarkdown(source);
-  const tags = extractTagsFromSource(metadataSource);
-  const links = parseWikiLinksFromSource(metadataSource);
+  const { codeBlocks, metadataSegments, textNodes } = scanMarkdown(source);
+  const tags = [...new Set(metadataSegments.flatMap(extractTagsFromSource))];
+  const links = [...new Set(metadataSegments.flatMap(parseWikiLinksFromSource))];
   const ast = [
     ...textNodes,
     ...links.map((target) => ({ type: "wikilink", target })),

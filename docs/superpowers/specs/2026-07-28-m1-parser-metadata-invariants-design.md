@@ -6,7 +6,7 @@ Issue #37 establishes the pure parser contract for `parseDocument`, `parseMarkdo
 
 ## Chosen approach
 
-Use one private, line-oriented Markdown analysis pass inside `core/parser/index.js`. The pass normalizes CRLF/CR line endings to LF, tracks whether each line is outside or inside a triple-backtick fence, and returns ordinary Markdown nodes, fenced code blocks, and metadata-visible text. The exported helpers continue to accept the same values and return the same shapes; `parseDocument` calls the shared analysis once so aggregate fields cannot drift from helper behavior.
+Use one private, line-oriented Markdown analysis pass inside `core/parser/index.js`. The pass normalizes CRLF/CR line endings to LF, tracks whether each line is outside or inside a triple-backtick fence, and returns ordinary Markdown nodes, fenced code blocks, and separate metadata-visible segments. Segment boundaries prevent malformed tag/link syntax on opposite sides of a fence from being joined into synthetic metadata. The exported helpers continue to accept the same values and return the same shapes; `parseDocument` calls the shared analysis once so aggregate fields cannot drift from helper behavior.
 
 An opening fence is a trimmed line containing three backticks followed by an optional existing language identifier (`[a-z0-9_-]*`, case-insensitive). A trimmed line containing only three backticks closes it. Closed and unclosed fences both produce one deterministic code block/code AST node. Fence delimiter lines and code-body lines do not also become paragraph nodes. Code bodies and language identifiers are normalized consistently; an omitted language remains `txt`.
 
