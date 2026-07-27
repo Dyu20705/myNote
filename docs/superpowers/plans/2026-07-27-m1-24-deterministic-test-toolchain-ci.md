@@ -92,7 +92,7 @@ test("edited synthetic note survives a save-triggered reload", async ({ page }) 
   await page.getByRole("textbox", { name: "Note title" }).fill("E2E synthetic title");
   await page.getByRole("textbox", { name: "Note content" }).fill("E2E synthetic body");
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
-  await page.locator("#saveButton").click();
+  await page.keyboard.press("Control+Enter");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Note content" })).toHaveValue("E2E synthetic body");
