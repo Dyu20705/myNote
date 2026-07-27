@@ -18,6 +18,10 @@ Khong duoc:
 
 Metadata (tags, links, code blocks, token, ast) phai di qua parser pipeline.
 
+- Tag va wiki-link metadata chi duoc trich xuat ngoai fenced code, ke ca fence chua dong.
+- Moi fenced code chi xuat hien mot lan duoi dang code node, khong lap lai thanh paragraph.
+- Tokenization van bao gom noi dung code de giu kha nang tim kiem.
+
 Khong duoc:
 - Regex duplicate metadata extraction o UI, history, search orchestration.
 - Vua parse trong parser, vua parse lai o noi khac de "cho nhanh".

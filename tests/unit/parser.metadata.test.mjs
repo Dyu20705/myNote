@@ -32,7 +32,7 @@ test("parser helpers coerce a representative non-string value without crashing",
 });
 
 test("parseDocument returns structurally identical output for the same input", () => {
-  const input = "# Heading\n#Alpha [[First]]\n\`\`\`JS\nconst searchable_code = true;\n\`\`\`";
+  const input = "# Heading\n#Alpha [[First]]\n```JS\nconst searchable_code = true;\n```";
 
   assert.deepEqual(parseDocument(input), parseDocument(input));
 });
@@ -46,19 +46,19 @@ test("parseWikiLinks trims, deduplicates, and preserves first-seen order", () =>
 });
 
 test("extractTags excludes apparent tags inside a closed fenced code block", () => {
-  const input = "#outside\n\`\`\`JS\n#inside [[Hidden]]\n\`\`\`\n#after";
+  const input = "#outside\n```JS\n#inside [[Hidden]]\n```\n#after";
 
   assert.deepEqual(extractTags(input), ["outside", "after"]);
 });
 
 test("parseWikiLinks excludes apparent links inside a closed fenced code block", () => {
-  const input = "[[Visible]]\n\`\`\`JS\n#inside [[Hidden]]\n\`\`\`\n[[After]]";
+  const input = "[[Visible]]\n```JS\n#inside [[Hidden]]\n```\n[[After]]";
 
   assert.deepEqual(parseWikiLinks(input), ["Visible", "After"]);
 });
 
 test("parseMarkdown represents fenced code once without delimiter or body paragraphs", () => {
-  const input = "Before\n\`\`\`js\nconst value = 1;\n\`\`\`\nAfter";
+  const input = "Before\n```js\nconst value = 1;\n```\nAfter";
 
   assert.deepEqual(parseMarkdown(input), [
     { type: "paragraph", text: "Before" },
@@ -68,7 +68,7 @@ test("parseMarkdown represents fenced code once without delimiter or body paragr
 });
 
 test("an unclosed fence is deterministic and excludes apparent metadata through end of input", () => {
-  const input = "#outside\n\`\`\`TXT\n#inside [[Hidden]]\nconst searchable_unclosed = true;";
+  const input = "#outside\n```TXT\n#inside [[Hidden]]\nconst searchable_unclosed = true;";
   const expected = {
     ast: [
       { type: "paragraph", text: "#outside" },
@@ -95,14 +95,14 @@ test("an unclosed fence is deterministic and excludes apparent metadata through 
 
 test("extractCodeBlocks handles defaults, normalized languages, empty blocks, and multiple fences", () => {
   const input = [
-    "\`\`\`JS",
+    "```JS",
     "const one = 1;",
-    "\`\`\`",
-    "\`\`\`",
-    "\`\`\`",
-    "\`\`\`Ts_Lang",
+    "```",
+    "```",
+    "```",
+    "```Ts_Lang",
     "let two;",
-    "\`\`\`",
+    "```",
   ].join("\n");
 
   assert.deepEqual(extractCodeBlocks(input), [
@@ -124,9 +124,9 @@ test("parseMarkdown preserves heading levels and ordinary paragraphs", () => {
 test("metadata immediately before and after fences preserves first-seen order", () => {
   const input = [
     "#first [[First]]",
-    "\`\`\`txt",
+    "```txt",
     "#hidden [[Hidden]]",
-    "\`\`\`",
+    "```",
     "#second #first [[Second]] [[First]]",
   ].join("\n");
 
@@ -135,14 +135,14 @@ test("metadata immediately before and after fences preserves first-seen order", 
 });
 
 test("LF and CRLF inputs produce structurally identical parser output", () => {
-  const lf = "# Heading\n\`\`\`JS\nconst searchable_code = true;\n\`\`\`\n#after [[Visible]]";
+  const lf = "# Heading\n```JS\nconst searchable_code = true;\n```\n#after [[Visible]]";
   const crlf = lf.replaceAll("\n", "\r\n");
 
   assert.deepEqual(parseDocument(crlf), parseDocument(lf));
 });
 
 test("parseDocument aggregate fields stay consistent with parser helpers", () => {
-  const input = "# Heading\n#outside [[Visible]]\n\`\`\`js\n#hidden [[Hidden]]\n\`\`\`";
+  const input = "# Heading\n#outside [[Visible]]\n```js\n#hidden [[Hidden]]\n```";
   const parsed = parseDocument(input);
 
   assert.deepEqual(parsed.ast, parseMarkdown(input));
@@ -154,10 +154,10 @@ test("parseDocument aggregate fields stay consistent with parser helpers", () =>
 
 test("tokenize preserves searchable code content in closed and unclosed fences", () => {
   const input = [
-    "\`\`\`js",
+    "```js",
     "const searchable_closed = true;",
-    "\`\`\`",
-    "\`\`\`txt",
+    "```",
+    "```txt",
     "searchable_unclosed",
   ].join("\n");
   const tokens = tokenize(input);
