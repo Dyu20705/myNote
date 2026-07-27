@@ -2,6 +2,19 @@
 
 Ung dung ghi chu local-first, tap trung vao tinh xac dinh (deterministic), ro rang kien truc, va an toan van hanh.
 
+## Verification
+
+Use Node `>=22.13 <23`. From a clean checkout, run the locked install and browser prerequisite before the four public verification commands:
+
+```sh
+npm ci
+npx --no-install playwright install --with-deps chromium
+npm run lint
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+```
+
 ## Triet ly (Philosophy)
 
 - Mac dinh local-first: du lieu o tren thiet bi.

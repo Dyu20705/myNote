@@ -1,0 +1,20 @@
+{
+  "name": "mynote",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13 <23"
+  },
+  "packageManager": "npm@11.7.0",
+  "scripts": {
+    "lint": "eslint . --ext .js,.mjs",
+    "test:unit": "node --test tests/governance.contract.test.mjs tests/unit/parser.invariant.node.test.mjs tests/unit/static-server.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/storage.lifecycle.test.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0",
+    "eslint": "10.8.0",
+    "fake-indexeddb": "6.2.5"
+  }
+}
