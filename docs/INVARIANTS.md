@@ -26,6 +26,15 @@ Khong duoc:
 - Regex duplicate metadata extraction o UI, history, search orchestration.
 - Vua parse trong parser, vua parse lai o noi khac de "cho nhanh".
 
+### Canonical note normalization
+
+- `normalizeNote` phai canonicalize `title` va `content`, sau do parse `content` dung mot lan.
+- `links` va `ast` phai luon duoc rebuild tu ket qua parser hien tai.
+- `checksum` phai luon duoc rebuild tu canonical `title`, mot ky tu newline, va exact `content`.
+- `searchBlob` phai luon duoc rebuild sau cung tu note da normalize.
+- Khong duoc tin cay `links`, `ast`, `checksum`, hoac `searchBlob` do caller cung cap.
+- Quy tac nay chay tai normalization boundary; khong yeu cau migration hay rewrite persistence hien co.
+
 ## 3) State Transition Invariant
 
 - Moi thay doi state phai qua action path ro rang.
