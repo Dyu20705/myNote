@@ -118,6 +118,7 @@ test("missing blocks are generated with stable shape and unique IDs", () => {
 test("version keeps positive integers and otherwise falls back to one", () => {
   const cases = [
     [undefined, 1],
+    [null, 1],
     [0, 1],
     [-1, 1],
     [1.5, 1],
