@@ -2,6 +2,7 @@ import { createAutosave } from "./core/autosave.js";
 import { createBacklinkIndex } from "./core/backlinks.js";
 import { createCommandStack } from "./core/commandStack.js";
 import { createHistory } from "./core/history.js";
+import { createNoteLifecycle } from "./core/noteLifecycle.js";
 import {
   createEmptyNote,
   normalizeNote,
@@ -111,6 +112,12 @@ function bumpSaveRevision() {
   return next;
 }
 
+function runAction(action) {
+  const result = Promise.resolve().then(action);
+  result.catch(() => {});
+  return result;
+}
+
 function renderTopline() {
   const state = store.getState();
   const count = state.notes.length;
@@ -154,7 +161,7 @@ function renderBacklinks() {
     button.className = "backlink-item";
     button.textContent = note.title;
     button.addEventListener("click", () => {
-      void setActiveNote(note.id);
+      runAction(() => setActiveNote(note.id));
     });
     els.backlinksList.append(button);
   }
@@ -193,11 +200,11 @@ async function deleteActiveNote() {
 const listView = createListView({
   container: els.noteList,
   onSelect(id) {
-    void setActiveNote(id);
+    runAction(() => setActiveNote(id));
   },
   onDelete(id) {
     if (activeNote()?.id === id) {
-      void deleteActiveNote();
+      runAction(() => deleteActiveNote());
     }
   },
   formatDate,
@@ -261,18 +268,29 @@ function mergeDraftIntoNote(note, draft) {
   });
 }
 
-function upsertNoteInMemory(note, activeId = note.id) {
+function upsertNoteInMemory(note, activeId = note.id, options = {}) {
+  const { preserveEditorDraft = false } = options;
   const state = store.getState();
   const existing = state.notes.find((item) => item.id === note.id);
   const notes = existing
     ? [note, ...state.notes.filter((item) => item.id !== note.id)].sort(sortByUpdatedAtDesc)
     : [note, ...state.notes].sort(sortByUpdatedAtDesc);
 
-  const recent = [activeId, ...state.recentIds.filter((item) => item !== activeId)].slice(0, 20);
-  store.setState({ notes, activeId, recent, dirty: false });
-  backlinkIndex.upsert(note, existing || null);
-  setBacklinksFromIndex();
-  renderAll();
+  const recentIds = [activeId, ...state.recentIds.filter((item) => item !== activeId)].slice(0, 20);
+  store.setState({
+    notes,
+    activeId,
+    recentIds,
+    dirty: preserveEditorDraft ? state.dirty : false,
+  });
+
+  if (preserveEditorDraft) {
+    renderTopline();
+    renderList();
+    renderBacklinks();
+  } else {
+    renderAll();
+  }
 }
 
 function removeNoteInMemory(id, preferredActiveId = null) {
@@ -282,39 +300,51 @@ function removeNoteInMemory(id, preferredActiveId = null) {
     preferredActiveId && notes.find((note) => note.id === preferredActiveId)
       ? preferredActiveId
       : notes[0]?.id ?? null;
-  const recent = state.recentIds.filter((item) => item !== id);
+  const recentIds = state.recentIds.filter((item) => item !== id);
 
-  store.setState({ notes, activeId: nextActiveId, recent, dirty: false });
-  backlinkIndex.remove(id);
-  setBacklinksFromIndex();
+  store.setState({ notes, activeId: nextActiveId, recentIds, dirty: false });
   renderAll();
 }
 
-async function persistAndIndexUpsert(note) {
-  const state = store.getState();
-  await putNoteToDb(state.db, note);
-  await searchClient.upsert(note);
-}
-
-async function persistAndIndexRemove(id) {
-  const state = store.getState();
-  await deleteNoteFromDb(state.db, id);
-  await searchClient.remove(id);
-}
-
-async function saveMessageGuard(work, revision = null) {
-  const startedAt = performance.now();
-  try {
-    await work();
-    if (revision === null || store.getState().saveRevision === revision) {
-      store.setState({ saveMessage: "Saved locally", dirty: false });
-    }
-  } catch {
+const noteLifecycle = createNoteLifecycle({
+  persistUpsert(note) {
+    return putNoteToDb(store.getState().db, note);
+  },
+  persistRemove(id) {
+    return deleteNoteFromDb(store.getState().db, id);
+  },
+  commitUpsert(note, context) {
+    const preserveEditorDraft =
+      context.revision !== null && store.getState().saveRevision !== context.revision;
+    upsertNoteInMemory(note, context.activeId, { preserveEditorDraft });
+  },
+  commitRemove(id, context) {
+    removeNoteInMemory(id, context.preferredActiveId);
+  },
+  async updateDerivedUpsert(note, context) {
+    backlinkIndex.upsert(note, context.previousNote);
+    setBacklinksFromIndex();
+    renderBacklinks();
+    await searchClient.upsert(note);
+    await refreshSearch();
+  },
+  async updateDerivedRemove(id) {
+    backlinkIndex.remove(id);
+    setBacklinksFromIndex();
+    renderBacklinks();
+    await searchClient.remove(id);
+    await refreshSearch();
+  },
+  onCanonicalFailure() {
     store.setState({ saveMessage: "Storage unavailable" });
-  }
-  renderTopline();
-  updateMetrics({ autosaveMs: performance.now() - startedAt });
-}
+  },
+  onDerivedFailure() {
+    store.setState({ saveMessage: "Saved locally; search index unavailable" });
+  },
+  onSuccess() {
+    store.setState({ saveMessage: "Saved locally" });
+  },
+});
 
 function focusEditor() {
   els.contentInput.focus();
@@ -326,6 +356,7 @@ function focusSearch() {
 }
 
 function markDirtyAndQueueSave() {
+  bumpSaveRevision();
   store.setState({ dirty: true });
   renderTopline();
   autosave.queue();
@@ -337,20 +368,16 @@ async function applyUpsertNote(note, options = {}) {
     return;
   }
 
-  upsertNoteInMemory(note, activeId);
-  await saveMessageGuard(async () => {
-    if (revision !== null && store.getState().saveRevision !== revision) {
-      return;
+  const startedAt = performance.now();
+  const previousNote = store.getState().notes.find((item) => item.id === note.id) ?? null;
+  try {
+    await noteLifecycle.upsert(note, { activeId, revision, previousNote });
+    if (historyOp) {
+      history.record({ ...historyOp, timestamp: now() });
     }
-    await persistAndIndexUpsert(note);
-    if (revision !== null && store.getState().saveRevision !== revision) {
-      return;
-    }
-    await refreshSearch();
-  }, revision);
-
-  if (historyOp) {
-    history.record({ ...historyOp, timestamp: now() });
+  } finally {
+    renderTopline();
+    updateMetrics({ autosaveMs: performance.now() - startedAt });
   }
 }
 
@@ -360,20 +387,15 @@ async function applyRemoveNote(id, options = {}) {
     return;
   }
 
-  removeNoteInMemory(id, preferredActiveId);
-  await saveMessageGuard(async () => {
-    if (revision !== null && store.getState().saveRevision !== revision) {
-      return;
+  const startedAt = performance.now();
+  try {
+    await noteLifecycle.remove(id, { preferredActiveId, revision });
+    if (historyOp) {
+      history.record({ ...historyOp, timestamp: now() });
     }
-    await persistAndIndexRemove(id);
-    if (revision !== null && store.getState().saveRevision !== revision) {
-      return;
-    }
-    await refreshSearch();
-  }, revision);
-
-  if (historyOp) {
-    history.record({ ...historyOp, timestamp: now() });
+  } finally {
+    renderTopline();
+    updateMetrics({ autosaveMs: performance.now() - startedAt });
   }
 }
 
@@ -394,7 +416,7 @@ async function saveCurrentNote() {
   const next = mergeDraftIntoNote(note, draft);
   const patch = createNotePatch(note, next);
   const inversePatch = invertNotePatch(patch);
-  const revision = bumpSaveRevision();
+  const revision = state.saveRevision;
 
   await commandStack.execute({
     do: async () => {
@@ -650,7 +672,7 @@ const palette = createPalette({
   input: els.commandInput,
   list: els.commandList,
   onRun(command) {
-    void command.run();
+    runAction(() => command.run());
   },
 });
 
@@ -673,18 +695,18 @@ els.searchInput.addEventListener("input", async (event) => {
 });
 
 els.newNoteButton.addEventListener("click", () => {
-  void createNote();
+  runAction(() => createNote());
 });
 
 els.saveButton.addEventListener("click", () => {
-  void autosave.flush();
+  runAction(() => autosave.flush());
 });
 
 for (const field of [els.titleInput, els.contentInput]) {
   field.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
-      void autosave.flush();
+      runAction(() => autosave.flush());
       return;
     }
 
@@ -700,7 +722,7 @@ for (const field of [els.titleInput, els.contentInput]) {
   });
 
   field.addEventListener("blur", () => {
-    void autosave.flush();
+    runAction(() => autosave.flush());
   });
 }
 
@@ -716,14 +738,14 @@ window.addEventListener("keydown", (event) => {
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
     event.preventDefault();
-    void createNote();
+    runAction(() => createNote());
     return;
   }
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
     if (shouldHandleGlobalKey(event)) {
       event.preventDefault();
-      void undoLastCommand();
+      runAction(() => undoLastCommand());
     }
     return;
   }
@@ -734,14 +756,14 @@ window.addEventListener("keydown", (event) => {
   ) {
     if (shouldHandleGlobalKey(event)) {
       event.preventDefault();
-      void redoLastCommand();
+      runAction(() => redoLastCommand());
     }
     return;
   }
 
   if ((event.ctrlKey || event.metaKey) && event.key === "Tab") {
     event.preventDefault();
-    void switchRecentNote();
+    runAction(() => switchRecentNote());
     return;
   }
 
@@ -763,19 +785,19 @@ window.addEventListener("keydown", (event) => {
 
   if (event.key === "j") {
     event.preventDefault();
-    void moveSelection(1);
+    runAction(() => moveSelection(1));
     return;
   }
 
   if (event.key === "k") {
     event.preventDefault();
-    void moveSelection(-1);
+    runAction(() => moveSelection(-1));
     return;
   }
 
   if (event.key === "G") {
     event.preventDefault();
-    void jumpBoundary(true);
+    runAction(() => jumpBoundary(true));
     return;
   }
 
@@ -784,7 +806,7 @@ window.addEventListener("keydown", (event) => {
     const state = store.getState();
     if (currentAt - state.lastGAt <= DOUBLE_G_TIMEOUT) {
       event.preventDefault();
-      void jumpBoundary(false);
+      runAction(() => jumpBoundary(false));
       store.setState({ lastGAt: 0 });
       return;
     }
@@ -799,7 +821,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Delete") {
     if (shouldHandleGlobalKey(event)) {
       event.preventDefault();
-      void deleteActiveNote();
+      runAction(() => deleteActiveNote());
     }
   }
 });
@@ -813,7 +835,7 @@ window.addEventListener("beforeunload", (event) => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    void autosave.flush();
+    runAction(() => autosave.flush());
   }
 });
 
@@ -863,7 +885,7 @@ bootstrap().catch(() => {
       "myNote failed to initialize local storage. Do you want to reset local database and restart in safe mode?"
     );
     if (shouldRecover) {
-      void resetLocalData();
+      runAction(() => resetLocalData());
     }
   }, 50);
 });
