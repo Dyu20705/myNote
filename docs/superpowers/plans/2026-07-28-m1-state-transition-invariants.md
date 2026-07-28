@@ -146,7 +146,7 @@ node --test tests/unit/command-stack.test.mjs
 node --test tests/unit/history.test.mjs
 ```
 
-Expected: state and note-patch suites pass. Command-stack fails only `undo rejection preserves retryability` and `redo rejection preserves retryability`. History fails only ingress/egress nested isolation assertions. Record command, exit code, test name, pass/fail/skip counts, actual/expected result, and duration.
+Expected: state passes. Note-patch passes its generated-patch contracts and fails only the two direct crafted-patch whitelist assertions. Command-stack fails only the undo/redo rejection retryability assertions. History fails only ingress/egress nested isolation assertions. Record command, exit code, test name, pass/fail/skip counts, actual/expected result, and duration.
 
 - [ ] **Step 7: Commit the RED contract**
 

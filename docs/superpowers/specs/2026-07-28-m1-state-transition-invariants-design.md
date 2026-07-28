@@ -15,7 +15,7 @@ Keep the four existing factories and their signatures, and strengthen only their
 - `createCommandStack` continues to own two bounded arrays. A command leaves its source stack before execution, moves to the opposite stack only after success, and is restored to its original source stack if the awaited operation rejects.
 - `createHistory` remains an in-memory bounded record. It deep-clones plain structured data on ingress and egress so neither producers nor consumers retain a mutable reference to its internal state.
 
-Two broader alternatives are rejected. A serialized command queue would add concurrency and cancellation semantics outside this child. A JSON-only history representation would silently narrow supported values and alter `undefined` and other structured data semantics. The selected approach uses the platform `structuredClone` behavior with the repository's existing JSON fallback pattern and adds no dependency.
+Two broader alternatives are rejected. A serialized command queue would add concurrency and cancellation semantics outside this child. A JSON-only history representation would silently narrow supported values and alter `undefined` and other structured data semantics. Supported Node 22.20 and Playwright Chromium runtimes provide `structuredClone`; that platform behavior is the supported clone contract. The selected implementation retains the repository's existing JSON fallback only as best-effort legacy behavior for older runtimes and adds no dependency.
 
 ## Command-stack ownership and failure behavior
 
