@@ -28,11 +28,15 @@ Khong duoc:
 
 ### Canonical note normalization
 
+- `id`, `title`, `content`, `createdAt`, `updatedAt`, `pinned`, `archived`, va `version` la canonical caller-owned fields; action layer van so huu semantic edits, timestamps, va revisions.
 - `normalizeNote` phai canonicalize `title` va `content`, sau do parse `content` dung mot lan.
 - `links` va `ast` phai luon duoc rebuild tu ket qua parser hien tai.
 - `checksum` phai luon duoc rebuild tu canonical `title`, mot ky tu newline, va exact `content`.
 - `searchBlob` phai luon duoc rebuild sau cung tu note da normalize.
 - Khong duoc tin cay `links`, `ast`, `checksum`, hoac `searchBlob` do caller cung cap.
+- Incoming tags phai duoc merge voi parsed tags vi schema hien tai khong co tag provenance; khong duoc tu dong xoa tag chi vi tag khong con trong content.
+- Non-empty blocks va block IDs phai duoc preserve. Missing hoac empty blocks duoc generate voi random UUID, nen hai lan normalize doc lap cua raw blockless note khong bat buoc structural-identical.
+- `checksum` chi la deterministic, non-cryptographic change detector; no khong dam bao integrity, authenticity, hay collision resistance.
 - Quy tac nay chay tai normalization boundary; khong yeu cau migration hay rewrite persistence hien co.
 
 ## 3) State Transition Invariant

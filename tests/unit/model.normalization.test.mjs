@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSearchBlob, hashText, normalizeNote } from "../../core/model.js";
+import { hashText, normalizeNote } from "../../core/model.js";
 import { parseDocument } from "../../core/parser/index.js";
 
 const fixedBlock = {
@@ -32,12 +32,18 @@ test("normalizeNote rejects null-like and non-object inputs", () => {
   }
 });
 
-test("links are always rebuilt from current content", () => {
-  const note = fixedNote({ links: ["Stale Link"] });
+test("links and search material are always rebuilt together from current content", () => {
+  const note = fixedNote({
+    links: ["Stale Link"],
+    searchBlob: "stale searchable material",
+  });
   const normalized = normalizeNote(note);
 
   assert.deepEqual(normalized.links, parseDocument(note.content).links);
   assert.deepEqual(normalized.links, ["Fresh Link"]);
+  assert.equal(normalized.searchBlob, "canonical title #alpha [[fresh link]] manual alpha fresh link");
+  assert.match(normalized.searchBlob, /fresh link/);
+  assert.doesNotMatch(normalized.searchBlob, /stale/);
 });
 
 test("AST is always rebuilt from current content", () => {
@@ -72,13 +78,6 @@ test("blank title falls back to Untitled before rebuilding checksum", () => {
   assert.equal(normalized.checksum, hashText(`Untitled\n${note.content}`));
 });
 
-test("caller-provided searchBlob is ignored and rebuilt from canonical fields", () => {
-  const normalized = normalizeNote(fixedNote({ searchBlob: "stale searchable material" }));
-
-  assert.equal(normalized.searchBlob, buildSearchBlob(normalized));
-  assert.doesNotMatch(normalized.searchBlob, /stale searchable material/);
-});
-
 test("tags merge supplied and parsed metadata with normalization and stable deduplication", () => {
   const content = [
     "#Inline #manual",
@@ -99,7 +98,6 @@ test("provided non-empty blocks are preserved for compatibility", () => {
   const blocks = [{ ...fixedBlock }];
   const normalized = normalizeNote(fixedNote({ blocks }));
 
-  assert.strictEqual(normalized.blocks, blocks);
   assert.deepEqual(normalized.blocks, blocks);
 });
 
@@ -134,11 +132,13 @@ test("version keeps positive integers and otherwise falls back to one", () => {
 });
 
 test("canonical fields and exact line endings are preserved", () => {
-  const content = "first\r\nsecond\rthird";
+  const content = "First\r\nSecond\rThird";
   const note = fixedNote({
     content,
     pinned: "yes",
     archived: 0,
+    checksum: "stale-checksum",
+    searchBlob: "stale searchable material",
   });
   const normalized = normalizeNote(note);
 
@@ -149,6 +149,8 @@ test("canonical fields and exact line endings are preserved", () => {
   assert.equal(normalized.updatedAt, note.updatedAt);
   assert.equal(normalized.pinned, true);
   assert.equal(normalized.archived, false);
+  assert.equal(normalized.checksum, hashText(`${note.title}\n${content}`));
+  assert.equal(normalized.searchBlob, `canonical title ${content.toLowerCase()} manual `);
 });
 
 test("non-string content becomes the canonical empty string", () => {
@@ -161,9 +163,12 @@ test("non-string content becomes the canonical empty string", () => {
 });
 
 test("normalization is idempotent for a fixed complete note", () => {
-  const once = normalizeNote(fixedNote());
+  const source = fixedNote();
+  const once = normalizeNote(source);
+  const separate = normalizeNote(source);
   const twice = normalizeNote(once);
 
+  assert.deepEqual(separate, once);
   assert.deepEqual(twice, once);
 });
 
