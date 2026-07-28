@@ -44,6 +44,12 @@ Khong duoc:
 - Moi thay doi state phai qua action path ro rang.
 - Khong mutate shared object truc tiep.
 - Transition phai deterministic voi cung input.
+- Store shallow-merge object va functional patches theo thu tu; moi active subscriber duoc notify dung mot lan sau moi successful update.
+- Note patch chi thay doi cac approved patch fields, phai preserve field ngoai patch boundary, va phai deep-clone nested transition values khi create, apply, hoac invert.
+- Failed command execute khong duoc thay doi undo hay redo stack.
+- Failed undo/redo phai restore command vao source stack ban dau, khong thay doi opposite stack, va rethrow original error de caller xu ly hoac retry.
+- Successful execute/undo/redo phai giu LIFO ordering, redo invalidation, va configured command bound.
+- Contract nay khong cam ket command concurrency serialization, listener exception isolation, persistence ordering, hay autosave failure safety.
 
 ## 4) Persistence Consistency Invariant
 
@@ -94,6 +100,9 @@ Khong duoc:
 ## 10) Memory Invariant
 
 - Undo/history phai bounded.
+- Default command va operation history bound la 300; snapshot history giu toi da 30 entries.
+- History phai deep-clone operation, nested patch, va snapshot values tren ingress va egress.
+- Khi operation history vuot 80 phan tram configured bound, patch payload cua entries cu co the compact ve `null`, nhung metadata va `patchSize` phai duoc preserve va 120 entries moi nhat phai giu full patch.
 - Index structures phai co duong remove/compaction.
 - Khong tao unbounded caches khong co eviction.
 
