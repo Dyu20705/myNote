@@ -78,6 +78,17 @@ test("blank title falls back to Untitled before rebuilding checksum", () => {
   assert.equal(normalized.checksum, hashText(`Untitled\n${note.content}`));
 });
 
+test("search material uses the canonical title and ignores caller projection", () => {
+  const normalized = normalizeNote(fixedNote({
+    title: "  Search title  ",
+    searchBlob: "stale searchable material",
+  }));
+
+  assert.equal(normalized.title, "Search title");
+  assert.equal(normalized.searchBlob, "search title #alpha [[fresh link]] manual alpha fresh link");
+  assert.doesNotMatch(normalized.searchBlob, /stale/);
+});
+
 test("tags merge supplied and parsed metadata with normalization and stable deduplication", () => {
   const content = [
     "#Inline #manual",
