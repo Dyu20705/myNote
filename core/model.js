@@ -45,12 +45,13 @@ export function normalizeNote(note) {
   const timestamp = now();
   const updatedAt = typeof note.updatedAt === "string" ? note.updatedAt : timestamp;
   const content = typeof note.content === "string" ? note.content : "";
+  const title = typeof note.title === "string" && note.title.trim() ? note.title.trim() : "Untitled";
   const parsed = parseDocument(content);
   const mergedTags = [...(Array.isArray(note.tags) ? note.tags : []), ...parsed.tags];
 
   const normalized = {
     id: typeof note.id === "string" ? note.id : uid(),
-    title: typeof note.title === "string" && note.title.trim() ? note.title.trim() : "Untitled",
+    title,
     content,
     blocks: Array.isArray(note.blocks) && note.blocks.length ? note.blocks : buildBlocks(content),
     tags: [...new Set(mergedTags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean))],
@@ -58,11 +59,9 @@ export function normalizeNote(note) {
     updatedAt,
     pinned: Boolean(note.pinned),
     archived: Boolean(note.archived),
-    links: Array.isArray(note.links)
-      ? [...new Set(note.links.map((item) => String(item || "").trim()).filter(Boolean))]
-      : parsed.links,
-    ast: Array.isArray(note.ast) && note.ast.length ? note.ast : parsed.ast,
-    checksum: typeof note.checksum === "string" ? note.checksum : hashText(`${note.title || ""}\n${content}`),
+    links: parsed.links,
+    ast: parsed.ast,
+    checksum: hashText(`${title}\n${content}`),
     version: Number.isInteger(note.version) && note.version > 0 ? note.version : 1,
   };
 
