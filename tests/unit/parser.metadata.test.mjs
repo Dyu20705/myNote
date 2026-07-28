@@ -20,6 +20,11 @@ const emptyDocument = {
 test("parser helpers return explicit empty results for null-like values", () => {
   for (const value of [undefined, null, false, 0, ""]) {
     assert.deepEqual(parseDocument(value), emptyDocument);
+    assert.deepEqual(parseMarkdown(value), []);
+    assert.deepEqual(extractTags(value), []);
+    assert.deepEqual(parseWikiLinks(value), []);
+    assert.deepEqual(extractCodeBlocks(value), []);
+    assert.deepEqual(tokenize(value), []);
   }
 });
 
@@ -112,6 +117,33 @@ test("extractCodeBlocks handles defaults, normalized languages, empty blocks, an
   ]);
 });
 
+test("trimmed fence delimiters preserve metadata isolation and normalize the language", () => {
+  const input = [
+    "before #outside",
+    "   ```JS   ",
+    "#hidden [[Hidden]]",
+    "\t```   ",
+    "#after [[Visible]]",
+  ].join("\n");
+
+  assert.deepEqual(extractTags(input), ["outside", "after"]);
+  assert.deepEqual(parseWikiLinks(input), ["Visible"]);
+  assert.deepEqual(extractCodeBlocks(input), [{ language: "js", code: "#hidden [[Hidden]]\n" }]);
+});
+
+test("unsupported fence info syntax remains ordinary text under the bounded grammar", () => {
+  const input = "```js extra\n#visible [[Visible]]";
+
+  assert.deepEqual(extractCodeBlocks(input), []);
+  assert.deepEqual(extractTags(input), ["visible"]);
+  assert.deepEqual(parseWikiLinks(input), ["Visible"]);
+  assert.deepEqual(parseMarkdown(input), [
+    { type: "paragraph", text: "```js extra" },
+    { type: "paragraph", text: "#visible [[Visible]]" },
+    { type: "wikilink", target: "Visible" },
+  ]);
+});
+
 test("parseMarkdown preserves heading levels one through six and ordinary paragraphs", () => {
   assert.deepEqual(parseMarkdown("# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six\n####### Seven\nordinary"), [
     { type: "heading", level: 1, text: "One" },
@@ -150,11 +182,13 @@ test("metadata immediately before and after fences preserves first-seen order", 
   assert.deepEqual(parseWikiLinks(input), ["First", "Second"]);
 });
 
-test("LF and CRLF inputs produce structurally identical parser output", () => {
+test("LF, CRLF, and CR inputs produce structurally identical parser output", () => {
   const lf = "# Heading\n```JS\nconst searchable_code = true;\n```\n#after [[Visible]]";
   const crlf = lf.replaceAll("\n", "\r\n");
+  const cr = lf.replaceAll("\n", "\r");
 
   assert.deepEqual(parseDocument(crlf), parseDocument(lf));
+  assert.deepEqual(parseDocument(cr), parseDocument(lf));
 });
 
 test("parseDocument aggregate fields stay consistent with parser helpers", () => {
