@@ -23,6 +23,7 @@ const PATCH_KEYS = [
   "checksum",
   "searchBlob",
 ];
+const PATCH_KEY_SET = new Set(PATCH_KEYS);
 
 export function createNotePatch(previous, next) {
   const ops = [];
@@ -35,12 +36,17 @@ export function createNotePatch(previous, next) {
 }
 
 export function invertNotePatch(patch) {
-  return patch.map((op) => ({ key: op.key, before: deepClone(op.after), after: deepClone(op.before) }));
+  return patch
+    .filter((op) => PATCH_KEY_SET.has(op.key))
+    .map((op) => ({ key: op.key, before: deepClone(op.after), after: deepClone(op.before) }));
 }
 
 export function applyNotePatch(note, patch) {
   const next = { ...note };
   for (const op of patch) {
+    if (!PATCH_KEY_SET.has(op.key)) {
+      continue;
+    }
     next[op.key] = deepClone(op.after);
   }
   return next;

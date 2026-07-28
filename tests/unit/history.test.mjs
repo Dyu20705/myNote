@@ -6,6 +6,7 @@ function operation(id) {
   return {
     id,
     kind: "synthetic",
+    metadata: { source: { version: 1 } },
     patch: [{ key: "tags", before: ["before"], after: ["after"] }],
   };
 }
@@ -16,10 +17,12 @@ test("history operations are isolated from caller mutation on ingress", () => {
   history.record(input);
 
   input.kind = "mutated";
+  input.metadata.source.version = 99;
   input.patch[0].before[0] = "mutated";
 
   const retained = history.getOperations()[0];
   assert.equal(retained.kind, "synthetic");
+  assert.equal(retained.metadata.source.version, 1);
   assert.deepEqual(retained.patch[0].before, ["before"]);
 });
 
@@ -40,9 +43,11 @@ test("history getters cannot mutate retained nested data", () => {
 
   const operations = history.getOperations();
   const snapshots = history.getSnapshots();
+  operations[0].metadata.source.version = 99;
   operations[0].patch[0].after[0] = "mutated";
   snapshots[0].state.notes[0].meta.version = 99;
 
+  assert.equal(history.getOperations()[0].metadata.source.version, 1);
   assert.deepEqual(history.getOperations()[0].patch[0].after, ["after"]);
   assert.equal(history.getSnapshots()[0].state.notes[0].meta.version, 1);
 });

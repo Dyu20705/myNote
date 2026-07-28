@@ -6,10 +6,13 @@ test("store copies initial state and shallow-merges object and functional patche
   const initial = { count: 1, stable: "kept" };
   const store = createStore(initial);
 
+  initial.count = 99;
+  assert.deepEqual(store.getState(), { count: 1, stable: "kept" });
+
   store.setState({ count: 2 });
   store.setState((state) => ({ count: state.count + 3, added: true }));
 
-  assert.deepEqual(initial, { count: 1, stable: "kept" });
+  assert.deepEqual(initial, { count: 99, stable: "kept" });
   assert.deepEqual(store.getState(), { count: 5, stable: "kept", added: true });
 });
 

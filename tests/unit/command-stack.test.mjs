@@ -62,46 +62,80 @@ test("failed execute leaves undo and redo availability unchanged", async () => {
   assert.equal(stack.canRedo(), true);
 });
 
-test("undo rejection preserves retryability", async () => {
+test("undo rejection restores exact stack order and rethrows the original error", async () => {
   const stack = createCommandStack();
-  let attempts = 0;
-  await stack.execute({
-    do: async () => {},
+  const log = [];
+  const originalError = new Error("synthetic undo failure");
+  let undoAttempts = 0;
+  const retryable = {
+    do: async () => log.push("do-b"),
     undo: async () => {
-      attempts += 1;
-      if (attempts === 1) {
-        throw new Error("synthetic undo failure");
+      undoAttempts += 1;
+      log.push(undoAttempts === 1 ? "undo-b-failed" : "undo-b");
+      if (undoAttempts === 1) {
+        throw originalError;
       }
     },
-  });
-
-  await assert.rejects(stack.undo(), /synthetic undo failure/);
-  assert.equal(stack.canUndo(), true);
-  assert.equal(stack.canRedo(), false);
-  assert.equal(await stack.undo(), true);
-  assert.equal(stack.canRedo(), true);
-});
-
-test("redo rejection preserves retryability", async () => {
-  const stack = createCommandStack();
-  let doAttempts = 0;
-  const command = {
-    do: async () => {
-      doAttempts += 1;
-      if (doAttempts === 2) {
-        throw new Error("synthetic redo failure");
-      }
-    },
-    undo: async () => {},
   };
-  await stack.execute(command);
+  await stack.execute(loggingCommand("a", log));
+  await stack.execute(retryable);
+  await stack.execute(loggingCommand("c", log));
   await stack.undo();
 
-  await assert.rejects(stack.redo(), /synthetic redo failure/);
-  assert.equal(stack.canUndo(), false);
+  await assert.rejects(stack.undo(), (error) => error === originalError);
+  assert.equal(stack.canUndo(), true);
+  assert.equal(stack.canRedo(), true);
+  assert.equal(await stack.undo(), true);
+  assert.equal(await stack.redo(), true);
+  assert.equal(await stack.redo(), true);
+  assert.deepEqual(log, [
+    "do-a",
+    "do-b",
+    "do-c",
+    "undo-c",
+    "undo-b-failed",
+    "undo-b",
+    "do-b",
+    "do-c",
+  ]);
+});
+
+test("redo rejection restores exact stack order and rethrows the original error", async () => {
+  const stack = createCommandStack();
+  const log = [];
+  const originalError = new Error("synthetic redo failure");
+  let cDoAttempts = 0;
+  const retryable = {
+    do: async () => {
+      cDoAttempts += 1;
+      log.push(cDoAttempts === 2 ? "do-c-failed" : "do-c");
+      if (cDoAttempts === 2) {
+        throw originalError;
+      }
+    },
+    undo: async () => log.push("undo-c"),
+  };
+  await stack.execute(loggingCommand("a", log));
+  await stack.execute(loggingCommand("b", log));
+  await stack.execute(retryable);
+  await stack.undo();
+
+  await assert.rejects(stack.redo(), (error) => error === originalError);
+  assert.equal(stack.canUndo(), true);
   assert.equal(stack.canRedo(), true);
   assert.equal(await stack.redo(), true);
-  assert.equal(stack.canUndo(), true);
+  assert.equal(await stack.undo(), true);
+  assert.equal(await stack.undo(), true);
+  assert.deepEqual(log, [
+    "do-a",
+    "do-b",
+    "do-c",
+    "undo-c",
+    "do-c-failed",
+    "do-c",
+    "undo-c",
+    "undo-b",
+  ]);
 });
 
 test("command stack bound evicts the oldest command without changing order", async () => {

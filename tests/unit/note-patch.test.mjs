@@ -50,6 +50,28 @@ test("note patch preserves source fields outside the approved patch keys", () =>
   assert.equal(applied.id, "synthetic-note");
 });
 
+test("applying a crafted patch ignores operations outside approved patch keys", () => {
+  const { previous } = notes();
+  const applied = applyNotePatch(previous, [
+    { key: "title", before: "Before", after: "Approved title" },
+    { key: "id", before: "synthetic-note", after: "forged-id" },
+    { key: "localOnly", before: { preserved: true }, after: { preserved: false } },
+  ]);
+
+  assert.equal(applied.title, "Approved title");
+  assert.equal(applied.id, "synthetic-note");
+  assert.deepEqual(applied.localOnly, { preserved: true });
+});
+
+test("inverting a crafted patch omits operations outside approved patch keys", () => {
+  const inverse = invertNotePatch([
+    { key: "title", before: "Before", after: "After" },
+    { key: "localOnly", before: { preserved: true }, after: { preserved: false } },
+  ]);
+
+  assert.deepEqual(inverse, [{ key: "title", before: "After", after: "Before" }]);
+});
+
 test("empty note changes produce an empty patch", () => {
   const { previous } = notes();
 

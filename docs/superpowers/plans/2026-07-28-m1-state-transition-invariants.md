@@ -44,9 +44,11 @@ import { createStore } from "../../core/state.js";
 test("store copies initial state and shallow-merges object and functional patches in order", () => {
   const initial = { count: 1, stable: "kept" };
   const store = createStore(initial);
+  initial.count = 99;
+  assert.deepEqual(store.getState(), { count: 1, stable: "kept" });
   store.setState({ count: 2 });
   store.setState((state) => ({ count: state.count + 3, added: true }));
-  assert.deepEqual(initial, { count: 1, stable: "kept" });
+  assert.deepEqual(initial, { count: 99, stable: "kept" });
   assert.deepEqual(store.getState(), { count: 5, stable: "kept", added: true });
 });
 
@@ -74,6 +76,8 @@ assert.deepEqual(createNotePatch(previous, previous), []);
 ```
 
 After creating a patch, mutate nested values in both input notes and assert the patch stays unchanged. After applying or inverting, mutate the returned nested value and assert a fresh application/inversion still matches the original fixed expectation. Reapply the same patch twice and assert structural equality.
+
+Pass a crafted patch containing one allowed `title` operation plus disallowed `id` and `localOnly` operations directly to `applyNotePatch`. Assert only `title` changes. Pass allowed and disallowed operations directly to `invertNotePatch` and assert the inverse contains only the allowed operation. These cases must fail on the baseline before any `notePatch.js` edit.
 
 - [ ] **Step 3: Write command-stack success, bound, and failure contracts**
 
@@ -115,9 +119,11 @@ test("redo rejection preserves retryability", async () => {
 
 Also prepare a redo stack, reject a different command's `execute`, and assert both `canUndo()` and `canRedo()` remain exactly as before.
 
+Strengthen undo and redo rejection with three named commands so both source and opposite stacks contain entries. Assert the rejection predicate receives the exact original `Error` object, retry the failed command, then drain the opposite stack and compare the complete literal do/undo log. This must fail if restoration uses the wrong end of either stack, replaces a command, mutates the opposite stack, or wraps the error.
+
 - [ ] **Step 4: Write history isolation, bounds, and compaction contracts**
 
-Record an operation containing a nested patch object, mutate the original, and assert retained data is unchanged. Snapshot `{ notes: [{ meta: { version: 1 } }] }`, mutate it, and assert retained snapshot state is unchanged. Mutate nested values from both getters and assert a second getter call returns the retained originals.
+Record an operation containing both nested non-patch metadata and a nested patch object, mutate the original, and assert retained data is unchanged. Snapshot `{ notes: [{ meta: { version: 1 } }] }`, mutate it, and assert retained snapshot state is unchanged. Mutate nested metadata, patch, and snapshot values from both getters and assert a second getter call returns the retained originals.
 
 Use `createHistory(3)` to record IDs 1 through 4 and assert retained IDs are `[2, 3, 4]`. Add 31 snapshots and assert 30 remain with the first retained marker equal to `2` and the last equal to `31`. Use `createHistory(150)` with 121 one-op patches and assert the oldest patch is `null`, its `patchSize` is `1`, and all newest 120 patches remain arrays.
 
@@ -147,6 +153,35 @@ Expected: state and note-patch suites pass. Command-stack fails only `undo rejec
 ```bash
 git add package.json tests/unit/state.test.mjs tests/unit/note-patch.test.mjs tests/unit/command-stack.test.mjs tests/unit/history.test.mjs
 git commit -m test:define-transition-invariant-contracts
+```
+
+### Task 1A: Enforce the approved note-patch key boundary
+
+**Files:**
+- Modify: `core/notePatch.js`
+- Test: `tests/unit/note-patch.test.mjs`
+
+**Interfaces:**
+- Consumes: the existing private `PATCH_KEYS` list and public `applyNotePatch`/`invertNotePatch` signatures.
+- Produces: crafted patches cannot change or invert fields outside the approved key list.
+
+- [ ] **Step 1: Observe crafted-patch RED**
+
+Run `node --test tests/unit/note-patch.test.mjs`. Expected: the direct crafted-patch tests fail because `id` becomes `forged-id` and the inverse retains `localOnly`; all generated-patch contracts pass.
+
+- [ ] **Step 2: Reuse the existing whitelist for apply and invert**
+
+Create `const PATCH_KEY_SET = new Set(PATCH_KEYS)`. Filter inverse operations with `PATCH_KEY_SET.has(op.key)` and skip disallowed operations in the apply loop before assigning `next[op.key]`. Do not export or expand the list.
+
+- [ ] **Step 3: Run focused GREEN**
+
+Run `node --test tests/unit/note-patch.test.mjs`. Expected: all eight tests pass, including the two crafted-patch boundary cases.
+
+- [ ] **Step 4: Commit the bounded review correction**
+
+```bash
+git add core/notePatch.js tests/unit/state.test.mjs tests/unit/note-patch.test.mjs tests/unit/command-stack.test.mjs tests/unit/history.test.mjs docs/superpowers/plans/2026-07-28-m1-state-transition-invariants.md
+git commit -m fix:enforce-approved-transition-boundaries
 ```
 
 ### Task 2: Preserve command retryability on undo and redo rejection
