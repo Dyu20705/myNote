@@ -1,3 +1,10 @@
+function deepClone(value) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
 export function createHistory(maxEntries = 300) {
   const operations = [];
   const snapshots = [];
@@ -10,7 +17,7 @@ export function createHistory(maxEntries = 300) {
   }
 
   function record(operation) {
-    const next = { ...operation };
+    const next = deepClone(operation);
     if (Array.isArray(next.patch)) {
       next.patch = compactPatch(next.patch);
       next.patchSize = next.patch.length;
@@ -33,7 +40,7 @@ export function createHistory(maxEntries = 300) {
   function snapshot(state) {
     snapshots.push({
       timestamp: new Date().toISOString(),
-      state,
+      state: deepClone(state),
     });
     if (snapshots.length > 30) {
       snapshots.shift();
@@ -41,11 +48,11 @@ export function createHistory(maxEntries = 300) {
   }
 
   function getOperations() {
-    return operations.slice();
+    return deepClone(operations);
   }
 
   function getSnapshots() {
-    return snapshots.slice();
+    return deepClone(snapshots);
   }
 
   return { record, snapshot, getOperations, getSnapshots };
