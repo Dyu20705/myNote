@@ -16,7 +16,12 @@ export function createCommandStack(limit = 300) {
     if (!command) {
       return false;
     }
-    await command.undo();
+    try {
+      await command.undo();
+    } catch (error) {
+      undoStack.push(command);
+      throw error;
+    }
     redoStack.push(command);
     return true;
   }
@@ -26,7 +31,12 @@ export function createCommandStack(limit = 300) {
     if (!command) {
       return false;
     }
-    await command.do();
+    try {
+      await command.do();
+    } catch (error) {
+      redoStack.push(command);
+      throw error;
+    }
     undoStack.push(command);
     return true;
   }
