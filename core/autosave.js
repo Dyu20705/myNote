@@ -27,6 +27,7 @@ export function createAutosave({ delayMs, onSave, scheduler = createWindowSchedu
   let idleTask = 0;
   let inFlight = null;
   let pending = false;
+  let flushFlight = null;
 
   function cancelScheduled() {
     if (timer) {
@@ -105,8 +106,17 @@ export function createAutosave({ delayMs, onSave, scheduler = createWindowSchedu
   }
 
   function flush() {
+    if (flushFlight) {
+      return flushFlight;
+    }
+
     const result = flushInternal();
-    result.catch(() => {});
+    flushFlight = result;
+    result.catch(() => {}).finally(() => {
+      if (flushFlight === result) {
+        flushFlight = null;
+      }
+    });
     return result;
   }
 
