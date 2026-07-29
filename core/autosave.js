@@ -1,42 +1,128 @@
-export function createAutosave({ delayMs, onSave }) {
+function createWindowScheduler() {
+  return {
+    setTimeout(callback, delay) {
+      return window.setTimeout(callback, delay);
+    },
+    clearTimeout(task) {
+      window.clearTimeout(task);
+    },
+    requestIdle(callback, timeout) {
+      if (typeof window.requestIdleCallback === "function") {
+        return window.requestIdleCallback(callback, { timeout });
+      }
+      return window.setTimeout(callback, 120);
+    },
+    cancelIdle(task) {
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(task);
+      } else {
+        window.clearTimeout(task);
+      }
+    },
+  };
+}
+
+export function createAutosave({ delayMs, onSave, scheduler = createWindowScheduler() }) {
   let timer = 0;
   let idleTask = 0;
+  let inFlight = null;
+  let pending = false;
+  let flushFlight = null;
 
-  async function flush() {
+  function cancelScheduled() {
     if (timer) {
-      window.clearTimeout(timer);
+      scheduler.clearTimeout(timer);
       timer = 0;
     }
     if (idleTask) {
-      if (typeof window.cancelIdleCallback === "function") {
-        window.cancelIdleCallback(idleTask);
-      } else {
-        window.clearTimeout(idleTask);
-      }
+      scheduler.cancelIdle(idleTask);
       idleTask = 0;
     }
-    await onSave();
+  }
+
+  function schedulePending() {
+    if (!pending || inFlight) {
+      return;
+    }
+
+    cancelScheduled();
+    timer = scheduler.setTimeout(() => {
+      timer = 0;
+      idleTask = scheduler.requestIdle(() => {
+        idleTask = 0;
+        startSave();
+      }, 500);
+    }, delayMs);
+  }
+
+  function startSave() {
+    if (inFlight) {
+      return inFlight;
+    }
+
+    pending = false;
+    const execution = (async () => {
+      try {
+        await onSave();
+      } finally {
+        inFlight = null;
+        if (pending) {
+          schedulePending();
+        }
+      }
+    })();
+
+    inFlight = execution;
+    execution.catch(() => {});
+    return execution;
+  }
+
+  async function flushInternal() {
+    cancelScheduled();
+    const active = inFlight;
+    let activeError = null;
+
+    if (active) {
+      try {
+        await active;
+      } catch (error) {
+        activeError = error;
+      }
+      cancelScheduled();
+    }
+
+    if (pending || !active) {
+      try {
+        await startSave();
+        activeError = null;
+      } catch (error) {
+        activeError = error;
+      }
+    }
+
+    if (activeError) {
+      throw activeError;
+    }
+  }
+
+  function flush() {
+    if (flushFlight) {
+      return flushFlight;
+    }
+
+    const result = flushInternal();
+    flushFlight = result;
+    result.catch(() => {}).finally(() => {
+      if (flushFlight === result) {
+        flushFlight = null;
+      }
+    });
+    return result;
   }
 
   function queue() {
-    if (timer) {
-      window.clearTimeout(timer);
-    }
-
-    timer = window.setTimeout(() => {
-      timer = 0;
-      if (typeof window.requestIdleCallback === "function") {
-        idleTask = window.requestIdleCallback(async () => {
-          idleTask = 0;
-          await onSave();
-        }, { timeout: 500 });
-      } else {
-        idleTask = window.setTimeout(async () => {
-          idleTask = 0;
-          await onSave();
-        }, 120);
-      }
-    }, delayMs);
+    pending = true;
+    schedulePending();
   }
 
   return { queue, flush };

@@ -49,16 +49,43 @@ Khong duoc:
 - Failed command execute khong duoc thay doi undo hay redo stack.
 - Failed undo/redo phai restore command vao source stack ban dau, khong thay doi opposite stack, va rethrow original error de caller xu ly hoac retry.
 - Successful execute/undo/redo phai giu LIFO ordering, redo invalidation, va configured command bound.
-- Contract nay khong cam ket command concurrency serialization, listener exception isolation, persistence ordering, hay autosave failure safety.
+- Pure transition contract khong tu no quyet dinh persistence ordering; durable mutation contract o muc 4 la authoritative cho application actions.
 
 ## 4) Persistence Consistency Invariant
 
-Command boundary:
-execute -> persist/index -> commit history
+Canonical command boundary:
+
+```text
+prepare normalized mutation
+-> persist canonical IndexedDB upsert/delete
+-> commit canonical in-memory state
+-> update rebuildable backlinks/search projections
+-> commit command/history success
+```
+
+Bat buoc:
+- IndexedDB mutation la canonical commit point cho create, edit, pin/archive, delete, undo, va redo.
+- Canonical persistence phai thanh cong truoc khi canonical note collection duoc insert, replace, hoac remove trong memory.
+- Canonical failure phai rethrow qua action/command boundary; failed command khong duoc vao undo stack va khong duoc record trong history.
+- Failed edit phai giu editor draft hien tai va `dirty: true`; failed delete phai giu note visible/selected; failed create khong duoc insert undurable note.
+- Error/status callback chi duoc nhan operation, subsystem, va error object; khong duoc nhan hoac log note title/body.
+- Sau canonical commit, backlinks/search failure la derived degradation: khong rollback canonical data, khong invalidate command/history success, va phai hien thi `Saved locally; search index unavailable`.
+- Bootstrap phai co the rebuild backlinks va search tu canonical notes.
+- History chi duoc record sau khi canonical lifecycle da hoan thanh; derived degradation van la canonical success.
+
+Autosave:
+- `createAutosave` chi duoc giu toi da mot in-flight `onSave()` promise va mot pending trailing-work signal.
+- Repeated `queue()` phai coalesce; khong duoc chay hai `onSave()` dong thoi.
+- `flush()` phai cancel timer/idle callbacks, doi in-flight save, va chay toi da mot trailing save can thiet.
+- Work queued trong trailing save phai con duoc schedule, khong bi mat.
+- Internally-started promise rejection phai co handler; awaited `flush()` van phai reject cho caller de chan navigation/mutation tiep theo.
+- Editor input phai advance save revision truoc khi queue. Neu revision moi xuat hien trong luc save, durable revision cu duoc commit vao collection nhung khong duoc overwrite editor DOM hoac clear `dirty`; trailing save xu ly draft moi.
 
 Khong duoc:
-- Ghi lich su truoc khi persist/index thanh cong.
+- Ghi lich su truoc canonical persistence.
 - Undo/redo bo qua persistence update.
+- Gop canonical storage failure va derived-index failure thanh mot `Storage unavailable` path.
+- Tao polling, background retry loop, optimistic queue, hoac schema change trong autosave boundary.
 
 ## 5) Search/Index Consistency Invariant
 
@@ -69,7 +96,7 @@ Cho moi updateNote:
 
 Khong duoc:
 - Full rebuild o normal editing path.
-- Mismatch giua persisted note va worker index.
+- Mismatch giua persisted note va worker index ma khong expose degraded/rebuildable status.
 
 ## 6) Backlinks Consistency Invariant
 
@@ -108,7 +135,9 @@ Khong duoc:
 
 ## 11) Test Invariant
 
-Moi thay doi parser/index/history can co test tuong ung:
+Moi thay doi parser/index/history/persistence/autosave can co test tuong ung:
 - Deterministic parse.
 - Reversible patch/index transitions.
 - Undo/redo khong drift state.
+- Canonical persist-before-memory ordering va failure injection.
+- Autosave coalescing, serialization, flush, trailing work, va rejection handling.
