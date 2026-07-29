@@ -13,6 +13,10 @@ function createLegacySourceChangedError() {
   return error;
 }
 
+function createTransactionAbortError() {
+  return new DOMException("IndexedDB transaction aborted.", "AbortError");
+}
+
 export function resetDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
@@ -44,9 +48,14 @@ export function openDatabase() {
 
 function transactionDone(transaction) {
   return new Promise((resolve, reject) => {
+    let firstRequestError;
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error);
+    transaction.onerror = (event) => {
+      firstRequestError ||= event.target?.error || transaction.error;
+    };
+    transaction.onabort = () => {
+      reject(firstRequestError || transaction.error || createTransactionAbortError());
+    };
   });
 }
 
