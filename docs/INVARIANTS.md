@@ -83,13 +83,13 @@ Autosave:
 
 Legacy migration:
 - `localStorage["my-note-v2"]` chi absent khi `getItem` tra ve `null`; empty string la invalid JSON va phai duoc preserve exact.
-- Khi legacy source ton tai ma IndexedDB da co note, migration phai return `blocked-existing-data`, khong parse/normalize source, khong merge, va khong thay doi ca hai store.
-- Khi IndexedDB rong, source phai duoc parse dung mot lan va moi candidate phai di qua authoritative `normalizeNote` dung mot lan truoc write.
-- Malformed JSON, non-array JSON, bat ky invalid record, hoac duplicate normalized ID phai reject toan bo candidate set truoc transaction; khong duoc import valid subset.
-- Valid array, ke ca empty array, phai queue trong dung mot IndexedDB `readwrite` transaction. Synchronous queue failure phai abort transaction va rethrow original error; request/transaction failure khong duoc de lai partial write.
-- Exact legacy key chi duoc remove sau transaction `complete`. Neu persistence fail thi source phai con nguyen de retry; retry blocked/failure phai deterministic va retry sau success phai la `absent` no-op.
+- Empty check va conditional writes phai nam trong cung mot IndexedDB `readwrite` transaction de serialize cac tab. Neu transaction nay thay IndexedDB da co note, migration phai return `blocked-existing-data`, khong parse/normalize source, khong merge, va khong thay doi ca hai store.
+- Khi deciding transaction thay IndexedDB rong, source phai duoc parse dung mot lan. Candidates duoc normalize fail-fast theo thu tu va moi candidate da tham duoc di qua authoritative `normalizeNote` toi da mot lan; khong bat buoc normalize cac candidate sau failure dau tien.
+- Malformed JSON, non-array JSON, bat ky invalid record, hoac duplicate normalized ID phai reject toan bo candidate set truoc bat ky write nao trong deciding transaction; khong duoc import valid subset.
+- Valid array, ke ca empty array, phai queue trong chinh deciding `readwrite` transaction. Synchronous queue failure phai abort transaction va rethrow original error; request/transaction failure khong duoc de lai partial write.
+- Exact legacy key chi duoc remove sau transaction `complete` va chi khi current value van bang exact raw value da capture. Source mismatch phai preserve current source va reject bang content-free `LEGACY_SOURCE_CHANGED`; persistence failure phai giu source de retry. Retry blocked/failure phai deterministic va retry sau success phai la `absent` no-op.
 - Migration outcome chi duoc chua bounded `status`, `count`, va optional safe `errorCode`; khong duoc return hoac log raw source, note, ID, title, content, tag, link, checksum, hay database dump.
-- Migration giu `myNoteDB` version 1 va current `notes` store/indexes. IndexedDB va localStorage khong co cross-store transaction: neu cleanup fail sau DB commit, lan retry phai preserve ca hai store va return `blocked-existing-data`, khong duoc import lap hoac tu dong xoa source.
+- Migration giu `myNoteDB` version 1 va current `notes` store/indexes. IndexedDB va localStorage khong co cross-store transaction hay compare-and-remove primitive: neu cleanup fail hoac source doi sau DB commit, lan retry phai preserve ca hai store va return `blocked-existing-data`, khong duoc import lap hoac tu dong xoa source.
 
 Khong duoc:
 - Ghi lich su truoc canonical persistence.

@@ -4,7 +4,7 @@
 
 **Goal:** Make the existing `my-note-v2` localStorage-to-IndexedDB v1 migration atomic, deterministic, retry-safe, explicitly classified, and covered by checked-in synthetic compatibility fixtures.
 
-**Architecture:** Keep migration ownership in `core/storage.js`. Read and classify the exact legacy string before any write, normalize every candidate once through the existing #39 contract, reject the whole set on invalid records or duplicate normalized IDs, commit valid records in one IndexedDB transaction, and remove the source only after commit. Preserve the current two-argument bootstrap call and expose only bounded status/count/error-code outcomes.
+**Architecture:** Keep migration ownership in `core/storage.js`. Capture the exact legacy string, serialize the empty check and conditional writes in one IndexedDB `readwrite` transaction, normalize candidates fail-fast and at most once each through the existing #39 contract, reject the whole set on invalid records or duplicate normalized IDs, and remove the source only after commit plus an identity recheck. Preserve the current two-argument bootstrap call and expose only bounded status/count/error-code outcomes.
 
 **Tech Stack:** Node.js 22.20.0, npm 11.7.0, ECMAScript modules, IndexedDB v1, `fake-indexeddb` 6.2.5, `node:test`, `node:assert/strict`, ESLint 10.8.0, Playwright 1.62.0.
 
@@ -448,21 +448,18 @@ Seed one canonical IndexedDB note, install the valid legacy source, and pass a n
 
 Run only this test. Expected RED: the current implementation preserves both stores but returns `undefined`.
 
-- [ ] **Step 3: Add count-only readiness and blocked outcome**
+- [ ] **Step 3: Add serialized count-only readiness and blocked outcome**
 
-Implement a private count helper without loading note bodies:
+Perform `count()` without loading note bodies in the same `readwrite` transaction that conditionally queues the migration writes. This transaction is the cross-connection exclusion boundary: a concurrent transaction that starts later must see the first commit and return `blocked-existing-data`.
 
 ```js
-function countNotesInDb(db) {
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NOTES, "readonly").objectStore(STORE_NOTES).count();
-    request.onsuccess = () => resolve(request.result || 0);
-    request.onerror = () => reject(request.error);
-  });
-}
+const tx = db.transaction(STORE_NOTES, "readwrite");
+const store = tx.objectStore(STORE_NOTES);
+const existingCount = await requestResult(store.count());
+// Block when non-empty; otherwise preflight and queue every put in this tx.
 ```
 
-After confirming the raw key exists and before preflight parsing, return `{ status: "blocked-existing-data", count: existingCount, errorCode: "LEGACY_EXISTING_DATA" }` when the count is positive.
+After confirming the raw key exists and before preflight parsing, return `{ status: "blocked-existing-data", count: existingCount, errorCode: "LEGACY_EXISTING_DATA" }` when the transactional count is positive.
 
 - [ ] **Step 4: Run existing-data GREEN and remaining compatibility coverage**
 
@@ -499,7 +496,7 @@ git commit -m "test: define legacy migration compatibility matrix"
 
 - [ ] **Step 1: Add the authoritative migration invariant**
 
-Document exact raw-source preservation, absent-versus-invalid distinction, existing-data precedence, one-pass normalization, duplicate rejection, one readwrite transaction, explicit abort on queue errors, post-commit cleanup, bounded outcomes, deterministic retries, `DB_VERSION = 1`, and the cross-store cleanup-failure boundary. Do not claim backup/restore UI, schema upgrades, automatic merge, or cross-store atomicity.
+Document exact raw-source preservation, absent-versus-invalid distinction, existing-data precedence, fail-fast/at-most-once normalization, duplicate rejection, one deciding readwrite transaction, explicit abort on queue errors, source identity checks around post-commit cleanup, bounded outcomes, deterministic retries, `DB_VERSION = 1`, and the cross-store cleanup-failure boundary. Do not claim backup/restore UI, schema upgrades, automatic merge, or cross-store atomicity.
 
 - [ ] **Step 2: Commit invariant documentation**
 
@@ -546,7 +543,14 @@ Invoke `superpowers:requesting-code-review` with issue #43, the design and plan 
 
 - [ ] **Step 6: Re-run verification after any review correction**
 
-Run the affected focused test first, then every command from Step 3. Commit each valid correction with a message naming the invariant it protects.
+For the validated review findings:
+
+- add a two-connection RED proving separate empty checks permit two imports, then move `count()` and conditional writes into one serialized `readwrite` transaction;
+- add a commit-boundary source-replacement RED, recheck exact source identity before writes and after commit, and reject with content-free `LEGACY_SOURCE_CHANGED` while preserving the newer source;
+- strengthen queue-error identity, asynchronous-abort settlement, normalized-ID collision/type validation, absent short-circuiting, existing-data precedence, and `count()`-only readiness tests;
+- clarify normalization as fail-fast/at-most-once and document the remaining Web Storage compare/remove limitation.
+
+Run each affected focused test first, then every command from Step 3. Commit each valid correction with a message naming the invariant it protects.
 
 - [ ] **Step 7: Publish one draft PR through `github:yeet`**
 
