@@ -473,13 +473,18 @@ describe("legacy storage migration", { concurrency: false }, () => {
     const originalAdd = globalThis.IDBObjectStore.prototype.add;
     let firstId;
     let putCalls = 0;
+    let asynchronousRequestError;
     globalThis.IDBObjectStore.prototype.put = function (note) {
       putCalls += 1;
       if (putCalls === 1) {
         firstId = note.id;
         return Reflect.apply(originalPut, this, [note]);
       }
-      return Reflect.apply(originalAdd, this, [{ ...note, id: firstId }]);
+      const request = Reflect.apply(originalAdd, this, [{ ...note, id: firstId }]);
+      request.addEventListener("error", () => {
+        asynchronousRequestError = request.error;
+      });
+      return request;
     };
 
     try {
@@ -488,6 +493,7 @@ describe("legacy storage migration", { concurrency: false }, () => {
         (error) => {
           assert.ok(error instanceof Error);
           assert.equal(error.name, "ConstraintError");
+          assert.equal(error, asynchronousRequestError);
           assert.equal(transactionEvents.at(-1), "abort");
           assert.equal(transactionEvents.includes("complete"), false);
           return true;
