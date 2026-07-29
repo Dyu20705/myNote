@@ -1,0 +1,34 @@
+[
+  {
+    "id": "legacy-duplicate",
+    "title": "Duplicate first",
+    "content": "First synthetic duplicate",
+    "blocks": [
+      {
+        "id": "block-duplicate-first",
+        "type": "paragraph",
+        "content": "First synthetic duplicate",
+        "meta": {}
+      }
+    ],
+    "createdAt": "2024-04-01T00:00:00.000Z",
+    "updatedAt": "2024-04-02T00:00:00.000Z",
+    "version": 1
+  },
+  {
+    "id": "legacy-duplicate",
+    "title": "Duplicate second",
+    "content": "Second synthetic duplicate",
+    "blocks": [
+      {
+        "id": "block-duplicate-second",
+        "type": "paragraph",
+        "content": "Second synthetic duplicate",
+        "meta": {}
+      }
+    ],
+    "createdAt": "2024-04-03T00:00:00.000Z",
+    "updatedAt": "2024-04-04T00:00:00.000Z",
+    "version": 1
+  }
+]

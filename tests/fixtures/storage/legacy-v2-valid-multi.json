@@ -1,0 +1,36 @@
+[
+  {
+    "id": "legacy-alpha",
+    "title": "  Alpha  ",
+    "content": "Alpha body #one [[Beta]]",
+    "blocks": [
+      {
+        "id": "block-alpha",
+        "type": "paragraph",
+        "content": "Alpha body #one [[Beta]]",
+        "meta": {}
+      }
+    ],
+    "tags": ["Manual"],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-02T00:00:00.000Z",
+    "version": 1
+  },
+  {
+    "id": "legacy-beta",
+    "title": "Beta",
+    "content": "Beta body",
+    "blocks": [
+      {
+        "id": "block-beta",
+        "type": "paragraph",
+        "content": "Beta body",
+        "meta": {}
+      }
+    ],
+    "createdAt": "2024-02-01T00:00:00.000Z",
+    "updatedAt": "2024-02-02T00:00:00.000Z",
+    "pinned": true,
+    "version": 1
+  }
+]

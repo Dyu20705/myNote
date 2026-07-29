@@ -1,0 +1,22 @@
+[
+  {
+    "id": "legacy-non-string-fields",
+    "title": 42,
+    "content": { "synthetic": true },
+    "blocks": [
+      {
+        "id": "block-non-string",
+        "type": "paragraph",
+        "content": "Caller block survives",
+        "meta": {}
+      }
+    ],
+    "createdAt": "2024-05-01T00:00:00.000Z",
+    "updatedAt": "2024-05-02T00:00:00.000Z",
+    "links": ["stale-link"],
+    "ast": [{ "type": "stale" }],
+    "checksum": "stale-checksum",
+    "searchBlob": "stale-search",
+    "version": 1
+  }
+]
