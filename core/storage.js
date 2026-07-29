@@ -54,6 +54,14 @@ export async function listNotesFromDb(db) {
   });
 }
 
+function countNotesInDb(db) {
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(STORE_NOTES, "readonly").objectStore(STORE_NOTES).count();
+    request.onsuccess = () => resolve(request.result || 0);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 export async function putNoteToDb(db, note) {
   const tx = db.transaction(STORE_NOTES, "readwrite");
   tx.objectStore(STORE_NOTES).put(note);
@@ -132,9 +140,9 @@ export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
     return createMigrationOutcome("absent", 0);
   }
 
-  const existing = await listNotesFromDb(db);
-  if (existing.length > 0) {
-    return;
+  const existingCount = await countNotesInDb(db);
+  if (existingCount > 0) {
+    return createMigrationOutcome("blocked-existing-data", existingCount, "LEGACY_EXISTING_DATA");
   }
 
   const preflight = preflightLegacyNotes(raw, normalizeNote);

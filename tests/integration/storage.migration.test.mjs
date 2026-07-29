@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 
 await import("fake-indexeddb/auto");
 
-const { listNotesFromDb, migrateLegacyStorageIfNeeded, openDatabase } = await import("../../core/storage.js");
+const { listNotesFromDb, migrateLegacyStorageIfNeeded, openDatabase, putNoteToDb } = await import(
+  "../../core/storage.js"
+);
 const { normalizeNote } = await import("../../core/model.js");
 
 const DATABASE_NAME = "myNoteDB";
@@ -241,6 +243,161 @@ describe("legacy storage migration", { concurrency: false }, () => {
     );
 
     assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("existing canonical data blocks automatic migration before normalization", async () => {
+    const existingNote = {
+      id: "existing-canonical-note",
+      title: "Existing synthetic note",
+      content: "Existing canonical content",
+      createdAt: "2024-06-01T00:00:00.000Z",
+      updatedAt: "2024-06-02T00:00:00.000Z",
+      version: 1,
+    };
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    await putNoteToDb(database, existingNote);
+    let normalizeCalls = 0;
+    const unexpectedNormalizer = () => {
+      normalizeCalls += 1;
+      throw new Error("existing-data branch must not normalize legacy records");
+    };
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, unexpectedNormalizer);
+
+    assert.deepEqual(outcome, {
+      status: "blocked-existing-data",
+      count: 1,
+      errorCode: "LEGACY_EXISTING_DATA",
+    });
+    assert.equal(normalizeCalls, 0);
+    assert.deepEqual(await listNotesFromDb(database), [existingNote]);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("non-string canonical fields migrate with stale projections rebuilt", async () => {
+    const raw = await loadFixture("legacy-v2-non-string-fields.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(outcome, { status: "migrated", count: 1 });
+    assert.deepEqual(await listNotesFromDb(database), [
+      {
+        id: "legacy-non-string-fields",
+        title: "Untitled",
+        content: "",
+        blocks: [
+          {
+            id: "block-non-string",
+            type: "paragraph",
+            content: "Caller block survives",
+            meta: {},
+          },
+        ],
+        tags: [],
+        createdAt: "2024-05-01T00:00:00.000Z",
+        updatedAt: "2024-05-02T00:00:00.000Z",
+        pinned: false,
+        archived: false,
+        links: [],
+        ast: [],
+        checksum: "30750576",
+        version: 1,
+        searchBlob: "untitled   ",
+      },
+    ]);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), null);
+  });
+
+  test("normalization exceptions classify the complete source as invalid", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, () => {
+      throw new Error("synthetic normalization rejection");
+    });
+
+    assert.deepEqual(outcome, {
+      status: "invalid-record",
+      count: 2,
+      errorCode: "LEGACY_INVALID_RECORD",
+    });
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("a present empty string is invalid JSON rather than an absent source", async () => {
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, "");
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(outcome, {
+      status: "invalid-json",
+      count: 0,
+      errorCode: "LEGACY_INVALID_JSON",
+    });
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), "");
+    assert.deepEqual(await listNotesFromDb(database), []);
+  });
+
+  test("retry after successful migration is an absent no-op", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const firstOutcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+    const notesAfterFirstRun = await listNotesFromDb(database);
+    const secondOutcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(firstOutcome, { status: "migrated", count: 2 });
+    assert.deepEqual(secondOutcome, { status: "absent", count: 0 });
+    assert.deepEqual(await listNotesFromDb(database), notesAfterFirstRun);
+    assert.equal(notesAfterFirstRun.length, 2);
+  });
+
+  test("database transaction creation failure preserves the exact source", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    database.close();
+
+    await assert.rejects(() => migrateLegacyStorageIfNeeded(database, normalizeNote), {
+      name: "InvalidStateError",
+    });
+
+    const reopenedDatabase = await openTestDatabase();
+    assert.deepEqual(await listNotesFromDb(reopenedDatabase), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("cleanup failure leaves a recoverable blocked pair without duplicate import", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const cleanupError = new Error("synthetic cleanup rejection");
+    globalThis.localStorage.removeItem = () => {
+      throw cleanupError;
+    };
+    const database = await openTestDatabase();
+
+    await assert.rejects(() => migrateLegacyStorageIfNeeded(database, normalizeNote), (error) => {
+      assert.equal(error, cleanupError);
+      return true;
+    });
+
+    assert.equal((await listNotesFromDb(database)).length, 2);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+    assert.deepEqual(await migrateLegacyStorageIfNeeded(database, normalizeNote), {
+      status: "blocked-existing-data",
+      count: 2,
+      errorCode: "LEGACY_EXISTING_DATA",
+    });
+    assert.equal((await listNotesFromDb(database)).length, 2);
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
   });
 });
