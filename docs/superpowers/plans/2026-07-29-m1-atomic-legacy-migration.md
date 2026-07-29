@@ -375,12 +375,12 @@ git commit -m "fix: reject duplicate normalized legacy identities"
 - Modify: `core/storage.js`
 
 **Interfaces:**
-- Consumes: one validated normalized array and the existing `putNotesToDb(db, notes)` helper.
+- Consumes: the deciding readwrite transaction and a validated normalized array inside `runLegacyMigrationTransaction`.
 - Produces: all-or-nothing behavior even when a later `store.put` throws before creating an IDB request.
 
-- [ ] **Step 1: Add transaction-prefix RED with an injected clone failure**
+- [ ] **Step 1: Add transaction-prefix RED with an injected sentinel queue failure**
 
-Call migration with the valid two-record fixture and a test normalizer that delegates to `normalizeNote`, then adds a function-valued property only to the second returned record. Assert migration rejects with `DataCloneError`, wait for transaction settlement, reopen the database, and assert zero notes plus the exact source still present.
+Call migration with the valid two-record fixture and temporarily replace the second `IDBObjectStore.put()` call with a throw of a sentinel `Error`. Assert exact error identity, terminal `abort` before caller rejection, zero notes after reopening, and the exact source still present.
 
 - [ ] **Step 2: Run focused RED**
 
@@ -391,12 +391,11 @@ Expected baseline RED: the second `put` throws, but the first queued request com
 Create the completion promise before queueing. If a synchronous `put` throws, call `transaction.abort()`, await the completion rejection with a local catch to avoid an unhandled promise, and rethrow the original queue error:
 
 ```js
-async function putNotesToDb(db, notes) {
+async function runLegacyMigrationTransaction(db, raw, normalizeNote) {
   const tx = db.transaction(STORE_NOTES, "readwrite");
   const done = transactionDone(tx);
-  const store = tx.objectStore(STORE_NOTES);
   try {
-    for (const note of notes) store.put(note);
+    // Count, preflight, and queue every note in this transaction.
   } catch (error) {
     tx.abort();
     await done.catch(() => {});
@@ -548,6 +547,7 @@ For the validated review findings:
 - add a two-connection RED proving separate empty checks permit two imports, then move `count()` and conditional writes into one serialized `readwrite` transaction;
 - add a commit-boundary source-replacement RED, recheck exact source identity before writes and after commit, and reject with content-free `LEGACY_SOURCE_CHANGED` while preserving the newer source;
 - strengthen queue-error identity, asynchronous-abort settlement, normalized-ID collision/type validation, absent short-circuiting, existing-data precedence, and `count()`-only readiness tests;
+- ensure request `error` only records the first cause while terminal `abort` controls rejection; prove synchronous, explicit-abort, and asynchronous `ConstraintError` paths settle before caller recovery and preserve error identity/type;
 - clarify normalization as fail-fast/at-most-once and document the remaining Web Storage compare/remove limitation.
 
 Run each affected focused test first, then every command from Step 3. Commit each valid correction with a message naming the invariant it protects.

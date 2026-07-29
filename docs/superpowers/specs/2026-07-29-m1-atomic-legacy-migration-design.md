@@ -70,7 +70,7 @@ Outcomes never contain a raw source string, normalized note, ID, title, content,
 
 ## Transaction and cleanup ownership
 
-The decisive `count()` and all validated note writes share one `readwrite` transaction. This is the cross-connection exclusion boundary: a later tab's transaction observes the first committed import and returns `blocked-existing-data`. Request failures abort the transaction by IndexedDB semantics. A synchronous queueing failure is caught, the transaction is explicitly aborted, completion is observed, and the original failure is rethrown. Therefore no prefix of the candidate set can commit.
+The decisive `count()` and all validated note writes share one `readwrite` transaction. This is the cross-connection exclusion boundary: a later tab's transaction observes the first committed import and returns `blocked-existing-data`. Request failures abort the transaction by IndexedDB semantics. Bubbling request `error` events record the first request error but do not settle the completion promise; only terminal `complete` or `abort` settles it. On abort, the first request error is preserved, then `transaction.error` is used, with a content-free `AbortError` fallback. A synchronous queueing failure is caught, the transaction is explicitly aborted, terminal settlement is observed, and the original failure is rethrown. Therefore no prefix of the candidate set can commit and callers cannot begin recovery before rollback finishes.
 
 The captured source is compared with the current `localStorage` value before queueing writes and again after the transaction `complete` event. A mismatch preserves the current value and rejects with a content-free error carrying `LEGACY_SOURCE_CHANGED`. The legacy key is removed only after the post-commit comparison succeeds. If the transaction rejects or aborts, no cleanup is attempted and the exact source remains available for retry.
 
@@ -88,7 +88,7 @@ Checked-in files under `tests/fixtures/storage/` cover:
 - duplicate normalized IDs;
 - non-string title/content normalization.
 
-`tests/integration/storage.migration.test.mjs` uses `fake-indexeddb`, an isolated Map-backed `localStorage` stub, fixed synthetic records, and serial database cleanup. It exercises the public migration function and real `normalizeNote` unless a deliberately injected normalization result is required to force a synchronous IndexedDB clone failure.
+`tests/integration/storage.migration.test.mjs` uses `fake-indexeddb`, an isolated Map-backed `localStorage` stub, fixed synthetic records, and serial database cleanup. It exercises the public migration function and real `normalizeNote` except where injected normalization results prove normalized-identity/type validation. Failure tests instrument the next readwrite transaction, inject a sentinel synchronous `put()` error, explicitly abort a queued transaction, or replace a later `put()` with a duplicate-key `add()` request; they assert terminal abort ordering, original error identity/type, rollback after reopening, and exact source preservation.
 
 Required RED evidence proves that the baseline:
 
@@ -99,7 +99,7 @@ Required RED evidence proves that the baseline:
 
 Independent-review RED evidence additionally proves that separate readonly-count and write transactions let two connections both import, and that unconditional post-commit cleanup deletes a newer source written at the commit boundary.
 
-GREEN coverage additionally proves valid and empty migrations, exact malformed/non-array preservation, existing-data blocking, deterministic retry after blocked/failure outcomes, retry-after-success no-op, canonical normalization/derived-field rebuilding, cross-connection serialization, source-conflict preservation, synchronous error identity, asynchronous abort settlement, transaction rollback, bounded outcome keys, and bootstrap call compatibility.
+GREEN coverage additionally proves valid and empty migrations, exact malformed/non-array preservation, existing-data blocking, deterministic retry after blocked/failure outcomes, retry-after-success no-op, canonical normalization/derived-field rebuilding, cross-connection serialization, source-conflict preservation, synchronous and asynchronous request-error identity, terminal abort settlement, transaction rollback, bounded outcome keys, and bootstrap call compatibility.
 
 ## Compatibility, security, and performance
 
