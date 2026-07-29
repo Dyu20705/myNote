@@ -75,17 +75,41 @@ async function putNotesToDb(db, notes) {
   await transactionDone(tx);
 }
 
-function loadLegacyNotes(raw) {
-  if (!raw) {
-    return [];
+function preflightLegacyNotes(raw, normalizeNote) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {
+      outcome: createMigrationOutcome("invalid-json", 0, "LEGACY_INVALID_JSON"),
+    };
   }
 
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  if (!Array.isArray(parsed)) {
+    return {
+      outcome: createMigrationOutcome("invalid-shape", 0, "LEGACY_INVALID_SHAPE"),
+    };
   }
+
+  const candidates = parsed;
+  const notes = [];
+  for (const candidate of candidates) {
+    let note;
+    try {
+      note = normalizeNote(candidate);
+    } catch {
+      return {
+        outcome: createMigrationOutcome("invalid-record", candidates.length, "LEGACY_INVALID_RECORD"),
+      };
+    }
+    if (!note || typeof note !== "object" || typeof note.id !== "string") {
+      return {
+        outcome: createMigrationOutcome("invalid-record", candidates.length, "LEGACY_INVALID_RECORD"),
+      };
+    }
+    notes.push(note);
+  }
+  return { notes };
 }
 
 export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
@@ -99,11 +123,12 @@ export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
     return;
   }
 
-  const legacy = loadLegacyNotes(raw).map(normalizeNote).filter(Boolean);
-  if (legacy.length === 0) {
-    return;
+  const preflight = preflightLegacyNotes(raw, normalizeNote);
+  if (preflight.outcome) {
+    return preflight.outcome;
   }
 
+  const legacy = preflight.notes;
   await putNotesToDb(db, legacy);
   localStorage.removeItem(LEGACY_STORAGE_KEY);
   return createMigrationOutcome("migrated", legacy.length);

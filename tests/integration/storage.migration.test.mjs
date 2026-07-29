@@ -141,4 +141,67 @@ describe("legacy storage migration", { concurrency: false }, () => {
       assert.equal(serializedOutcome.includes(forbidden), false);
     }
   });
+
+  test("malformed JSON is classified without changing either store", async () => {
+    const raw = await loadFixture("legacy-v2-malformed.txt");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(outcome, {
+      status: "invalid-json",
+      count: 0,
+      errorCode: "LEGACY_INVALID_JSON",
+    });
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("non-array JSON is classified without changing either store", async () => {
+    const raw = await loadFixture("legacy-v2-non-array.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(outcome, {
+      status: "invalid-shape",
+      count: 0,
+      errorCode: "LEGACY_INVALID_SHAPE",
+    });
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("mixed valid and invalid records are rejected atomically on every retry", async () => {
+    const raw = await loadFixture("legacy-v2-mixed-invalid.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    const expectedOutcome = {
+      status: "invalid-record",
+      count: 2,
+      errorCode: "LEGACY_INVALID_RECORD",
+    };
+
+    const firstOutcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+    const secondOutcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(firstOutcome, expectedOutcome);
+    assert.deepEqual(secondOutcome, expectedOutcome);
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("valid empty array completes a zero-record migration", async () => {
+    const raw = await loadFixture("legacy-v2-empty.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(outcome, { status: "migrated", count: 0 });
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), null);
+  });
 });
