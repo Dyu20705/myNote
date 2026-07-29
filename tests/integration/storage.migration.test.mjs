@@ -92,12 +92,15 @@ describe("legacy storage migration", { concurrency: false }, () => {
 
   test("missing legacy source returns an explicit absent outcome", async () => {
     const database = await openTestDatabase();
+    database.close();
+    openHandles.delete(database);
 
     const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
 
     assert.deepEqual(outcome, { status: "absent", count: 0 });
     assert.deepEqual(Object.keys(outcome), ["status", "count"]);
-    assert.deepEqual(await listNotesFromDb(database), []);
+    const reopenedDatabase = await openTestDatabase();
+    assert.deepEqual(await listNotesFromDb(reopenedDatabase), []);
   });
 
   test("valid legacy fixture commits canonical notes and returns a bounded outcome", async () => {
@@ -246,6 +249,53 @@ describe("legacy storage migration", { concurrency: false }, () => {
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
   });
 
+  test("distinct raw IDs that normalize to one identity reject the complete migration", async () => {
+    const raw = JSON.stringify([
+      { id: "raw-identity-one", title: "One", content: "First" },
+      { id: "raw-identity-two", title: "Two", content: "Second" },
+    ]);
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    const normalizedCandidates = [];
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, (candidate) => {
+      normalizedCandidates.push(candidate.id);
+      return { ...normalizeNote(candidate), id: "shared-normalized-identity" };
+    });
+
+    assert.deepEqual(outcome, {
+      status: "duplicate-id",
+      count: 2,
+      errorCode: "LEGACY_DUPLICATE_ID",
+    });
+    assert.deepEqual(normalizedCandidates, ["raw-identity-one", "raw-identity-two"]);
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("missing and non-string normalized IDs reject the complete migration", async () => {
+    const raw = JSON.stringify([{ id: "raw-candidate", title: "Candidate", content: "Body" }]);
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    for (const invalidId of [undefined, 42]) {
+      let normalizeCalls = 0;
+      const outcome = await migrateLegacyStorageIfNeeded(database, () => {
+        normalizeCalls += 1;
+        return { id: invalidId };
+      });
+
+      assert.deepEqual(outcome, {
+        status: "invalid-record",
+        count: 1,
+        errorCode: "LEGACY_INVALID_RECORD",
+      });
+      assert.equal(normalizeCalls, 1);
+      assert.deepEqual(await listNotesFromDb(database), []);
+      assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+    }
+  });
+
   test("concurrent migrations serialize the empty check and import exactly once", async () => {
     const raw = JSON.stringify([{ title: "Concurrent synthetic note", content: "One source" }]);
     globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
@@ -315,26 +365,60 @@ describe("legacy storage migration", { concurrency: false }, () => {
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), replacementRaw);
   });
 
-  test("a synchronous queue failure aborts every pending legacy write", async () => {
+  test("a synchronous queue error is preserved and aborts every pending legacy write", async () => {
     const raw = await loadFixture("legacy-v2-valid-multi.json");
     globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
     const database = await openTestDatabase();
-    let normalizationCount = 0;
-    const normalizeWithSecondRecordCloneFailure = (candidate) => {
-      const note = normalizeNote(candidate);
-      normalizationCount += 1;
-      if (normalizationCount === 2) {
-        note.uncloneable = () => {};
+    const queueError = new Error("Synthetic queue failure without note content.");
+    const originalPut = globalThis.IDBObjectStore.prototype.put;
+    let putCalls = 0;
+    globalThis.IDBObjectStore.prototype.put = function (...args) {
+      putCalls += 1;
+      if (putCalls === 2) {
+        throw queueError;
       }
-      return note;
+      return Reflect.apply(originalPut, this, args);
     };
 
-    await assert.rejects(
-      () => migrateLegacyStorageIfNeeded(database, normalizeWithSecondRecordCloneFailure),
-      { name: "DataCloneError" }
-    );
+    try {
+      await assert.rejects(
+        () => migrateLegacyStorageIfNeeded(database, normalizeNote),
+        (error) => error === queueError
+      );
+    } finally {
+      globalThis.IDBObjectStore.prototype.put = originalPut;
+    }
 
-    assert.deepEqual(await listNotesFromDb(database), []);
+    closeAllDatabaseHandles();
+    const reopenedDatabase = await openTestDatabase();
+    assert.deepEqual(await listNotesFromDb(reopenedDatabase), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("an asynchronous transaction abort settles before rejection and rolls back", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    const originalPut = globalThis.IDBObjectStore.prototype.put;
+    let abortScheduled = false;
+    globalThis.IDBObjectStore.prototype.put = function (...args) {
+      const request = Reflect.apply(originalPut, this, args);
+      if (!abortScheduled) {
+        abortScheduled = true;
+        queueMicrotask(() => this.transaction.abort());
+      }
+      return request;
+    };
+
+    try {
+      await assert.rejects(() => migrateLegacyStorageIfNeeded(database, normalizeNote));
+    } finally {
+      globalThis.IDBObjectStore.prototype.put = originalPut;
+    }
+
+    closeAllDatabaseHandles();
+    const reopenedDatabase = await openTestDatabase();
+    assert.deepEqual(await listNotesFromDb(reopenedDatabase), []);
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
   });
 
@@ -347,23 +431,43 @@ describe("legacy storage migration", { concurrency: false }, () => {
       updatedAt: "2024-06-02T00:00:00.000Z",
       version: 1,
     };
-    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    const raw = await loadFixture("legacy-v2-malformed.txt");
     globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
     const database = await openTestDatabase();
     await putNoteToDb(database, existingNote);
+    const originalCount = globalThis.IDBObjectStore.prototype.count;
+    const originalGetAll = globalThis.IDBObjectStore.prototype.getAll;
+    let countCalls = 0;
+    let getAllCalls = 0;
+    globalThis.IDBObjectStore.prototype.count = function (...args) {
+      countCalls += 1;
+      return Reflect.apply(originalCount, this, args);
+    };
+    globalThis.IDBObjectStore.prototype.getAll = function () {
+      getAllCalls += 1;
+      throw new Error("existing-data readiness must not load note bodies");
+    };
     let normalizeCalls = 0;
     const unexpectedNormalizer = () => {
       normalizeCalls += 1;
       throw new Error("existing-data branch must not normalize legacy records");
     };
 
-    const outcome = await migrateLegacyStorageIfNeeded(database, unexpectedNormalizer);
+    let outcome;
+    try {
+      outcome = await migrateLegacyStorageIfNeeded(database, unexpectedNormalizer);
+    } finally {
+      globalThis.IDBObjectStore.prototype.count = originalCount;
+      globalThis.IDBObjectStore.prototype.getAll = originalGetAll;
+    }
 
     assert.deepEqual(outcome, {
       status: "blocked-existing-data",
       count: 1,
       errorCode: "LEGACY_EXISTING_DATA",
     });
+    assert.equal(countCalls, 1);
+    assert.equal(getAllCalls, 0);
     assert.equal(normalizeCalls, 0);
     assert.deepEqual(await listNotesFromDb(database), [existingNote]);
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
