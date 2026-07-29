@@ -169,23 +169,18 @@ function createLocalStorageStub() {
 
 Use `beforeEach`/`afterEach` to close every database handle, delete `myNoteDB`, replace `globalThis.localStorage`, and restore the previous global. Keep the suite `{ concurrency: false }`.
 
-- [ ] **Step 3: Write the first failing bounded-outcome test**
+- [ ] **Step 3: Write the first failing absent-outcome test**
 
-Add one test that calls migration with no legacy key, then with the valid fixture in a fresh empty database. Assert these literal results and no extra keys:
+Add one test that calls migration with no legacy key and asserts this literal result and no extra keys:
 
 ```js
 assert.deepEqual(await migrateLegacyStorageIfNeeded(db, normalizeNote), {
   status: "absent",
   count: 0,
 });
-
-assert.deepEqual(await migrateLegacyStorageIfNeeded(db, normalizeNote), {
-  status: "migrated",
-  count: 2,
-});
 ```
 
-Also compare persisted notes to `fixture.map(normalizeNote)`, assert the source key is absent after commit, and assert serialized outcomes do not contain `Alpha`, `Beta`, fixture IDs, or body text.
+Assert `Object.keys(outcome)` is exactly `["status", "count"]` and IndexedDB remains empty.
 
 - [ ] **Step 4: Run focused RED and record it**
 
@@ -195,7 +190,7 @@ Run:
 node --test --test-concurrency=1 tests/integration/storage.migration.test.mjs
 ```
 
-Expected baseline RED: exit 1; the absent assertion reports actual `undefined` instead of `{ status: "absent", count: 0 }`. Confirm the failure is behavioral, not fixture/import/setup syntax.
+Expected baseline RED: exit 1; the assertion reports actual `undefined` instead of `{ status: "absent", count: 0 }`. Confirm the failure is behavioral, not fixture/import/setup syntax.
 
 - [ ] **Step 5: Commit the observed RED contract**
 
@@ -204,7 +199,7 @@ git add tests/fixtures/storage tests/integration/storage.migration.test.mjs
 git commit -m "test: capture explicit legacy migration outcomes"
 ```
 
-### Task 2: Return compatible outcomes for absent, blocked, and valid migrations
+### Task 2: Return compatible outcomes for absent and valid migrations
 
 **Files:**
 - Modify: `core/storage.js`
@@ -212,45 +207,44 @@ git commit -m "test: capture explicit legacy migration outcomes"
 
 **Interfaces:**
 - Consumes: exact `localStorage.getItem("my-note-v2")`, existing IndexedDB handle, and `normalizeNote(note)`.
-- Produces: public `{ status, count, errorCode? }` outcome objects without changing the two-argument function signature.
+- Produces: public absent/migrated `{ status, count }` outcome objects without changing the two-argument function signature.
 
-- [ ] **Step 1: Add bounded outcome and count helpers**
+- [ ] **Step 1: Add the bounded outcome helper and absent branch**
 
-Add a private helper that omits `errorCode` when not supplied, and use `count()` rather than `getAll()` for readiness:
+Add a private helper that omits `errorCode` when not supplied. Read the raw source once and return absent only when it is `null`:
 
 ```js
 function createMigrationOutcome(status, count, errorCode) {
   return errorCode === undefined ? { status, count } : { status, count, errorCode };
 }
-
-function countNotesInDb(db) {
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NOTES, "readonly").objectStore(STORE_NOTES).count();
-    request.onsuccess = () => resolve(request.result || 0);
-    request.onerror = () => reject(request.error);
-  });
-}
 ```
 
-- [ ] **Step 2: Make raw-source presence and current-data precedence explicit**
+- [ ] **Step 2: Run absent GREEN**
 
-In `migrateLegacyStorageIfNeeded`, read the raw string once. Return `{ status: "absent", count: 0 }` only for `raw === null`. If the key exists and the database count is positive, return:
+Run only the absent test. Expected: PASS with no IndexedDB access beyond test verification and no source mutation.
+
+- [ ] **Step 3: Add and run valid-migration RED**
+
+Add a separate test that installs the valid fixture and asserts:
 
 ```js
-{ status: "blocked-existing-data", count: existingCount, errorCode: "LEGACY_EXISTING_DATA" }
+assert.deepEqual(await migrateLegacyStorageIfNeeded(db, normalizeNote), {
+  status: "migrated",
+  count: 2,
+});
 ```
 
-Do not parse, normalize, write, or remove the source in the blocked branch.
+Compare persisted notes to `fixture.map(normalizeNote)`, assert the source key is absent after commit, and assert serialized outcome text does not contain `Alpha`, `Beta`, fixture IDs, or body text. Expected RED: records migrate, but the actual return is `undefined`.
 
-- [ ] **Step 3: Preserve current valid-array behavior while returning migrated**
+- [ ] **Step 4: Preserve current valid-array behavior while returning migrated**
 
 For this task only, parse the already-read `raw` string with `JSON.parse(raw)`, normalize the valid array, write it with the existing transaction helper, remove the key after `transactionDone`, and return `{ status: "migrated", count: notes.length }`. Task 3 replaces this temporary valid-only parsing path with the complete classifier before any invalid fixture is accepted.
 
-- [ ] **Step 4: Run focused GREEN for the first contract**
+- [ ] **Step 5: Run focused GREEN for both outcome contracts**
 
 Run the focused migration suite. Expected: the one Task 1 test passes with two bounded outcomes, two canonical records, and no source remaining after successful commit.
 
-- [ ] **Step 5: Commit the minimal outcome implementation**
+- [ ] **Step 6: Commit the minimal outcome implementation**
 
 ```bash
 git add core/storage.js tests/integration/storage.migration.test.mjs
@@ -440,16 +434,41 @@ git commit -m "fix: abort legacy migration queue failures"
 Add separate tests proving:
 
 - non-string title/content migrates to the exact result of authoritative `normalizeNote` with canonical `title: "Untitled"` and `content: ""`; caller-supplied links, AST, checksum, and search material are replaced by rebuilt values;
-- existing IndexedDB data returns `{ status: "blocked-existing-data", count: 1, errorCode: "LEGACY_EXISTING_DATA" }`, changes neither store, and does not call the supplied normalizer;
 - a second call after successful migration returns `{ status: "absent", count: 0 }` and leaves the two durable records unchanged;
 - every returned outcome has only `status`, `count`, and optional `errorCode`, with no fixture content in its serialization;
 - the existing bootstrap-compatible two-argument call resolves when callers ignore its return value.
 
-- [ ] **Step 2: Run each new test and classify expected state**
+- [ ] **Step 2: Add existing-data RED**
 
-These compatibility tests should already be GREEN because they lock behavior established by Tasks 2-5. Record that they are regression/acceptance coverage rather than claiming fabricated RED. If any fails, invoke `superpowers:systematic-debugging` before changing production code and add a dedicated RED for the identified root cause.
+Seed one canonical IndexedDB note, install the valid legacy source, and pass a normalizer that throws if called. Assert migration does not call it, changes neither store, preserves the exact source, and returns:
 
-- [ ] **Step 3: Add the migration suite explicitly to integration verification**
+```js
+{ status: "blocked-existing-data", count: 1, errorCode: "LEGACY_EXISTING_DATA" }
+```
+
+Run only this test. Expected RED: the current implementation preserves both stores but returns `undefined`.
+
+- [ ] **Step 3: Add count-only readiness and blocked outcome**
+
+Implement a private count helper without loading note bodies:
+
+```js
+function countNotesInDb(db) {
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(STORE_NOTES, "readonly").objectStore(STORE_NOTES).count();
+    request.onsuccess = () => resolve(request.result || 0);
+    request.onerror = () => reject(request.error);
+  });
+}
+```
+
+After confirming the raw key exists and before preflight parsing, return `{ status: "blocked-existing-data", count: existingCount, errorCode: "LEGACY_EXISTING_DATA" }` when the count is positive.
+
+- [ ] **Step 4: Run existing-data GREEN and remaining compatibility coverage**
+
+Run the existing-data test first. The other compatibility tests should already be GREEN because they lock behavior established by Tasks 2-5. Record those as regression/acceptance coverage rather than claiming fabricated RED. If any fails, invoke `superpowers:systematic-debugging` before changing production code and add a dedicated RED for the identified root cause.
+
+- [ ] **Step 5: Add the migration suite explicitly to integration verification**
 
 Set the script to:
 
@@ -457,11 +476,11 @@ Set the script to:
 "test:integration": "node --test --test-concurrency=1 tests/integration/storage.lifecycle.test.mjs tests/integration/storage.migration.test.mjs tests/integration/note-lifecycle.failure.test.mjs"
 ```
 
-- [ ] **Step 4: Run focused and full integration GREEN**
+- [ ] **Step 6: Run focused and full integration GREEN**
 
 Run the focused migration command and `npm run test:integration`. Record exact tests/suites/pass/fail/skip counts and duration.
 
-- [ ] **Step 5: Commit the complete compatibility matrix**
+- [ ] **Step 7: Commit the complete compatibility matrix**
 
 ```bash
 git add package.json tests/integration/storage.migration.test.mjs tests/fixtures/storage
