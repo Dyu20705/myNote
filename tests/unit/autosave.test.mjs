@@ -190,3 +190,50 @@ test("a rejected scheduled save is handled and a later flush can retry", async (
   await autosave.flush();
   assert.equal(calls, 2);
 });
+
+test("concurrent flush callers both wait for the same trailing save", async () => {
+  const scheduler = createFakeScheduler();
+  const first = deferred();
+  const trailing = deferred();
+  let calls = 0;
+  const autosave = createAutosave({
+    delayMs: 10,
+    scheduler,
+    onSave: async () => {
+      calls += 1;
+      if (calls === 1) {
+        await first.promise;
+      }
+      if (calls === 2) {
+        await trailing.promise;
+      }
+    },
+  });
+
+  autosave.queue();
+  scheduler.runTimer();
+  scheduler.runIdle();
+  await settle();
+  autosave.queue();
+
+  let firstFlushDone = false;
+  let secondFlushDone = false;
+  const flushOne = autosave.flush().then(() => {
+    firstFlushDone = true;
+  });
+  const flushTwo = autosave.flush().then(() => {
+    secondFlushDone = true;
+  });
+
+  first.resolve();
+  await settle();
+
+  assert.equal(calls, 2);
+  assert.equal(firstFlushDone, false);
+  assert.equal(secondFlushDone, false);
+
+  trailing.resolve();
+  await Promise.all([flushOne, flushTwo]);
+  assert.equal(firstFlushDone, true);
+  assert.equal(secondFlushDone, true);
+});
