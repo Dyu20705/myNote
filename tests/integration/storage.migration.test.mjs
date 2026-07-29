@@ -51,6 +51,29 @@ function replaceLegacySourceOnNextReadwriteCommit(database, replacementRaw) {
   });
 }
 
+function observeNextReadwriteTransaction(database, events) {
+  let observed = false;
+  return new Proxy(database, {
+    get(target, property) {
+      if (property !== "transaction") {
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+
+      return (...args) => {
+        const transaction = target.transaction(...args);
+        if (args[1] === "readwrite" && !observed) {
+          observed = true;
+          transaction.addEventListener("error", () => events.push("error"));
+          transaction.addEventListener("abort", () => events.push("abort"));
+          transaction.addEventListener("complete", () => events.push("complete"));
+        }
+        return transaction;
+      };
+    },
+  });
+}
+
 function closeAllDatabaseHandles() {
   for (const database of openHandles) {
     database.close();
@@ -369,6 +392,8 @@ describe("legacy storage migration", { concurrency: false }, () => {
     const raw = await loadFixture("legacy-v2-valid-multi.json");
     globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
     const database = await openTestDatabase();
+    const transactionEvents = [];
+    const observedDatabase = observeNextReadwriteTransaction(database, transactionEvents);
     const queueError = new Error("Synthetic queue failure without note content.");
     const originalPut = globalThis.IDBObjectStore.prototype.put;
     let putCalls = 0;
@@ -382,8 +407,13 @@ describe("legacy storage migration", { concurrency: false }, () => {
 
     try {
       await assert.rejects(
-        () => migrateLegacyStorageIfNeeded(database, normalizeNote),
-        (error) => error === queueError
+        () => migrateLegacyStorageIfNeeded(observedDatabase, normalizeNote),
+        (error) => {
+          assert.equal(error, queueError);
+          assert.equal(transactionEvents.at(-1), "abort");
+          assert.equal(transactionEvents.includes("complete"), false);
+          return true;
+        }
       );
     } finally {
       globalThis.IDBObjectStore.prototype.put = originalPut;
@@ -399,6 +429,8 @@ describe("legacy storage migration", { concurrency: false }, () => {
     const raw = await loadFixture("legacy-v2-valid-multi.json");
     globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
     const database = await openTestDatabase();
+    const transactionEvents = [];
+    const observedDatabase = observeNextReadwriteTransaction(database, transactionEvents);
     const originalPut = globalThis.IDBObjectStore.prototype.put;
     let abortScheduled = false;
     globalThis.IDBObjectStore.prototype.put = function (...args) {
@@ -411,7 +443,56 @@ describe("legacy storage migration", { concurrency: false }, () => {
     };
 
     try {
-      await assert.rejects(() => migrateLegacyStorageIfNeeded(database, normalizeNote));
+      await assert.rejects(
+        () => migrateLegacyStorageIfNeeded(observedDatabase, normalizeNote),
+        (error) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.name, "AbortError");
+          assert.equal(transactionEvents.at(-1), "abort");
+          assert.equal(transactionEvents.includes("complete"), false);
+          return true;
+        }
+      );
+    } finally {
+      globalThis.IDBObjectStore.prototype.put = originalPut;
+    }
+
+    closeAllDatabaseHandles();
+    const reopenedDatabase = await openTestDatabase();
+    assert.deepEqual(await listNotesFromDb(reopenedDatabase), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("an asynchronous request error rejects with its identity after transaction abort", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    const transactionEvents = [];
+    const observedDatabase = observeNextReadwriteTransaction(database, transactionEvents);
+    const originalPut = globalThis.IDBObjectStore.prototype.put;
+    const originalAdd = globalThis.IDBObjectStore.prototype.add;
+    let firstId;
+    let putCalls = 0;
+    globalThis.IDBObjectStore.prototype.put = function (note) {
+      putCalls += 1;
+      if (putCalls === 1) {
+        firstId = note.id;
+        return Reflect.apply(originalPut, this, [note]);
+      }
+      return Reflect.apply(originalAdd, this, [{ ...note, id: firstId }]);
+    };
+
+    try {
+      await assert.rejects(
+        () => migrateLegacyStorageIfNeeded(observedDatabase, normalizeNote),
+        (error) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.name, "ConstraintError");
+          assert.equal(transactionEvents.at(-1), "abort");
+          assert.equal(transactionEvents.includes("complete"), false);
+          return true;
+        }
+      );
     } finally {
       globalThis.IDBObjectStore.prototype.put = originalPut;
     }
