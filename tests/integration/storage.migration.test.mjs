@@ -28,6 +28,29 @@ function createLocalStorageStub() {
   };
 }
 
+function replaceLegacySourceOnNextReadwriteCommit(database, replacementRaw) {
+  return new Proxy(database, {
+    get(target, property) {
+      if (property !== "transaction") {
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+
+      return (...args) => {
+        const transaction = target.transaction(...args);
+        if (args[1] === "readwrite") {
+          transaction.addEventListener(
+            "complete",
+            () => globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, replacementRaw),
+            { once: true }
+          );
+        }
+        return transaction;
+      };
+    },
+  });
+}
+
 function closeAllDatabaseHandles() {
   for (const database of openHandles) {
     database.close();
@@ -221,6 +244,75 @@ describe("legacy storage migration", { concurrency: false }, () => {
     });
     assert.deepEqual(await listNotesFromDb(database), []);
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
+
+  test("concurrent migrations serialize the empty check and import exactly once", async () => {
+    const raw = JSON.stringify([{ title: "Concurrent synthetic note", content: "One source" }]);
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const firstDatabase = await openTestDatabase();
+    const secondDatabase = await openTestDatabase();
+
+    const outcomes = await Promise.all([
+      migrateLegacyStorageIfNeeded(firstDatabase, normalizeNote),
+      migrateLegacyStorageIfNeeded(secondDatabase, normalizeNote),
+    ]);
+
+    assert.deepEqual(
+      outcomes.map(({ status }) => status).sort(),
+      ["blocked-existing-data", "migrated"]
+    );
+    assert.deepEqual(
+      outcomes.find(({ status }) => status === "migrated"),
+      { status: "migrated", count: 1 }
+    );
+    assert.deepEqual(
+      outcomes.find(({ status }) => status === "blocked-existing-data"),
+      {
+        status: "blocked-existing-data",
+        count: 1,
+        errorCode: "LEGACY_EXISTING_DATA",
+      }
+    );
+
+    closeAllDatabaseHandles();
+    const reopenedDatabase = await openTestDatabase();
+    assert.equal((await listNotesFromDb(reopenedDatabase)).length, 1);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), null);
+  });
+
+  test("a source replaced at database commit is preserved as a cleanup conflict", async () => {
+    const raw = JSON.stringify([
+      { id: "legacy-before-replacement", title: "Before", content: "Committed source" },
+    ]);
+    const replacementRaw = JSON.stringify([
+      { id: "legacy-after-replacement", title: "After", content: "Preserved source" },
+    ]);
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    const databaseWithCommitReplacement = replaceLegacySourceOnNextReadwriteCommit(
+      database,
+      replacementRaw
+    );
+
+    await assert.rejects(
+      () => migrateLegacyStorageIfNeeded(databaseWithCommitReplacement, normalizeNote),
+      (error) => {
+        assert.equal(error.code, "LEGACY_SOURCE_CHANGED");
+        assert.equal(error.message.includes("Before"), false);
+        assert.equal(error.message.includes("After"), false);
+        assert.equal(error.message.includes("legacy-before-replacement"), false);
+        assert.equal(error.message.includes("legacy-after-replacement"), false);
+        return true;
+      }
+    );
+
+    closeAllDatabaseHandles();
+    const reopenedDatabase = await openTestDatabase();
+    assert.deepEqual(
+      (await listNotesFromDb(reopenedDatabase)).map(({ id }) => id),
+      ["legacy-before-replacement"]
+    );
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), replacementRaw);
   });
 
   test("a synchronous queue failure aborts every pending legacy write", async () => {
