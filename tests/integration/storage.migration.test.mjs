@@ -204,4 +204,20 @@ describe("legacy storage migration", { concurrency: false }, () => {
     assert.deepEqual(await listNotesFromDb(database), []);
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), null);
   });
+
+  test("duplicate normalized IDs reject the complete migration", async () => {
+    const raw = await loadFixture("legacy-v2-duplicate-ids.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+
+    const outcome = await migrateLegacyStorageIfNeeded(database, normalizeNote);
+
+    assert.deepEqual(outcome, {
+      status: "duplicate-id",
+      count: 2,
+      errorCode: "LEGACY_DUPLICATE_ID",
+    });
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
 });

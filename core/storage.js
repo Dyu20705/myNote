@@ -93,6 +93,7 @@ function preflightLegacyNotes(raw, normalizeNote) {
 
   const candidates = parsed;
   const notes = [];
+  const ids = new Set();
   for (const candidate of candidates) {
     let note;
     try {
@@ -107,6 +108,12 @@ function preflightLegacyNotes(raw, normalizeNote) {
         outcome: createMigrationOutcome("invalid-record", candidates.length, "LEGACY_INVALID_RECORD"),
       };
     }
+    if (ids.has(note.id)) {
+      return {
+        outcome: createMigrationOutcome("duplicate-id", candidates.length, "LEGACY_DUPLICATE_ID"),
+      };
+    }
+    ids.add(note.id);
     notes.push(note);
   }
   return { notes };
