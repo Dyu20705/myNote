@@ -117,6 +117,11 @@ async function runLegacyMigrationTransaction(db, raw, normalizeNote) {
       return preflight;
     }
 
+    if (localStorage.getItem(LEGACY_STORAGE_KEY) !== raw) {
+      await done;
+      return { sourceChanged: true };
+    }
+
     for (const note of preflight.notes) {
       store.put(note);
     }
