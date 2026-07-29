@@ -7,6 +7,12 @@ function createMigrationOutcome(status, count, errorCode) {
   return errorCode === undefined ? { status, count } : { status, count, errorCode };
 }
 
+function createLegacySourceChangedError() {
+  const error = new Error("Legacy source changed during migration.");
+  error.code = "LEGACY_SOURCE_CHANGED";
+  return error;
+}
+
 export function resetDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
@@ -54,10 +60,9 @@ export async function listNotesFromDb(db) {
   });
 }
 
-function countNotesInDb(db) {
+function requestResult(request) {
   return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NOTES, "readonly").objectStore(STORE_NOTES).count();
-    request.onsuccess = () => resolve(request.result || 0);
+    request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
@@ -74,20 +79,50 @@ export async function deleteNoteFromDb(db, id) {
   await transactionDone(tx);
 }
 
-async function putNotesToDb(db, notes) {
+async function runLegacyMigrationTransaction(db, raw, normalizeNote) {
   const tx = db.transaction(STORE_NOTES, "readwrite");
   const done = transactionDone(tx);
   const store = tx.objectStore(STORE_NOTES);
+
   try {
-    for (const note of notes) {
+    const existingCount = (await requestResult(store.count())) || 0;
+    if (existingCount > 0) {
+      await done;
+      return {
+        outcome: createMigrationOutcome(
+          "blocked-existing-data",
+          existingCount,
+          "LEGACY_EXISTING_DATA"
+        ),
+      };
+    }
+
+    if (localStorage.getItem(LEGACY_STORAGE_KEY) !== raw) {
+      await done;
+      return { sourceChanged: true };
+    }
+
+    const preflight = preflightLegacyNotes(raw, normalizeNote);
+    if (preflight.outcome) {
+      await done;
+      return preflight;
+    }
+
+    for (const note of preflight.notes) {
       store.put(note);
     }
+
+    await done;
+    return { migratedCount: preflight.notes.length };
   } catch (error) {
-    tx.abort();
+    try {
+      tx.abort();
+    } catch {
+      // The transaction may already have aborted because an asynchronous request failed.
+    }
     await done.catch(() => {});
     throw error;
   }
-  await done;
 }
 
 function preflightLegacyNotes(raw, normalizeNote) {
@@ -140,18 +175,13 @@ export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
     return createMigrationOutcome("absent", 0);
   }
 
-  const existingCount = await countNotesInDb(db);
-  if (existingCount > 0) {
-    return createMigrationOutcome("blocked-existing-data", existingCount, "LEGACY_EXISTING_DATA");
+  const result = await runLegacyMigrationTransaction(db, raw, normalizeNote);
+  if (result.outcome) {
+    return result.outcome;
   }
-
-  const preflight = preflightLegacyNotes(raw, normalizeNote);
-  if (preflight.outcome) {
-    return preflight.outcome;
+  if (result.sourceChanged || localStorage.getItem(LEGACY_STORAGE_KEY) !== raw) {
+    throw createLegacySourceChangedError();
   }
-
-  const legacy = preflight.notes;
-  await putNotesToDb(db, legacy);
   localStorage.removeItem(LEGACY_STORAGE_KEY);
-  return createMigrationOutcome("migrated", legacy.length);
+  return createMigrationOutcome("migrated", result.migratedCount);
 }
