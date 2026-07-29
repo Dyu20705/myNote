@@ -3,6 +3,10 @@ const DB_NAME = "myNoteDB";
 const DB_VERSION = 1;
 const STORE_NOTES = "notes";
 
+function createMigrationOutcome(status, count, errorCode) {
+  return errorCode === undefined ? { status, count } : { status, count, errorCode };
+}
+
 export function resetDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
@@ -71,8 +75,7 @@ async function putNotesToDb(db, notes) {
   await transactionDone(tx);
 }
 
-function loadLegacyNotes() {
-  const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+function loadLegacyNotes(raw) {
   if (!raw) {
     return [];
   }
@@ -86,16 +89,22 @@ function loadLegacyNotes() {
 }
 
 export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
+  const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (raw === null) {
+    return createMigrationOutcome("absent", 0);
+  }
+
   const existing = await listNotesFromDb(db);
   if (existing.length > 0) {
     return;
   }
 
-  const legacy = loadLegacyNotes().map(normalizeNote).filter(Boolean);
+  const legacy = loadLegacyNotes(raw).map(normalizeNote).filter(Boolean);
   if (legacy.length === 0) {
     return;
   }
 
   await putNotesToDb(db, legacy);
   localStorage.removeItem(LEGACY_STORAGE_KEY);
+  return createMigrationOutcome("migrated", legacy.length);
 }
