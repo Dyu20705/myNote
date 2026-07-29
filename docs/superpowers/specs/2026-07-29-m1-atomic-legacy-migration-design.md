@@ -48,7 +48,7 @@ Classification statuses are:
 
 - `invalid-json`: JSON parsing failed.
 - `invalid-shape`: parsed JSON is not an array.
-- `invalid-record`: at least one candidate cannot normalize to an object with a non-empty string ID, including a thrown normalization error.
+- `invalid-record`: at least one candidate cannot normalize to an object with a string ID under the authoritative #39 contract, including a thrown normalization error.
 - `duplicate-id`: two successfully normalized candidates share an ID.
 - `ready`: every candidate is valid and IDs are unique; normalized notes remain internal to the migration operation.
 
