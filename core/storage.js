@@ -68,11 +68,18 @@ export async function deleteNoteFromDb(db, id) {
 
 async function putNotesToDb(db, notes) {
   const tx = db.transaction(STORE_NOTES, "readwrite");
+  const done = transactionDone(tx);
   const store = tx.objectStore(STORE_NOTES);
-  for (const note of notes) {
-    store.put(note);
+  try {
+    for (const note of notes) {
+      store.put(note);
+    }
+  } catch (error) {
+    tx.abort();
+    await done.catch(() => {});
+    throw error;
   }
-  await transactionDone(tx);
+  await done;
 }
 
 function preflightLegacyNotes(raw, normalizeNote) {

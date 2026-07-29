@@ -220,4 +220,27 @@ describe("legacy storage migration", { concurrency: false }, () => {
     assert.deepEqual(await listNotesFromDb(database), []);
     assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
   });
+
+  test("a synchronous queue failure aborts every pending legacy write", async () => {
+    const raw = await loadFixture("legacy-v2-valid-multi.json");
+    globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+    const database = await openTestDatabase();
+    let normalizationCount = 0;
+    const normalizeWithSecondRecordCloneFailure = (candidate) => {
+      const note = normalizeNote(candidate);
+      normalizationCount += 1;
+      if (normalizationCount === 2) {
+        note.uncloneable = () => {};
+      }
+      return note;
+    };
+
+    await assert.rejects(
+      () => migrateLegacyStorageIfNeeded(database, normalizeWithSecondRecordCloneFailure),
+      { name: "DataCloneError" }
+    );
+
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), raw);
+  });
 });
