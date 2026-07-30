@@ -4,10 +4,15 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 await import("fake-indexeddb/auto");
 
 const {
+  deleteNoteWithReviewFromDb,
   getStudyReviewFromDb,
   listNotesFromDb,
   listStudyReviewsFromDb,
   openDatabase,
+  putJapaneseNoteWithReviewToDb,
+  putNoteToDb,
+  putStudyReviewToDb,
+  restoreNoteWithReviewToDb,
 } = await import("../../core/storage.js");
 
 const DATABASE_NAME = "myNoteDB";
@@ -98,6 +103,38 @@ function readRawReview(database, noteId) {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+function readRawNotes(database) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("notes", "readonly");
+    const request = transaction.objectStore("notes").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function readRawReviews(database) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("studyReviews", "readonly");
+    const request = transaction.objectStore("studyReviews").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function makePairedNote(id = VALID_REVIEW.noteId) {
+  return {
+    id,
+    title: "Paired study note",
+    content: "A stored note paired with its review schedule.",
+    updatedAt: "2026-07-30T00:00:00.000Z",
+    metadata: { source: "integration-test" },
+  };
+}
+
+function makeReview(noteId = VALID_REVIEW.noteId, overrides = {}) {
+  return { ...VALID_REVIEW, noteId, ...overrides };
 }
 
 async function openDatabaseObservingV1NoteAccess() {
@@ -196,5 +233,208 @@ describe("study review storage schema", { concurrency: false }, () => {
       return true;
     });
     assert.deepEqual(await readRawReview(database, invalidPersistedReview.noteId), invalidPersistedReview);
+  });
+
+  test("creates a note and validated defensive review pair without caller aliases", async () => {
+    const database = await openTestDatabase();
+    const note = makePairedNote();
+    const review = { ...makeReview(), ignored: "not persisted" };
+    const expectedNote = structuredClone(note);
+
+    await putJapaneseNoteWithReviewToDb(database, note, review);
+    note.metadata.source = "mutated caller value";
+    review.status = "review";
+
+    assert.deepEqual(await listNotesFromDb(database), [expectedNote]);
+    assert.deepEqual(await readRawReview(database, expectedNote.id), makeReview());
+
+    const listed = (await listStudyReviewsFromDb(database))[0];
+    listed.status = "suspended";
+    const fetched = await getStudyReviewFromDb(database, expectedNote.id);
+    fetched.status = "learning";
+    assert.deepEqual(await getStudyReviewFromDb(database, expectedNote.id), makeReview());
+  });
+
+  test("updates an existing review but rejects a missing review without creating an orphan", async () => {
+    const database = await openTestDatabase();
+    const existingReview = makeReview("existing-review");
+    await writeRawReview(database, existingReview);
+
+    const updatedReview = makeReview(existingReview.noteId, { status: "learning", interval: 1 });
+    await putStudyReviewToDb(database, updatedReview);
+    assert.deepEqual(await getStudyReviewFromDb(database, existingReview.noteId), updatedReview);
+
+    const missingReview = makeReview("missing-review");
+    await assert.rejects(() => putStudyReviewToDb(database, missingReview), (error) => {
+      assert.equal(error.code, "STUDY_REVIEW_NOT_FOUND");
+      return true;
+    });
+    assert.equal(await getStudyReviewFromDb(database, missingReview.noteId), undefined);
+  });
+
+  test("rejects invalid pair inputs before opening a transaction", async () => {
+    let transactionCalls = 0;
+    const database = {
+      transaction() {
+        transactionCalls += 1;
+        throw new Error("transactions must not open for invalid input");
+      },
+    };
+    const invalidReviews = [
+      null,
+      { ...makeReview(), status: undefined },
+      makeReview(""),
+      makeReview(VALID_REVIEW.noteId, { notebookType: "other" }),
+      makeReview(VALID_REVIEW.noteId, { status: "other" }),
+      makeReview(VALID_REVIEW.noteId, { lastReviewedAt: "not-a-date" }),
+      makeReview(VALID_REVIEW.noteId, { nextReviewAt: "not-a-date" }),
+      makeReview(VALID_REVIEW.noteId, { interval: -1 }),
+      makeReview(VALID_REVIEW.noteId, { interval: 0.5 }),
+      makeReview(VALID_REVIEW.noteId, { ease: 3.1 }),
+    ];
+
+    for (const invalidNote of [makePairedNote(""), { ...makePairedNote(), id: 42 }]) {
+      const review = makeReview();
+      await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, invalidNote, review));
+    }
+    await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, makePairedNote(), makeReview("other-id")));
+    for (const invalidReview of invalidReviews) {
+      await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, makePairedNote(), invalidReview));
+      await assert.rejects(() => putStudyReviewToDb(database, invalidReview));
+    }
+    assert.equal(transactionCalls, 0);
+  });
+
+  test("rolls back pair creation when either note or review key collides", async () => {
+    const database = await openTestDatabase();
+    const existingNote = makePairedNote("note-collision");
+    const existingReview = makeReview("review-collision");
+    await putNoteToDb(database, existingNote);
+    await writeRawReview(database, existingReview);
+    const beforeNotes = await readRawNotes(database);
+    const beforeReviews = await readRawReviews(database);
+
+    await assert.rejects(() => putJapaneseNoteWithReviewToDb(
+      database,
+      makePairedNote(existingNote.id),
+      makeReview(existingNote.id),
+    ));
+    assert.deepEqual(await readRawNotes(database), beforeNotes);
+    assert.deepEqual(await readRawReviews(database), beforeReviews);
+
+    await assert.rejects(() => putJapaneseNoteWithReviewToDb(
+      database,
+      makePairedNote(existingReview.noteId),
+      makeReview(existingReview.noteId),
+    ));
+    assert.deepEqual(await readRawNotes(database), beforeNotes);
+    assert.deepEqual(await readRawReviews(database), beforeReviews);
+  });
+
+  test("deletes an enrolled note with its captured review and deletes generic notes alone", async () => {
+    const database = await openTestDatabase();
+    const pairedNote = makePairedNote("enrolled-note");
+    const pairedReview = makeReview(pairedNote.id);
+    const genericNote = makePairedNote("generic-note");
+    await putJapaneseNoteWithReviewToDb(database, pairedNote, pairedReview);
+    await putNoteToDb(database, genericNote);
+
+    assert.deepEqual(await deleteNoteWithReviewFromDb(database, pairedNote.id), pairedReview);
+    assert.deepEqual(await readRawReview(database, pairedNote.id), undefined);
+    assert.deepEqual(await listNotesFromDb(database), [genericNote]);
+
+    assert.equal(await deleteNoteWithReviewFromDb(database, genericNote.id), undefined);
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.deepEqual(await listStudyReviewsFromDb(database), []);
+  });
+
+  test("restores the exact validated note and review pair", async () => {
+    const database = await openTestDatabase();
+    const note = makePairedNote("restored-note");
+    const review = makeReview(note.id, { status: "learning", interval: 3 });
+
+    await restoreNoteWithReviewToDb(database, note, review);
+    assert.deepEqual(await readRawNotes(database), [note]);
+    assert.deepEqual(await readRawReviews(database), [review]);
+  });
+
+  test("aborts each paired mutation when its second store request throws synchronously", async () => {
+    const database = await openTestDatabase();
+    const originalAdd = globalThis.IDBObjectStore.prototype.add;
+    const originalPut = globalThis.IDBObjectStore.prototype.put;
+    const originalDelete = globalThis.IDBObjectStore.prototype.delete;
+
+    async function assertRollback(operation, secondStoreName, patchMethod) {
+      const beforeNotes = await readRawNotes(database);
+      const beforeReviews = await readRawReviews(database);
+      const injectedError = new Error(`injected ${patchMethod} failure`);
+      const original = globalThis.IDBObjectStore.prototype[patchMethod];
+      globalThis.IDBObjectStore.prototype[patchMethod] = function (...args) {
+        if (this.name === secondStoreName) {
+          throw injectedError;
+        }
+        return Reflect.apply(original, this, args);
+      };
+
+      try {
+        await assert.rejects(operation, (error) => error === injectedError);
+      } finally {
+        globalThis.IDBObjectStore.prototype[patchMethod] = original;
+      }
+      assert.deepEqual(await readRawNotes(database), beforeNotes);
+      assert.deepEqual(await readRawReviews(database), beforeReviews);
+    }
+
+    try {
+      await assertRollback(
+        () => putJapaneseNoteWithReviewToDb(database, makePairedNote("create-failure"), makeReview("create-failure")),
+        "studyReviews",
+        "add",
+      );
+      await assertRollback(
+        () => deleteNoteWithReviewFromDb(database, "delete-failure"),
+        "studyReviews",
+        "delete",
+      );
+      await assertRollback(
+        () => restoreNoteWithReviewToDb(database, makePairedNote("restore-failure"), makeReview("restore-failure")),
+        "studyReviews",
+        "put",
+      );
+    } finally {
+      globalThis.IDBObjectStore.prototype.add = originalAdd;
+      globalThis.IDBObjectStore.prototype.put = originalPut;
+      globalThis.IDBObjectStore.prototype.delete = originalDelete;
+    }
+  });
+
+  test("rejects after a scheduled transaction abort and commits no partial pair", async () => {
+    const database = await openTestDatabase();
+    const beforeNotes = await readRawNotes(database);
+    const beforeReviews = await readRawReviews(database);
+    const originalAdd = globalThis.IDBObjectStore.prototype.add;
+    let terminalAbortObserved = false;
+
+    globalThis.IDBObjectStore.prototype.add = function (...args) {
+      const request = Reflect.apply(originalAdd, this, args);
+      if (this.name === "studyReviews") {
+        this.transaction.addEventListener("abort", () => {
+          terminalAbortObserved = true;
+        }, { once: true });
+        queueMicrotask(() => this.transaction.abort());
+      }
+      return request;
+    };
+
+    try {
+      await assert.rejects(
+        () => putJapaneseNoteWithReviewToDb(database, makePairedNote("scheduled-abort"), makeReview("scheduled-abort")),
+        () => terminalAbortObserved,
+      );
+    } finally {
+      globalThis.IDBObjectStore.prototype.add = originalAdd;
+    }
+    assert.deepEqual(await readRawNotes(database), beforeNotes);
+    assert.deepEqual(await readRawReviews(database), beforeReviews);
   });
 });

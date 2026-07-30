@@ -20,6 +20,50 @@ function createTransactionAbortError() {
   return new DOMException("IndexedDB transaction aborted.", "AbortError");
 }
 
+function createInvalidNoteError() {
+  const error = new TypeError("Invalid note");
+  error.code = "INVALID_NOTE";
+  return error;
+}
+
+function createStudyReviewNotFoundError() {
+  const error = new Error("Study review not found");
+  error.code = "STUDY_REVIEW_NOT_FOUND";
+  return error;
+}
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function validatePairedNote(note, review) {
+  if (!isPlainObject(note) || typeof note.id !== "string" || note.id.length === 0 || note.id !== review.noteId) {
+    throw createInvalidNoteError();
+  }
+  try {
+    return structuredClone(note);
+  } catch {
+    throw createInvalidNoteError();
+  }
+}
+
+function abortTransaction(transaction) {
+  try {
+    transaction.abort();
+  } catch {
+    // The transaction may already have aborted because an asynchronous request failed.
+  }
+}
+
+async function abortAndSettleTransaction(transaction, done) {
+  abortTransaction(transaction);
+  await done.catch(() => {});
+}
+
 export function resetDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
@@ -97,6 +141,78 @@ export async function getStudyReviewFromDb(db, noteId) {
   const tx = db.transaction(STORE_STUDY_REVIEWS, "readonly");
   const review = await requestResult(tx.objectStore(STORE_STUDY_REVIEWS).get(noteId));
   return review === undefined ? undefined : validateStudyReview(review);
+}
+
+export async function putStudyReviewToDb(db, review) {
+  const validatedReview = validateStudyReview(review);
+  const tx = db.transaction(STORE_STUDY_REVIEWS, "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    const store = tx.objectStore(STORE_STUDY_REVIEWS);
+    const existingReview = await requestResult(store.get(validatedReview.noteId));
+    if (existingReview === undefined) {
+      throw createStudyReviewNotFoundError();
+    }
+    store.put(validatedReview);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function putJapaneseNoteWithReviewToDb(db, note, review) {
+  const validatedReview = validateStudyReview(review);
+  const validatedNote = validatePairedNote(note, validatedReview);
+  const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    tx.objectStore(STORE_NOTES).add(validatedNote);
+    tx.objectStore(STORE_STUDY_REVIEWS).add(validatedReview);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function deleteNoteWithReviewFromDb(db, noteId) {
+  if (typeof noteId !== "string" || noteId.length === 0) {
+    throw createInvalidNoteError();
+  }
+  const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    const reviewStore = tx.objectStore(STORE_STUDY_REVIEWS);
+    const review = await requestResult(reviewStore.get(noteId));
+    const capturedReview = review === undefined ? undefined : validateStudyReview(review);
+    tx.objectStore(STORE_NOTES).delete(noteId);
+    reviewStore.delete(noteId);
+    await done;
+    return capturedReview;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function restoreNoteWithReviewToDb(db, note, review) {
+  const validatedReview = validateStudyReview(review);
+  const validatedNote = validatePairedNote(note, validatedReview);
+  const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    tx.objectStore(STORE_NOTES).put(validatedNote);
+    tx.objectStore(STORE_STUDY_REVIEWS).put(validatedReview);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
 }
 
 export async function putNoteToDb(db, note) {
