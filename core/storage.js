@@ -1,7 +1,10 @@
+import { validateStudyReview } from "./studyReview.js";
+
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NOTES = "notes";
+const STORE_STUDY_REVIEWS = "studyReviews";
 
 function createMigrationOutcome(status, count, errorCode) {
   return errorCode === undefined ? { status, count } : { status, count, errorCode };
@@ -15,6 +18,61 @@ function createLegacySourceChangedError() {
 
 function createTransactionAbortError() {
   return new DOMException("IndexedDB transaction aborted.", "AbortError");
+}
+
+function createDatabaseUpgradeBlockedError() {
+  const error = new Error("Database upgrade is blocked by another open tab.");
+  error.code = "DATABASE_UPGRADE_BLOCKED";
+  return error;
+}
+
+function createInvalidNoteError() {
+  const error = new TypeError("Invalid note");
+  error.code = "INVALID_NOTE";
+  return error;
+}
+
+function createStudyReviewNotFoundError() {
+  const error = new Error("Study review not found");
+  error.code = "STUDY_REVIEW_NOT_FOUND";
+  return error;
+}
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function validatePairedNote(note, review) {
+  try {
+    if (!isPlainObject(note)) {
+      throw createInvalidNoteError();
+    }
+    const clonedNote = structuredClone(note);
+    const noteId = clonedNote.id;
+    if (typeof noteId !== "string" || noteId.length === 0 || noteId !== review.noteId) {
+      throw createInvalidNoteError();
+    }
+    return clonedNote;
+  } catch {
+    throw createInvalidNoteError();
+  }
+}
+
+function abortTransaction(transaction) {
+  try {
+    transaction.abort();
+  } catch {
+    // The transaction may already have aborted because an asynchronous request failed.
+  }
+}
+
+async function abortAndSettleTransaction(transaction, done) {
+  abortTransaction(transaction);
+  await done.catch(() => {});
 }
 
 export function resetDatabase() {
@@ -32,16 +90,37 @@ export function resetDatabase() {
 export function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let blocked = false;
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      const store = db.createObjectStore(STORE_NOTES, { keyPath: "id" });
-      store.createIndex("updatedAt", "updatedAt");
-      store.createIndex("pinned", "pinned");
-      store.createIndex("archived", "archived");
+      if (event.oldVersion < 1 && !db.objectStoreNames.contains(STORE_NOTES)) {
+        const store = db.createObjectStore(STORE_NOTES, { keyPath: "id" });
+        store.createIndex("updatedAt", "updatedAt");
+        store.createIndex("pinned", "pinned");
+        store.createIndex("archived", "archived");
+      }
+      if (event.oldVersion < 2 && !db.objectStoreNames.contains(STORE_STUDY_REVIEWS)) {
+        const store = db.createObjectStore(STORE_STUDY_REVIEWS, { keyPath: "noteId" });
+        store.createIndex("nextReviewAt", "nextReviewAt");
+        store.createIndex("notebookType", "notebookType");
+        store.createIndex("status", "status");
+      }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onblocked = () => {
+      blocked = true;
+      reject(createDatabaseUpgradeBlockedError());
+    };
+    request.onsuccess = () => {
+      const database = request.result;
+      if (blocked) {
+        database.close();
+        return;
+      }
+      database.onversionchange = () => database.close();
+      resolve(database);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -51,10 +130,11 @@ function transactionDone(transaction) {
     let firstRequestError;
     transaction.oncomplete = () => resolve();
     transaction.onerror = (event) => {
-      firstRequestError ||= event.target?.error || transaction.error;
+      const requestError = event.target?.error || transaction.error;
+      if (requestError?.name !== "AbortError") firstRequestError ||= requestError;
     };
     transaction.onabort = () => {
-      reject(firstRequestError || transaction.error || createTransactionAbortError());
+      reject(firstRequestError || createTransactionAbortError());
     };
   });
 }
@@ -74,6 +154,98 @@ function requestResult(request) {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+export async function listStudyReviewsFromDb(db) {
+  const tx = db.transaction(STORE_STUDY_REVIEWS, "readonly");
+  const reviews = await requestResult(tx.objectStore(STORE_STUDY_REVIEWS).getAll());
+  return (reviews || []).map(validateStudyReview);
+}
+
+export async function getStudyReviewFromDb(db, noteId) {
+  const tx = db.transaction(STORE_STUDY_REVIEWS, "readonly");
+  const review = await requestResult(tx.objectStore(STORE_STUDY_REVIEWS).get(noteId));
+  return review === undefined ? undefined : validateStudyReview(review);
+}
+
+export async function putStudyReviewToDb(db, review) {
+  const validatedReview = validateStudyReview(review);
+  const tx = db.transaction(STORE_STUDY_REVIEWS, "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    const store = tx.objectStore(STORE_STUDY_REVIEWS);
+    const existingReview = await requestResult(store.get(validatedReview.noteId));
+    if (existingReview === undefined) {
+      throw createStudyReviewNotFoundError();
+    }
+    store.put(validatedReview);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function putJapaneseNoteWithReviewToDb(db, note, review) {
+  const validatedReview = validateStudyReview(review);
+  const validatedNote = validatePairedNote(note, validatedReview);
+  const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    tx.objectStore(STORE_NOTES).add(validatedNote);
+    tx.objectStore(STORE_STUDY_REVIEWS).add(validatedReview);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function deleteNoteWithReviewFromDb(db, noteId) {
+  if (typeof noteId !== "string" || noteId.length === 0) {
+    throw createInvalidNoteError();
+  }
+  const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    const noteStore = tx.objectStore(STORE_NOTES);
+    const reviewStore = tx.objectStore(STORE_STUDY_REVIEWS);
+    const [note, review] = await Promise.all([
+      requestResult(noteStore.get(noteId)),
+      requestResult(reviewStore.get(noteId)),
+    ]);
+    if (note === undefined) {
+      await done;
+      return undefined;
+    }
+    const capturedReview = review === undefined ? undefined : validateStudyReview(review);
+    noteStore.delete(noteId);
+    if (capturedReview !== undefined) reviewStore.delete(noteId);
+    await done;
+    return capturedReview;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function restoreNoteWithReviewToDb(db, note, review) {
+  const validatedReview = validateStudyReview(review);
+  const validatedNote = validatePairedNote(note, validatedReview);
+  const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    tx.objectStore(STORE_NOTES).add(validatedNote);
+    tx.objectStore(STORE_STUDY_REVIEWS).add(validatedReview);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
 }
 
 export async function putNoteToDb(db, note) {

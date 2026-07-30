@@ -94,7 +94,33 @@ Required:
 - Persistence failure preserves the source for retry. Retry after success is an `absent` no-op.
 - Migration outcomes contain only bounded `status`, `count`, and optional safe `errorCode` fields.
 - Migration never returns or logs raw source data, note data, identifiers, titles, content, tags, links, checksums, or database dumps.
-- The current migration keeps `myNoteDB` version 1 and the current `notes` store/indexes until a separately approved schema change is implemented.
+- Legacy migration owns only the existing `notes` store and indexes. It does not create, update, delete, or inspect `studyReviews`.
+
+### Japanese study persistence: schema v2
+
+- `myNoteDB` version 2 is a forward-only additive upgrade.
+- The `oldVersion < 2` upgrade branch creates only `studyReviews`; it never enumerates, reads, normalizes, writes, copies, or rewrites a record in `notes`.
+- `notes` retains store name `notes`, key path `id`, indexes `updatedAt`, `pinned`, and `archived`, and all existing record bytes.
+- Bootstrap and upgrade do not automatically enroll existing notes or create review records.
+- `studyReviews` uses key path `noteId` and exactly the indexes `nextReviewAt`, `notebookType`, and `status`.
+- A review has the exact owned fields `noteId`, `notebookType`, `status`, `lastReviewedAt`, `nextReviewAt`, `interval`, and `ease`.
+- `interval` is a non-negative safe integer. `ease` is finite and lies within the persisted contract range.
+- The validator rejects malformed data with content-free `INVALID_STUDY_REVIEW` and returns an exact-shape defensive copy.
+- Review reads validate and return defensive copies. Invalid persisted records reject without repair or rewrite.
+- An orphan review remains readable and durable; storage code does not silently delete it or create a replacement note.
+- Updating an existing review uses one `studyReviews` `readwrite` transaction. A missing record rejects with `STUDY_REVIEW_NOT_FOUND` and is not inserted.
+- Creating, deleting, or restoring a note/review pair uses one `readwrite` transaction containing both `notes` and `studyReviews`.
+- Pair inputs are validated and cloned before a transaction opens, and note/review identifiers must match.
+- A collision, synchronous queue failure, request failure, or abort rolls back both stores and settles terminally before rejection.
+- The first real IndexedDB request error retains exact object identity. A cancelled request caused by explicit transaction abort does not replace it.
+- Application-created validation, missing-record, blocked-upgrade, and abort fallback errors contain no note or review identifier, timestamp, field value, payload, or content.
+- Deleting a generic note removes only the note and returns `undefined`.
+- Deleting an enrolled note returns a defensive review only after the paired deletion commits.
+- Deleting a missing note preserves any orphan review with the same key and returns `undefined`.
+- Restore uses `add` for both records and aborts instead of overwriting either existing key.
+- A blocked version upgrade rejects with `DATABASE_UPGRADE_BLOCKED`; a connection that succeeds after that rejection is immediately closed.
+- Every opened database connection closes itself on `versionchange` so a newer deployment is not indefinitely blocked by this client.
+- There is no automatic schema downgrade from v2 to v1. Rollback code must understand v2 and must not delete review data or rewrite notes.
 
 Forbidden:
 
@@ -138,7 +164,7 @@ Normal editing must not trigger a full index rebuild. Any mismatch must expose a
 
 ## 8. Verification
 
-Changes to parser, model, index, backlinks, state, history, persistence, migration, or autosave require focused regression tests covering the affected contract, including as applicable:
+Changes to parser, model, index, backlinks, state, history, persistence, migration, autosave, or study-review metadata require focused regression tests covering the affected contract, including as applicable:
 
 - Deterministic parsing and normalization.
 - Reversible patch and index transitions.
@@ -146,3 +172,4 @@ Changes to parser, model, index, backlinks, state, history, persistence, migrati
 - Persist-before-memory ordering and injected failure.
 - Autosave coalescing, serialization, flushing, trailing work, and rejection handling.
 - Migration atomicity, compatibility, retry behavior, and bounded diagnostics.
+- Schema upgrades, blocked upgrades, cross-store rollback, collision handling, orphan preservation, and defensive validation.

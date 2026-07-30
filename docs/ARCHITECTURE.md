@@ -6,7 +6,8 @@ This document defines the required architecture for the current application. Cha
 
 myNote currently contains these core capabilities:
 
-- **Persistence:** IndexedDB with a bounded legacy localStorage migration.
+- **Persistence:** IndexedDB schema v2 with a bounded legacy localStorage migration.
+- **Study metadata:** isolated `studyReviews` records linked to notes only by `noteId`.
 - **Canonical model:** versioned notes with checksums, blocks, tags, links, AST data, and search material.
 - **Parser pipeline:** `parseDocument` and related parser functions own derived note metadata.
 - **Search:** worker-based querying with incremental index updates.
@@ -25,7 +26,7 @@ UI → Actions → State → Core services → Persistence
 - UI modules emit events and render state; they do not access persistence directly.
 - Actions are the application entry point for canonical mutations.
 - State transitions are explicit, deterministic, and observable.
-- Core services own parsing, indexing, backlinks, autosave, patches, and history.
+- Core services own parsing, indexing, backlinks, autosave, patches, history, and study-review validation.
 - Persistence is called only through action/effect or core lifecycle boundaries.
 
 ## 3. Module ownership
@@ -55,8 +56,17 @@ UI → Actions → State → Core services → Persistence
 
 ### `core/storage.js`
 
-- Owns IndexedDB schema, transactions, migration, and database I/O.
+- Owns IndexedDB schema v2, transactions, migration, and database I/O.
+- Preserves the existing `notes` store and adds `studyReviews` without scanning or rewriting notes.
+- Owns atomic cross-store note/review mutations and terminal transaction settlement.
+- Rejects a blocked schema upgrade deterministically and closes connections on version changes.
 - Never mutates UI or application state directly.
+
+### `core/studyReview.js`
+
+- Owns the exact persisted study-review shape, enums, validation, and defensive copies.
+- Rejects malformed or unsafe metadata with bounded content-free errors.
+- Does not own note content, scheduling behavior, application state, or UI lifecycle.
 
 ### `core/commandStack.js`, `core/notePatch.js`, and `core/history.js`
 
@@ -83,7 +93,16 @@ UI event
 
 Canonical persistence failure stops the mutation before in-memory state and history report success. Derived index failure after canonical persistence is treated as a visible, rebuildable degradation.
 
-## 5. Change gate
+Study-review persistence in this work package adds no scheduler, parser behavior, state transition, automatic enrollment, or UI. Any operation that changes both a note and its review uses one cross-store transaction. Existing notes remain byte-for-byte untouched during the v1-to-v2 upgrade.
+
+## 5. Compatibility and rollback
+
+- Schema v2 is forward-only and additive.
+- A v1 client cannot open a database already upgraded to v2 by requesting version 1.
+- Rollback must deploy code that understands schema v2; it must not delete `studyReviews`, rewrite notes, or attempt an automatic downgrade.
+- A blocked upgrade rejects with `DATABASE_UPGRADE_BLOCKED`; the user can close other tabs and retry without data mutation.
+
+## 6. Change gate
 
 Every material change must answer:
 
@@ -93,4 +112,6 @@ Every material change must answer:
 4. Does it avoid unbounded memory, cache, history, or listener growth?
 5. Does it keep heavy parsing and indexing off the main thread where required?
 6. Are transaction, failure, recovery, and rollback boundaries explicit?
-7. Do tests cover the changed invariant?
+7. Does a schema upgrade preserve existing note records and avoid automatic enrollment?
+8. Do paired note/review mutations use one cross-store transaction with terminal rollback?
+9. Do tests cover the changed invariant?
