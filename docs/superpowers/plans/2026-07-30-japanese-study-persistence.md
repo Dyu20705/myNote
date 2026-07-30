@@ -94,7 +94,7 @@ export function validateStudyReview(review) {
 }
 ```
 
-Use `Number.isInteger(interval) && interval >= 0`, `Number.isFinite(ease) && ease >= 1.3 && ease <= 3`, and `Date.parse(value)` plus canonical ISO-UTC equality `new Date(value).toISOString() === value`. Reject arrays and inherited/coerced values; never include record data in errors.
+Use `Number.isInteger(interval) && interval >= 0`, `Number.isFinite(ease) && ease >= 1.3 && ease <= 3`, and an explicit ISO-8601 date-time-with-zone grammar plus a finite `Date.parse(value)` result. Accept `Z` and numeric offsets such as `+07:00`; do not silently canonicalize the caller's valid timestamp. Reject arrays and inherited/coerced values; never include record data in errors.
 
 - [ ] **Step 5: Run focused GREEN**
 
@@ -213,10 +213,11 @@ git commit -m "feat: add isolated study review store"
 
 Add tests proving:
 
-- `putJapaneseNoteWithReviewToDb` writes a valid note and exact defensive review copy.
+- `putJapaneseNoteWithReviewToDb` adds a valid note and exact defensive review copy without overwriting an existing key.
 - `getStudyReviewFromDb` returns `undefined` for a missing key.
 - `putStudyReviewToDb` updates an existing review but rejects a missing record with a content-free error code `STUDY_REVIEW_NOT_FOUND`; it cannot create an orphan.
 - mismatched `note.id`/`review.noteId`, invalid note IDs, and every invalid review category reject before opening a transaction.
+- a note-ID or review-ID collision rejects and preserves both pre-existing records exactly.
 - caller mutation after `put` and mutation of returned list/get values cannot change the durable record.
 
 - [ ] **Step 2: Run IO RED**
@@ -225,14 +226,14 @@ Run the focused integration file. Expected: exit 1 because the write APIs are mi
 
 - [ ] **Step 3: Implement validated review update and atomic pair creation**
 
-Validate/clone all arguments before `db.transaction`. For single-record rating updates, use a `studyReviews` readwrite transaction, first `get(noteId)`, reject missing records with a bounded error, then `put(validatedReview)`. For pair creation, require a plain note with a non-empty string ID equal to `review.noteId`, then queue both puts in one transaction:
+Validate/clone all arguments before `db.transaction`. For single-record rating updates, use a `studyReviews` readwrite transaction, first `get(noteId)`, reject missing records with a bounded error, then `put(validatedReview)`. For pair creation, require a plain note with a non-empty string ID equal to `review.noteId`, then queue both adds in one transaction so a collision aborts instead of overwriting data:
 
 ```js
 const tx = db.transaction([STORE_NOTES, STORE_STUDY_REVIEWS], "readwrite");
 const done = transactionDone(tx);
 try {
-  tx.objectStore(STORE_NOTES).put(note);
-  tx.objectStore(STORE_STUDY_REVIEWS).put(validatedReview);
+  tx.objectStore(STORE_NOTES).add(note);
+  tx.objectStore(STORE_STUDY_REVIEWS).add(validatedReview);
   await done;
 } catch (error) {
   abortTransaction(tx);
