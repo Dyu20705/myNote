@@ -218,6 +218,30 @@ test("enrolled planner lookup accepts only a matching planner enrollment", () =>
   assert.equal(findEnrolledPlannerNoteId({ notes, reviews, isoWeek: "2026-W32" }), undefined);
 });
 
+test("enrolled duplicate lookups use canonical punctuation-delimited tag tokens", () => {
+  const localDate = "2026-07-30";
+  const isoWeek = "2026-W31";
+  const notes = [
+    { id: "output-punctuation", title: localDate, content: "Draft (#jp-output), ready." },
+    { id: "output-prefix", title: localDate, content: "#jp-output-extra" },
+    { id: "output-continuation", title: localDate, content: "#jp-output_more" },
+    { id: "planner-punctuation", title: "Japanese study plan — 2026-W31", content: "(#jp-planner)," },
+    { id: "planner-prefix", title: "Japanese study plan — 2026-W31", content: "#jp-planner-extra" },
+    { id: "planner-continuation", title: "Japanese study plan — 2026-W31", content: "#jp-planner_more" },
+  ];
+  const reviews = [
+    makeReview("output-punctuation", "output"),
+    makeReview("output-prefix", "output"),
+    makeReview("output-continuation", "output"),
+    makeReview("planner-punctuation", "planner"),
+    makeReview("planner-prefix", "planner"),
+    makeReview("planner-continuation", "planner"),
+  ];
+
+  assert.equal(findEnrolledOutputNoteId({ notes, reviews, localDate }), "output-punctuation");
+  assert.equal(findEnrolledPlannerNoteId({ notes, reviews, isoWeek }), "planner-punctuation");
+});
+
 test("enrolled duplicate lookups reject malformed or hostile query boundaries without exposing input", () => {
   const finders = [
     [findEnrolledOutputNoteId, "localDate", "2026-07-30"],

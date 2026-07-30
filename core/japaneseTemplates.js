@@ -1,4 +1,5 @@
 import { STUDY_NOTEBOOK_TYPES, validateStudyReview } from "./studyReview.js";
+import { extractTags } from "./parser/index.js";
 
 export const JAPANESE_NOTEBOOK_TYPES = STUDY_NOTEBOOK_TYPES;
 
@@ -170,8 +171,7 @@ function readMatchingNoteId(note, expectedTitle, expectedTag) {
       return undefined;
     }
 
-    const escapedTag = expectedTag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?:^|\\s)${escapedTag}(?=$|\\s)`).test(content.value) ? id.value : undefined;
+    return extractTags(content.value).includes(expectedTag.slice(1)) ? id.value : undefined;
   } catch {
     return undefined;
   }
