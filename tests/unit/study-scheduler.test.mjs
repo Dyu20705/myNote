@@ -122,6 +122,14 @@ test("isDue compares allowed offsets and fractional timestamps by instant", () =
   assert.equal(isDue(review, "2026-07-30T00:00:00.500000Z"), true);
 });
 
+test("isDue preserves arbitrary fractional-second precision across timezone offsets", () => {
+  const review = validReview({ nextReviewAt: "2026-07-30T00:00:00.000000000000000000010Z" });
+
+  assert.equal(isDue(review, "2026-07-30T00:00:00.000000000000000000009Z"), false);
+  assert.equal(isDue(review, "2026-07-30T07:00:00.00000000000000000001+07:00"), true);
+  assert.equal(isDue(review, "2026-07-30T07:00:00.0000000000000000000101+0700"), true);
+});
+
 test("isDue never makes suspended reviews due and does not mutate callers", () => {
   const review = validReview({ status: "suspended", nextReviewAt: "2026-07-29T00:00:00.000Z" });
   const before = structuredClone(review);
