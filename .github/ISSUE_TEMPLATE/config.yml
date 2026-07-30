@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Internal development repository
+    url: https://github.com/Dyu20705/myNote
+    about: Unsolicited external issues, feature requests, and contribution proposals are not accepted.

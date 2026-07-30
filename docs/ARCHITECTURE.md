@@ -1,88 +1,96 @@
-# myNote Architecture Baseline (Phase 1 Closed)
+# myNote Architecture Baseline
 
-Muc tieu tai lieu nay:
-- Chot huong kien truc nen tang sau Phase 1.
-- Giam architectural drift khi tiep tuc dung AI agent coding.
-- Tao baseline de danh gia moi thay doi o Phase 2.
+This document defines the required architecture for the current application. Changes that violate these boundaries require an explicit architecture decision and matching tests.
 
-## 1) He thong hien tai (Baseline)
+## 1. System baseline
 
-myNote da co cac thanh phan cot loi:
-- Persistence: IndexedDB + migration tu localStorage.
-- Data model: note co cau truc (version, checksum, blocks, tags, links, ast).
-- Parser pipeline: parseDocument la nguon metadata chinh.
-- Search engine: worker-based + incremental index updates.
-- Backlinks: incremental backlinks index.
-- History: command stack undo/redo + patch-based history.
-- Rendering: virtualized note list.
-- Observability: metrics instrumentation trong UI.
-- Tests: parser invariant tests.
+myNote currently contains these core capabilities:
 
-## 2) So do kien truc bat buoc
+- **Persistence:** IndexedDB with a bounded legacy localStorage migration.
+- **Canonical model:** versioned notes with checksums, blocks, tags, links, AST data, and search material.
+- **Parser pipeline:** `parseDocument` and related parser functions own derived note metadata.
+- **Search:** worker-based querying with incremental index updates.
+- **Backlinks:** an incrementally maintained reverse-link index.
+- **History:** command-stack undo/redo and patch-based retained history.
+- **Rendering:** a virtualized note list.
+- **Observability:** bounded runtime metrics surfaced in the UI.
+- **Verification:** deterministic unit, integration, contract, and browser tests.
 
-Flow phu thuoc:
-UI -> Actions -> State -> Core services -> Persistence
+## 2. Required dependency direction
 
-Mo ta:
-- UI chi phat su kien, khong truy cap persistence truc tiep.
-- Actions la diem vao duy nhat de thay doi state.
-- State cap nhat co kiem soat va co the trace.
-- Core services xu ly parser, search, backlinks, history.
-- Persistence chi duoc goi tu action/effect layer.
+```text
+UI → Actions → State → Core services → Persistence
+```
 
-## 3) Ownership theo module
+- UI modules emit events and render state; they do not access persistence directly.
+- Actions are the application entry point for canonical mutations.
+- State transitions are explicit, deterministic, and observable.
+- Core services own parsing, indexing, backlinks, autosave, patches, and history.
+- Persistence is called only through action/effect or core lifecycle boundaries.
 
-- app.js:
-  - Bootstrap va dependency wiring.
-  - Event to Action routing.
-  - Khong chua business logic parser/search phuc tap.
+## 3. Module ownership
 
-- core/parser:
-  - Parse markdown, tags, wiki links, code blocks, tokenization.
-  - Tra ve cau truc deterministic.
+### `app.js`
 
-- core/search.worker + core/searchClient:
-  - Index/query bat dong bo.
-  - Validate worker payload.
-  - Ranking va incremental upsert/remove.
+- Bootstraps dependencies and application state.
+- Routes UI events to actions.
+- Coordinates effects without reimplementing parser, search, or storage logic.
 
-- core/backlinks:
-  - Incremental graph relation index.
-  - Khong phu thuoc UI.
+### `core/parser/`
 
-- core/storage:
-  - IndexedDB schema, migration, IO.
-  - Khong duoc mutate UI/state truc tiep.
+- Parses Markdown-oriented content, tags, wiki links, code blocks, and tokens.
+- Produces deterministic derived metadata.
+- Remains the only metadata extraction authority.
 
-- core/commandStack + core/notePatch + core/history:
-  - Execute/undo/redo theo command boundary.
-  - Patch-based ghi lich su thay doi.
+### `core/search.worker.js` and `core/searchClient.js`
 
-- ui/*:
-  - Render va interaction thuần UI.
-  - Khong parse metadata va khong goi storage.
+- Validate worker messages and bound payload sizes.
+- Maintain incremental upsert/remove indexing.
+- Execute asynchronous search and ranking away from the main thread.
 
-## 4) Operational update cycle
+### `core/backlinks.js`
 
-1. UI event.
-2. Action nhan su kien va tao transition.
-3. State update (predictable).
-4. Effect (persist/index/backlinks) chay async.
-5. Render incremental.
-6. Metrics cap nhat.
+- Maintains reverse note relationships incrementally.
+- Has no UI dependency.
 
-## 5) Phase 1 dong lai
+### `core/storage.js`
 
-Phase 1 duoc xem la hoan tat khi:
-- Kien truc baseline nay duoc giu on dinh.
-- Khong them feature lon ngoai roadmap Phase 2.
-- Moi PR/refactor deu duoc doi chieu voi INVARIANTS.md.
+- Owns IndexedDB schema, transactions, migration, and database I/O.
+- Never mutates UI or application state directly.
 
-## 6) Gate cho moi thay doi moi
+### `core/commandStack.js`, `core/notePatch.js`, and `core/history.js`
 
-Moi thay doi tu AI agent phai tra loi:
-- Co tao dependency moi sai huong khong?
-- Co duplicate parsing logic ngoai parser pipeline khong?
-- Co them synchronous heavy work tren main thread khong?
-- Co mo them memory structure khong gioi han khong?
-- Co ro transaction boundary giua state/persistence/history khong?
+- Execute, undo, and redo within explicit command boundaries.
+- Preserve bounded, reversible patch/history behavior.
+
+### `ui/`
+
+- Owns rendering and interaction behavior only.
+- Does not parse canonical metadata or call storage directly.
+
+## 4. Mutation lifecycle
+
+```text
+UI event
+→ action validation
+→ normalized mutation preparation
+→ canonical persistence
+→ canonical in-memory commit
+→ derived index/backlink update
+→ history success
+→ incremental render and metrics update
+```
+
+Canonical persistence failure stops the mutation before in-memory state and history report success. Derived index failure after canonical persistence is treated as a visible, rebuildable degradation.
+
+## 5. Change gate
+
+Every material change must answer:
+
+1. Does it preserve the required dependency direction?
+2. Does it avoid duplicate parsing or metadata ownership?
+3. Does it keep canonical persistence ahead of in-memory/history success?
+4. Does it avoid unbounded memory, cache, history, or listener growth?
+5. Does it keep heavy parsing and indexing off the main thread where required?
+6. Are transaction, failure, recovery, and rollback boundaries explicit?
+7. Do tests cover the changed invariant?
