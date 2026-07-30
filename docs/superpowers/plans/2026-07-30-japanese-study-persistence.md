@@ -254,7 +254,9 @@ Add tests proving:
 
 - enrolled delete returns the exact captured review and removes both records;
 - generic delete returns `undefined` and removes only the ordinary note;
+- delete with no note preserves any orphan review with the same key and returns `undefined`;
 - restore writes the exact note/review pair;
+- restore rejects collisions without overwriting either existing record;
 - a synchronous failure on the second store operation aborts create, delete, and restore, leaving both stores deep-equal to their before snapshot;
 - a scheduled transaction abort after requests are queued rejects only after terminal abort and leaves no partial durable state.
 
@@ -266,7 +268,7 @@ Run the focused integration file. Expected: delete/restore exports are missing a
 
 - [x] **Step 7: Implement delete capture and exact restore in one transaction**
 
-For delete, request the review from `studyReviews`, clone it if present, queue deletion from both stores, await transaction completion, then return the captured copy. For restore, validate IDs/review before starting the transaction and queue exact note/review puts in the shared transaction. Centralize only the small abort-and-settle pattern; do not build a generic repository abstraction.
+For delete, request the note and review in the same transaction. When the note is absent, preserve any orphan review, await transaction completion, and return `undefined`; otherwise clone the review if present, queue the applicable deletions, await transaction completion, then return the captured copy. For restore, validate IDs/review before starting the transaction and queue exact note/review adds in the shared transaction so collisions abort without overwriting. Centralize only the small abort-and-settle pattern; do not build a generic repository abstraction.
 
 - [x] **Step 8: Run atomicity GREEN and all storage neighbors**
 

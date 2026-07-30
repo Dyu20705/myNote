@@ -138,30 +138,28 @@ function makeReview(noteId = VALID_REVIEW.noteId, overrides = {}) {
 }
 
 async function openDatabaseObservingV1NoteAccess() {
-  const methods = ["get", "getAll", "put", "openCursor"];
-  const originals = Object.fromEntries(
-    methods.map((method) => [method, globalThis.IDBObjectStore.prototype[method]]),
-  );
+  const originalObjectStore = globalThis.IDBTransaction.prototype.objectStore;
   const noteStoreCalls = [];
 
-  for (const method of methods) {
-    globalThis.IDBObjectStore.prototype[method] = function (...args) {
-      if (this.name === "notes") {
-        noteStoreCalls.push(method);
-      }
-      return Reflect.apply(originals[method], this, args);
-    };
-  }
+  globalThis.IDBTransaction.prototype.objectStore = function (name) {
+    if (name === "notes") noteStoreCalls.push(name);
+    return Reflect.apply(originalObjectStore, this, [name]);
+  };
 
   try {
     const database = await openDatabase();
     openHandles.add(database);
     return { database, noteStoreCalls };
   } finally {
-    for (const method of methods) {
-      globalThis.IDBObjectStore.prototype[method] = originals[method];
-    }
+    globalThis.IDBTransaction.prototype.objectStore = originalObjectStore;
   }
+}
+
+function assertContentFree(error, forbiddenValues) {
+  for (const value of forbiddenValues) {
+    assert.equal(error.message.includes(value), false);
+  }
+  return true;
 }
 
 describe("study review storage schema", { concurrency: false }, () => {
@@ -267,6 +265,8 @@ describe("study review storage schema", { concurrency: false }, () => {
     const missingReview = makeReview("missing-review");
     await assert.rejects(() => putStudyReviewToDb(database, missingReview), (error) => {
       assert.equal(error.code, "STUDY_REVIEW_NOT_FOUND");
+      assert.equal(error.message, "Study review not found");
+      assertContentFree(error, [missingReview.noteId, missingReview.nextReviewAt]);
       return true;
     });
     assert.equal(await getStudyReviewFromDb(database, missingReview.noteId), undefined);
@@ -293,11 +293,50 @@ describe("study review storage schema", { concurrency: false }, () => {
       makeReview(VALID_REVIEW.noteId, { ease: 3.1 }),
     ];
 
-    for (const invalidNote of [makePairedNote(""), { ...makePairedNote(), id: 42 }]) {
-      const review = makeReview();
-      await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, invalidNote, review));
+    const invalidNoteId = "private-invalid-note-id";
+    const mismatchedReviewId = "private-mismatched-review-id";
+    const getterFailure = new Error("private getter payload");
+    const prototypeFailure = new Error("private proxy payload");
+    const throwingIdNote = makePairedNote();
+    Object.defineProperty(throwingIdNote, "id", {
+      enumerable: true,
+      get() {
+        throw getterFailure;
+      },
+    });
+    const hostileProxyNote = new Proxy(makePairedNote(), {
+      getPrototypeOf() {
+        throw prototypeFailure;
+      },
+    });
+
+    async function assertInvalidNote(note, review = makeReview()) {
+      await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, note, review), (error) => {
+        assert.equal(error.name, "TypeError");
+        assert.equal(error.code, "INVALID_NOTE");
+        assert.equal(error.message, "Invalid note");
+        assert.notEqual(error, getterFailure);
+        assert.notEqual(error, prototypeFailure);
+        assertContentFree(error, [
+          invalidNoteId,
+          mismatchedReviewId,
+          getterFailure.message,
+          prototypeFailure.message,
+        ]);
+        return true;
+      });
     }
-    await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, makePairedNote(), makeReview("other-id")));
+
+    for (const invalidNote of [
+      makePairedNote(""),
+      { ...makePairedNote(), id: 42 },
+      throwingIdNote,
+      hostileProxyNote,
+    ]) {
+      const review = makeReview();
+      await assertInvalidNote(invalidNote, review);
+    }
+    await assertInvalidNote(makePairedNote(invalidNoteId), makeReview(mismatchedReviewId));
     for (const invalidReview of invalidReviews) {
       await assert.rejects(() => putJapaneseNoteWithReviewToDb(database, makePairedNote(), invalidReview));
       await assert.rejects(() => putStudyReviewToDb(database, invalidReview));
@@ -331,6 +370,46 @@ describe("study review storage schema", { concurrency: false }, () => {
     assert.deepEqual(await readRawReviews(database), beforeReviews);
   });
 
+  test("preserves the first asynchronous request error identity until terminal abort", async () => {
+    const database = await openTestDatabase();
+    const collisionId = "private-collision-note";
+    const collisionContent = "private collision content";
+    const existingNote = { ...makePairedNote(collisionId), content: collisionContent };
+    await putNoteToDb(database, existingNote);
+    const originalAdd = globalThis.IDBObjectStore.prototype.add;
+    const transactionEvents = [];
+    let requestError;
+
+    globalThis.IDBObjectStore.prototype.add = function (...args) {
+      const request = Reflect.apply(originalAdd, this, args);
+      if (this.name === "notes") {
+        request.addEventListener("error", () => {
+          requestError ||= request.error;
+        });
+        this.transaction.addEventListener("error", () => transactionEvents.push("error"));
+        this.transaction.addEventListener("complete", () => transactionEvents.push("complete"));
+        this.transaction.addEventListener("abort", () => transactionEvents.push("abort"));
+      }
+      return request;
+    };
+
+    try {
+      await assert.rejects(
+        () => putJapaneseNoteWithReviewToDb(database, existingNote, makeReview(collisionId)),
+        (error) => {
+          assert.equal(error, requestError);
+          assert.equal(error.name, "ConstraintError");
+          assert.equal(transactionEvents.at(-1), "abort");
+          assert.equal(transactionEvents.includes("complete"), false);
+          assertContentFree(error, [collisionId, collisionContent]);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.IDBObjectStore.prototype.add = originalAdd;
+    }
+  });
+
   test("deletes an enrolled note with its captured review and deletes generic notes alone", async () => {
     const database = await openTestDatabase();
     const pairedNote = makePairedNote("enrolled-note");
@@ -348,6 +427,16 @@ describe("study review storage schema", { concurrency: false }, () => {
     assert.deepEqual(await listStudyReviewsFromDb(database), []);
   });
 
+  test("preserves an orphan review when its note is absent", async () => {
+    const database = await openTestDatabase();
+    const orphanReview = makeReview("orphan-review");
+    await writeRawReview(database, orphanReview);
+
+    assert.equal(await deleteNoteWithReviewFromDb(database, orphanReview.noteId), undefined);
+    assert.deepEqual(await readRawNotes(database), []);
+    assert.deepEqual(await readRawReviews(database), [orphanReview]);
+  });
+
   test("restores the exact validated note and review pair", async () => {
     const database = await openTestDatabase();
     const note = makePairedNote("restored-note");
@@ -356,6 +445,25 @@ describe("study review storage schema", { concurrency: false }, () => {
     await restoreNoteWithReviewToDb(database, note, review);
     assert.deepEqual(await readRawNotes(database), [note]);
     assert.deepEqual(await readRawReviews(database), [review]);
+  });
+
+  test("restore collisions abort without overwriting either existing record", async () => {
+    const database = await openTestDatabase();
+    const noteId = "restore-collision";
+    const existingNote = makePairedNote(noteId);
+    const existingReview = makeReview(noteId);
+    await putJapaneseNoteWithReviewToDb(database, existingNote, existingReview);
+    const beforeNotes = structuredClone(await readRawNotes(database));
+    const beforeReviews = structuredClone(await readRawReviews(database));
+
+    await assert.rejects(() => restoreNoteWithReviewToDb(
+      database,
+      { ...existingNote, title: "replacement title" },
+      { ...existingReview, status: "review", interval: 2 },
+    ), { name: "ConstraintError" });
+
+    assert.deepEqual(await readRawNotes(database), beforeNotes);
+    assert.deepEqual(await readRawReviews(database), beforeReviews);
   });
 
   test("aborts each paired mutation when its second store request throws synchronously", async () => {
@@ -409,7 +517,7 @@ describe("study review storage schema", { concurrency: false }, () => {
       await assertRollback(
         () => restoreNoteWithReviewToDb(database, makePairedNote("restore-failure"), makeReview("restore-failure")),
         "studyReviews",
-        "put",
+        "add",
       );
     } finally {
       globalThis.IDBObjectStore.prototype.add = originalAdd;
@@ -439,7 +547,13 @@ describe("study review storage schema", { concurrency: false }, () => {
     try {
       await assert.rejects(
         () => putJapaneseNoteWithReviewToDb(database, makePairedNote("scheduled-abort"), makeReview("scheduled-abort")),
-        () => terminalAbortObserved,
+        (error) => {
+          assert.equal(terminalAbortObserved, true);
+          assert.equal(error.name, "AbortError");
+          assert.equal(error.message, "IndexedDB transaction aborted.");
+          assertContentFree(error, ["scheduled-abort", "Paired study note"]);
+          return true;
+        },
       );
     } finally {
       globalThis.IDBObjectStore.prototype.add = originalAdd;

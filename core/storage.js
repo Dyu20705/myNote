@@ -41,11 +41,16 @@ function isPlainObject(value) {
 }
 
 function validatePairedNote(note, review) {
-  if (!isPlainObject(note) || typeof note.id !== "string" || note.id.length === 0 || note.id !== review.noteId) {
-    throw createInvalidNoteError();
-  }
   try {
-    return structuredClone(note);
+    if (!isPlainObject(note)) {
+      throw createInvalidNoteError();
+    }
+    const clonedNote = structuredClone(note);
+    const noteId = clonedNote.id;
+    if (typeof noteId !== "string" || noteId.length === 0 || noteId !== review.noteId) {
+      throw createInvalidNoteError();
+    }
+    return clonedNote;
   } catch {
     throw createInvalidNoteError();
   }
@@ -106,10 +111,11 @@ function transactionDone(transaction) {
     let firstRequestError;
     transaction.oncomplete = () => resolve();
     transaction.onerror = (event) => {
-      firstRequestError ||= event.target?.error || transaction.error;
+      const requestError = event.target?.error || transaction.error;
+      if (requestError?.name !== "AbortError") firstRequestError ||= requestError;
     };
     transaction.onabort = () => {
-      reject(firstRequestError || transaction.error || createTransactionAbortError());
+      reject(firstRequestError || createTransactionAbortError());
     };
   });
 }
@@ -186,11 +192,19 @@ export async function deleteNoteWithReviewFromDb(db, noteId) {
   const done = transactionDone(tx);
 
   try {
+    const noteStore = tx.objectStore(STORE_NOTES);
     const reviewStore = tx.objectStore(STORE_STUDY_REVIEWS);
-    const review = await requestResult(reviewStore.get(noteId));
+    const [note, review] = await Promise.all([
+      requestResult(noteStore.get(noteId)),
+      requestResult(reviewStore.get(noteId)),
+    ]);
+    if (note === undefined) {
+      await done;
+      return undefined;
+    }
     const capturedReview = review === undefined ? undefined : validateStudyReview(review);
-    tx.objectStore(STORE_NOTES).delete(noteId);
-    reviewStore.delete(noteId);
+    noteStore.delete(noteId);
+    if (capturedReview !== undefined) reviewStore.delete(noteId);
     await done;
     return capturedReview;
   } catch (error) {
@@ -206,8 +220,8 @@ export async function restoreNoteWithReviewToDb(db, note, review) {
   const done = transactionDone(tx);
 
   try {
-    tx.objectStore(STORE_NOTES).put(validatedNote);
-    tx.objectStore(STORE_STUDY_REVIEWS).put(validatedReview);
+    tx.objectStore(STORE_NOTES).add(validatedNote);
+    tx.objectStore(STORE_STUDY_REVIEWS).add(validatedReview);
     await done;
   } catch (error) {
     await abortAndSettleTransaction(tx, done);
