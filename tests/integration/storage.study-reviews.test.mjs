@@ -359,7 +359,7 @@ describe("study review storage schema", { concurrency: false }, () => {
   });
 
   test("aborts each paired mutation when its second store request throws synchronously", async () => {
-    const database = await openTestDatabase();
+    let database = await openTestDatabase();
     const originalAdd = globalThis.IDBObjectStore.prototype.add;
     const originalPut = globalThis.IDBObjectStore.prototype.put;
     const originalDelete = globalThis.IDBObjectStore.prototype.delete;
@@ -381,6 +381,9 @@ describe("study review storage schema", { concurrency: false }, () => {
       } finally {
         globalThis.IDBObjectStore.prototype[patchMethod] = original;
       }
+      database.close();
+      openHandles.delete(database);
+      database = await openTestDatabase();
       assert.deepEqual(await readRawNotes(database), beforeNotes);
       assert.deepEqual(await readRawReviews(database), beforeReviews);
     }
@@ -391,11 +394,18 @@ describe("study review storage schema", { concurrency: false }, () => {
         "studyReviews",
         "add",
       );
+      const deleteFailureNote = makePairedNote("delete-failure");
+      const deleteFailureReview = makeReview(deleteFailureNote.id);
+      await putJapaneseNoteWithReviewToDb(database, deleteFailureNote, deleteFailureReview);
+      assert.deepEqual(await readRawNotes(database), [deleteFailureNote]);
+      assert.deepEqual(await readRawReview(database, deleteFailureNote.id), deleteFailureReview);
       await assertRollback(
-        () => deleteNoteWithReviewFromDb(database, "delete-failure"),
+        () => deleteNoteWithReviewFromDb(database, deleteFailureNote.id),
         "studyReviews",
         "delete",
       );
+      assert.deepEqual(await readRawNotes(database), [deleteFailureNote]);
+      assert.deepEqual(await readRawReview(database, deleteFailureNote.id), deleteFailureReview);
       await assertRollback(
         () => restoreNoteWithReviewToDb(database, makePairedNote("restore-failure"), makeReview("restore-failure")),
         "studyReviews",
