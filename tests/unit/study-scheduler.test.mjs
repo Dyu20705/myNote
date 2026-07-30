@@ -221,6 +221,15 @@ test("rateReview applies established intervals and ease floors and ceilings exac
   });
 });
 
+test("rateReview normalizes adjusted ease to two decimals while good preserves the stored value", () => {
+  const review = validReview({ interval: 2, ease: 2.555 });
+
+  assert.equal(rateReview(review, "again", NOW).ease, 2.36);
+  assert.equal(rateReview(review, "hard", NOW).ease, 2.41);
+  assert.equal(rateReview(review, "good", NOW).ease, 2.555);
+  assert.equal(rateReview(review, "easy", NOW).ease, 2.71);
+});
+
 test("rateReview uses exactly 24-hour days and preserves fractional precision from caller time", () => {
   const nowIso = "2026-10-25T23:30:00.123456+02:00";
   const result = rateReview(validReview({ interval: 1, ease: 2.5 }), "good", nowIso);
@@ -229,6 +238,14 @@ test("rateReview uses exactly 24-hour days and preserves fractional precision fr
   assert.equal(result.nextReviewAt, "2026-10-28T21:30:00.123456Z");
   assert.equal(isDue(result, "2026-10-28T21:30:00.123455999Z"), false);
   assert.equal(isDue(result, "2026-10-28T21:30:00.123456Z"), true);
+});
+
+test("rateReview canonicalizes computed timestamps when caller time omits seconds", () => {
+  const nowIso = "2026-07-30T07:00+07:00";
+  const result = rateReview(validReview(), "again", nowIso);
+
+  assert.equal(result.lastReviewedAt, nowIso);
+  assert.equal(result.nextReviewAt, "2026-07-30T00:10:00.000Z");
 });
 
 test("rateReview rejects unknown ratings, suspended cards, and unsafe interval or timestamp arithmetic without leaking inputs", () => {
