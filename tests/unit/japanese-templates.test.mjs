@@ -242,6 +242,26 @@ test("enrolled duplicate lookups use canonical punctuation-delimited tag tokens"
   assert.equal(findEnrolledPlannerNoteId({ notes, reviews, isoWeek }), "planner-punctuation");
 });
 
+test("enrolled duplicate lookups ignore reserved tags inside fenced code", () => {
+  const localDate = "2026-07-30";
+  const isoWeek = "2026-W31";
+  const notes = [
+    { id: "output-closed-fence", title: localDate, content: "```text\n#jp-output\n```" },
+    { id: "output-open-fence", title: localDate, content: "```text\n#jp-output" },
+    { id: "planner-closed-fence", title: "Japanese study plan — 2026-W31", content: "```text\n#jp-planner\n```" },
+    { id: "planner-open-fence", title: "Japanese study plan — 2026-W31", content: "```text\n#jp-planner" },
+  ];
+  const reviews = [
+    makeReview("output-closed-fence", "output"),
+    makeReview("output-open-fence", "output"),
+    makeReview("planner-closed-fence", "planner"),
+    makeReview("planner-open-fence", "planner"),
+  ];
+
+  assert.equal(findEnrolledOutputNoteId({ notes, reviews, localDate }), undefined);
+  assert.equal(findEnrolledPlannerNoteId({ notes, reviews, isoWeek }), undefined);
+});
+
 test("enrolled duplicate lookups reject malformed or hostile query boundaries without exposing input", () => {
   const finders = [
     [findEnrolledOutputNoteId, "localDate", "2026-07-30"],
