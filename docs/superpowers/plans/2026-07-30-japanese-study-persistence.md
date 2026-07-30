@@ -348,6 +348,6 @@ git add docs/INVARIANTS.md docs/ARCHITECTURE.md docs/superpowers/plans/2026-07-3
 git commit -m "docs: define Japanese study persistence invariants"
 ```
 
-- [ ] **Step 6: Request independent review and publish one draft PR**
+- [ ] **Step 6: Hand the verified branch back for independent review**
 
-Provide reviewer issue #47, approved design, this plan, base SHA `8ea579d95d8d57a0b470c3c9ae58e1f772a97b7b`, final head SHA, and complete diff. Fix all P0/P1 findings with TDD, rerun full verification, then publish branch `codex/japanese-47-study-persistence` as one draft PR containing `Closes #47`. Keep #48–#52 blocked and stop after current-head CI succeeds and #47 moves to `status/review`.
+Report issue #47, approved design, this plan, base SHA `8ea579d95d8d57a0b470c3c9ae58e1f772a97b7b`, final head SHA, complete verification, and concerns to the controller. The controller owns independent whole-branch review, any reviewed fix wave, final re-verification, and publication through `github:yeet`. The controller will publish branch `codex/japanese-47-study-persistence` as one draft PR containing `Closes #47`, keep #48–#52 blocked, and stop after current-head CI succeeds and #47 moves to `status/review`.
