@@ -1,55 +1,58 @@
 # myNote Performance Budget
 
-Tai lieu nay dat ngan sach hieu nang de ngan performance drift.
-Moi thay doi can doi chieu voi budget truoc khi merge.
+This document defines the performance constraints used to prevent unmeasured latency, memory, and storage drift.
 
-## 1) Budget Muc tieu
+## Target budgets
 
-- Search latency (worker query): < 20ms median tren tap du lieu vua.
-- Typing frame budget: < 8ms/frame tren main thread.
-- Initial load to interactive: < 250ms trong dieu kien local warm.
-- Autosave idle cost: < 50ms median.
-- Memory growth: bounded, khong tang vo han theo thoi gian.
+| Operation | Target |
+|---|---:|
+| Worker search query | `< 20 ms` median on the representative medium dataset |
+| Main-thread typing work | `< 8 ms` per frame |
+| Warm local startup to interactive | `< 250 ms` |
+| Autosave work | `< 50 ms` median |
+| Long-session memory growth | Bounded; no unbounded increase over time |
 
-## 2) Runtime Constraints
+These values are baseline targets, not unsupported guarantees. Benchmark reports must record environment, build mode, dataset shape, warm-up, sample count, statistic, and raw result location.
 
-- Search/indexing nặng phai o worker.
-- Khong full DOM rerender khi note edit.
-- Virtualized list bat buoc khi note count lon (>= 500).
-- Khong full rebuild index trong normal editing path.
+## Runtime constraints
 
-## 3) Measurement Sources
+- Heavy search and indexing work runs in a worker.
+- Editing does not rerender the complete note list.
+- Lists with at least 500 notes use virtualization.
+- Normal editing uses incremental index and backlink updates rather than full rebuilds.
+- History, caches, listeners, worker messages, and rendered state remain bounded.
+- Performance changes must not weaken persistence, recovery, security, or accessibility contracts.
 
-- Metrics panel trong topbar:
-  - render
-  - search
-  - worker
-  - autosave
-  - mem
+## Measurement sources
 
-- Profiling bo sung (Phase 2):
-  - action timeline
-  - effect latency breakdown
+The runtime metrics surface tracks:
 
-## 4) Regression Rules
+- Render latency.
+- Search latency.
+- Worker latency.
+- Autosave latency.
+- Available memory information where the browser exposes it.
 
-- Neu budget vuot nguong, khong merge feature moi lien quan.
-- Uu tien fix regression truoc khi tiep tuc roadmap.
-- Moi optimization claim phai co so lieu do duoc.
+Additional benchmark work should separate main-thread time, worker time, persistence time, and total user-perceived latency.
 
-## 5) Suggested Test Scenarios
+## Regression policy
 
-- 100 notes / 1k notes / 10k notes list.
-- Note content ngan, vua, dai (bao gom code blocks).
-- Search burst queries lien tuc.
-- Autosave khi tab visible/hidden transition.
+- Do not merge a related change when a measured budget regression is unexplained.
+- Fix correctness, data-integrity, and performance regressions before expanding the affected feature surface.
+- Every optimization claim requires a reproducible command and measured before/after evidence.
+- Results from materially different environments are not treated as equivalent.
 
-## 6) Known Temporary Limits
+## Representative scenarios
 
-- Fixed-row virtualization co sai so voi noi dung cao dong.
-- memory metric phu thuoc browser support performance.memory.
+- 100, 1,000, and 10,000 note collections.
+- Short, medium, and long note bodies, including fenced code and links.
+- Repeated search bursts.
+- Rapid note switching and editing.
+- Autosave across visible, hidden, and restored tab states.
+- Long sessions that exercise history, indexing, and listener cleanup.
 
-## 7) Phase 2 Exit Criteria
+## Known limitations
 
-- Khong regression vuot budget trong test scenario chinh.
-- Co baseline benchmark file de so sanh qua tung refactor.
+- Fixed-row virtualization may be inaccurate for highly variable row heights.
+- `performance.memory` is browser-specific and may be unavailable.
+- A checked-in benchmark suite is still required before these targets can become enforced release thresholds.

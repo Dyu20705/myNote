@@ -1,155 +1,153 @@
-# Huong dan User Flow va Beta Test
+# User-Flow and Beta-Test Guide
 
-Tai lieu nay mo ta user flow chinh va ke hoach beta test cho myNote theo khung 2-4 tuan.
+This guide defines the core acceptance flows and a four-week internal beta sequence for myNote.
 
-## 1) Muc tieu beta
+## Beta objectives
 
-- Xac nhan do on dinh cho luong ghi chu hang ngay.
-- Xac nhan tinh nhat quan giua edit, autosave, search, backlinks, undo/redo.
-- Phat hien som loi race condition, regression hieu nang, va gap UX nghiem trong.
+- Validate the daily note lifecycle under normal and failure conditions.
+- Verify consistency across editing, autosave, search, backlinks, persistence, and undo/redo.
+- Detect data-loss defects, race conditions, performance regressions, and blocking accessibility or interaction issues.
 
-## 2) User flow chinh (Happy path)
+## Core acceptance flows
 
-### Flow A: Khoi tao va tao ghi chu dau tien
+### A. First note and persistence
 
-1. Mo ung dung.
-2. Nhan Ctrl/Cmd+N de tao note moi.
-3. Nhap title va content.
-4. Cho autosave hoac nhan Save.
-5. Xac nhan trang thai luu o top bar.
+1. Open the application.
+2. Press `Ctrl/Cmd+N`.
+3. Enter a title and body.
+4. Allow autosave to complete or select **Save**.
+5. Confirm the visible local-save status.
+6. Reload the page.
 
-Ky vong:
+Expected:
 
-- Note moi xuat hien trong danh sach.
-- Reload trang van con du lieu.
+- The note appears in the list.
+- The acknowledged title and body survive reload.
+- No duplicate note is created.
 
-### Flow B: Tim kiem va dieu huong
+### B. Search and keyboard navigation
 
-1. Nhap tu khoa vao o search.
-2. Dung j/k de di chuyen note.
-3. Dung gg/G de nhay dau/cuoi danh sach.
-4. Nhan vao note hoac Enter command palette de mo hanh dong nhanh.
+1. Enter a query in the search field.
+2. Use `j` and `k` to move through results.
+3. Use `gg` and `G` to select the first and last result.
+4. Open the command palette and execute a supported command.
 
-Ky vong:
+Expected:
 
-- Ket qua tim kiem cap nhat nhanh, khong giat lag ro rang.
-- Note active dong bo giua list va editor.
+- Results update without visible main-thread stalls.
+- Active selection remains synchronized between list and editor.
+- Keyboard focus remains visible and predictable.
 
-### Flow C: Wiki-link va backlinks
+### C. Wiki links and backlinks
 
-1. Tao 2 note A va B.
-2. Trong note B, them lien ket [[A]].
-3. Mo note A va kiem tra panel backlinks.
+1. Create notes A and B.
+2. Add `[[A]]` to note B.
+3. Open note A and inspect backlinks.
+4. Rename A and repeat the check.
+5. Delete and restore one linked note where supported.
 
-Ky vong:
+Expected:
 
-- Backlinks hien note B.
-- Sua title note A va kiem tra backlinks cap nhat dung.
+- B appears as an incoming reference to A.
+- Rename, deletion, and restoration do not leave stale reverse edges.
 
-### Flow D: Undo/Redo
+### D. Undo and redo
 
-1. Sua noi dung note.
-2. Nhan Ctrl/Cmd+Z de undo.
-3. Nhan Ctrl/Cmd+Shift+Z hoac Ctrl/Cmd+Y de redo.
+1. Edit a note.
+2. Press `Ctrl/Cmd+Z`.
+3. Press `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y`.
 
-Ky vong:
+Expected:
 
-- Noi dung quay lui/chay toi dung thu tu.
-- Khong mat dong bo voi search va list.
+- Changes move backward and forward in the correct order.
+- Persistence, search, list rendering, and editor state remain consistent.
+- A failed durable mutation does not advance history.
 
-### Flow E: Export
+### E. Export
 
-1. Mo command palette bang Ctrl/Cmd+K.
-2. Chon Export all as Markdown.
-3. Lap lai voi Export all as JSON.
+1. Open the command palette with `Ctrl/Cmd+K`.
+2. Run **Export all as Markdown**.
+3. Run **Export all as JSON**.
+4. Inspect both outputs.
 
-Ky vong:
+Expected:
 
-- File duoc tai ve thanh cong.
-- Noi dung khong rong, cau truc hop le.
+- Files download successfully.
+- Output is non-empty when notes exist.
+- JSON parses successfully and Markdown remains human-readable.
+- Exported content matches canonical notes.
 
-### Flow F: Safe mode recovery
+### F. Recovery
 
-1. Gia lap loi storage init (co the bang profile browser loi hoac data xung dot).
-2. Xac nhan app vao trang thai Safe mode.
-3. Chon hanh dong reset local database.
-4. App reload sau reset.
+1. Exercise an isolated storage initialization or migration failure fixture.
+2. Confirm the application exposes a bounded recovery state.
+3. Use the confirmed local reset only after export/recovery options are understood.
+4. Reload after reset.
 
-Ky vong:
+Expected:
 
-- Co thong diep huong dan ro rang.
-- Reset thanh cong va app khoi tao lai duoc.
+- The error explains the affected subsystem without exposing note content.
+- Failed operations do not report durable success.
+- Reset clears only the application’s local database and legacy key.
+- The application can bootstrap cleanly afterward.
 
-## 3) Ke hoach beta 2-4 tuan
+## Four-week internal beta sequence
 
-### Tuan 1: Smoke + onboarding
+### Week 1 — Smoke and onboarding
 
-- 10-15 tester noi bo.
-- Tap trung Flow A, B, E.
-- Thu thap bug blocker, crash, mat du lieu.
+- Exercise flows A, B, and E.
+- Record blockers, crashes, data loss, confusing first-run states, and keyboard failures.
 
-### Tuan 2: Core reliability
+### Week 2 — Core reliability
 
-- 20-30 tester.
-- Tap trung Flow C, D.
-- Them test du lieu vua (>= 500 notes) de check virtualization.
+- Exercise flows C and D.
+- Repeat against a medium collection of at least 500 notes.
+- Inject persistence and derived-index failures through deterministic test fixtures where available.
 
-### Tuan 3: Stress va edge cases
+### Week 3 — Stress and edge cases
 
-- 30+ tester.
-- Test note dai, nhieu tags, nhieu wiki-links, thao tac nhanh lien tuc.
-- Test reload lien tuc, dong/mo tab, tab hidden/visible.
+- Use long notes, many tags, many links, fenced code, rapid edits, and repeated navigation.
+- Repeat reload, close/open, hidden/visible tab, and interruption scenarios.
+- Observe memory, search latency, and autosave serialization over a long session.
 
-### Tuan 4: Go/No-Go
+### Week 4 — Go/no-go review
 
-- Chot bug critical/phai fix.
-- Re-test regression cac bug da fix.
-- Danh gia san sang release.
+- Resolve every reproducible critical or high-severity data-integrity defect.
+- Re-run regression scenarios for fixed defects.
+- Record remaining limitations, owners, and release impact.
 
-## 4) Test matrix toi thieu
+## Minimum test matrix
 
-- Browser: Chrome, Edge, Firefox (ban moi).
-- Nen tang: Windows va it nhat 1 nen tang phu (macOS hoac Linux).
-- Kich thuoc du lieu:
-- Nho: < 100 notes.
-- Vua: 100-1000 notes.
-- Lon: > 1000 notes.
+- Browsers: current Chrome, Edge, and Firefox.
+- Platforms: Windows and at least one of macOS or Linux.
+- Collection sizes:
+  - Small: fewer than 100 notes.
+  - Medium: 100–1,000 notes.
+  - Large: more than 1,000 notes.
 
-## 5) Tieu chi pass/fail
+## Pass criteria
 
-Pass khi:
+- No reproducible critical/high data-loss defect remains.
+- Undo/redo, search, backlinks, export, and persistence have no known consistency failure in the tested scope.
+- Recovery behavior works in the primary test environments.
+- Core interactions remain within the documented performance budget or have an explicitly accepted measured exception.
 
-- Khong con bug Critical/High lien quan mat du lieu.
-- Undo/Redo, search, backlinks khong co loi nhat quan da biet.
-- Safe mode recovery hoat dong tren moi moi truong test chinh.
+## Fail criteria
 
-Fail khi:
+- Reproducible acknowledged-data loss or silent overwrite.
+- Visible main-thread freezes during a core workflow.
+- Export produces invalid, empty, or incomplete output for existing canonical data.
+- Failure states report success or clear retryable user input.
 
-- Co bug mat du lieu lap lai duoc.
-- Co freeze main thread de thay ro trong thao tac co ban.
-- Export cho ra file loi hoac thieu du lieu.
+## Internal defect record
 
-## 6) Mau bug report
+Each defect should include:
 
-- Tieu de: [Area] Mo ta ngan gon
-- Moi truong: browser + OS + version
-- Buoc tai hien: 1..n
-- Ket qua thuc te
-- Ket qua ky vong
-- Tan suat: 100% / ngau nhien
-- Dinh kem: screenshot/video va file export neu can
-
-## 7) Logging cho beta
-
-- Danh dau cac bug theo nhom: Data integrity, Search, Backlinks, Undo/Redo, Export, Recovery, Performance.
-- Uu tien fix theo muc do: Critical -> High -> Medium -> Low.
-- Chot bao cao hang tuan: so bug moi, so bug dong, top regression.
-
-## 8) Checklist cho nguoi test
-
-- Da test tao/sua/xoa note.
-- Da test search + dieu huong phim tat.
-- Da test backlinks voi wiki-link.
-- Da test undo/redo.
-- Da test export Markdown/JSON.
-- Da test reload trang va kiem tra du lieu con day du.
+- Area and concise summary.
+- Browser, operating system, and versions.
+- Exact reproduction steps.
+- Actual and expected results.
+- Frequency.
+- Data-integrity, security, accessibility, and performance impact.
+- Screenshot/video or synthetic export fixture when safe and relevant.
+- Verification command or acceptance flow used after the fix.

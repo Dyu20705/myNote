@@ -1,85 +1,67 @@
-## Parent and child issues
+> **Internal development only:** unsolicited external pull requests are not accepted.
+
+## Issue relationships
 
 - Parent issue:
 - Child issue:
+- Depends on:
+- Blocks:
 - Milestone:
 
-## Problem statement
+## Problem and scope
 
-Describe the verified current behavior and the problem this PR resolves.
+Describe the verified current behavior, the bounded problem, the intended outcome, and explicit non-goals.
 
-## Scope
-
-List the behaviors and files intentionally changed.
-
-## Non-goals
-
-List adjacent work explicitly excluded from this PR.
-
-## Architecture decisions
-
-Document boundaries, interfaces consumed/produced, dependency direction, transaction ordering, and material trade-offs.
-
-## File-level summary
+## Architecture and file summary
 
 | File | Change | Reason |
 |---|---|---|
 | | | |
 
-## Test commands and actual results
+Document changed ownership boundaries, interfaces, dependency direction, transaction ordering, and material trade-offs.
 
-Do not write “tests pass” without exact evidence.
+## Verification evidence
 
-| Command | Exit code | Pass/fail count | Existing failures | Result summary |
+Do not write “tests pass” without executed evidence.
+
+| Command or check | Exit code | Pass/fail count | Existing failures | Result |
 |---|---:|---|---|---|
-| | | | | |
+| `npm run test:content` | | | | |
+| `npm run lint` | | | | |
+| `npm run test:unit` | | | | |
+| `npm run test:integration` | | | | |
+| `npm run test:e2e` | | | | |
 
-## Migration and rollback
+## Migration, recovery, and rollback
 
-- Database versions and fixtures tested:
+- Database/schema versions and fixtures:
 - Existing-data rewrite behavior:
-- Backup/export behavior:
 - Interruption and recovery behavior:
-- Rollback command or revert boundary:
+- Backup/export behavior:
+- Revert or rollback boundary:
 
-## Security and privacy impact
+## Impact review
 
-- Untrusted input and validation:
-- Note title/body/content logging:
-- Worker or message bounds:
-- New trust boundaries:
-
-## Performance impact
-
-- Main-thread work:
-- Indexing/backlinks behavior:
-- Memory/cache/history bounds:
-- Benchmark command and baseline comparison:
+- Security and privacy:
+- Main-thread and worker performance:
+- Memory, cache, history, and listener bounds:
+- Accessibility and keyboard behavior:
+- Backward compatibility:
+- Known limitations:
 
 ## Screenshots
 
-For UI changes, attach before/after screenshots and include keyboard and accessibility states. For non-UI changes, state `Not applicable — no UI change`.
+For UI changes, include before/after and relevant keyboard, focus, loading, empty, error, and recovery states. Otherwise write `Not applicable — no UI change`.
 
-## Known limitations
+## Completion checklist
 
-List bounded limitations that remain after this PR. Do not hide incomplete acceptance criteria here.
-
-## Follow-up issues
-
-Reference separately scoped child issues. Do not place untracked future work in prose.
-
-## Self-review checklist
-
-- [ ] Correctness and deterministic behavior reviewed.
-- [ ] Data integrity and persistence ordering reviewed.
-- [ ] Architecture invariants preserved.
-- [ ] Security and privacy impact reviewed.
-- [ ] Performance and memory impact measured or shown not applicable.
-- [ ] Error handling and recovery paths reviewed.
-- [ ] Accessibility reviewed for UI changes.
-- [ ] Backward compatibility reviewed.
-- [ ] Migration safety verified when applicable.
-- [ ] Test quality includes observed RED and final GREEN evidence.
-- [ ] Documentation matches implementation.
-- [ ] Every P0/P1 finding is fixed.
-- [ ] PR is reviewable and is not being merged by this implementation run.
+- [ ] Scope matches one child issue and excludes unrelated work.
+- [ ] Correctness and deterministic behavior were reviewed.
+- [ ] Canonical persistence and data-integrity ordering were reviewed.
+- [ ] Architecture invariants are preserved or explicitly updated.
+- [ ] Security, privacy, performance, memory, and accessibility impacts were reviewed.
+- [ ] Failure, recovery, rollback, and compatibility behavior are explicit.
+- [ ] Focused regression tests cover the changed contract.
+- [ ] Current-tree documentation matches implementation.
+- [ ] No unresolved P0/P1 finding remains.
+- [ ] Issue dependencies and downstream blockers are ready to reconcile after merge.
