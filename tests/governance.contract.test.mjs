@@ -14,6 +14,10 @@ function assertNoPlaceholders(content, path) {
   assert.doesNotMatch(content, FORBIDDEN_PLACEHOLDERS, `${path} must not contain unresolved placeholders`);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 test("governance defines internal issue relationships and one active work package", () => {
   const governance = readRepositoryFile("docs/GOVERNANCE.md");
 
@@ -54,7 +58,7 @@ test("pull request template is internal and requires relationship and verificati
     "Screenshots",
     "Completion checklist",
   ]) {
-    assert.match(template, new RegExp(`## ${section.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}`));
+    assert.match(template, new RegExp(`## ${escapeRegExp(section)}`));
   }
 
   assert.match(template, /Internal development only/);
