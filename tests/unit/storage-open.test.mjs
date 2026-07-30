@@ -39,7 +39,7 @@ test("openDatabase rejects a blocked upgrade and closes a late connection", asyn
         return true;
       },
     );
-    await new Promise((resolve) => setImmediate(resolve));
+    await Promise.resolve();
     assert.equal(closeCalls, 1);
   } finally {
     globalThis.indexedDB = originalIndexedDb;
