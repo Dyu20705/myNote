@@ -81,6 +81,7 @@ test("validateStudyReview rejects invalid study review records without exposing 
     ["invalid non-null last review time", { ...VALID_REVIEW, lastReviewedAt: "not-a-date" }],
     ["negative interval", { ...VALID_REVIEW, interval: -1 }],
     ["fractional interval", { ...VALID_REVIEW, interval: 1.5 }],
+    ["unsafe interval", { ...VALID_REVIEW, interval: Number.MAX_SAFE_INTEGER + 1 }],
     ["non-number interval", { ...VALID_REVIEW, interval: "1" }],
     ["ease below minimum", { ...VALID_REVIEW, ease: 1.29 }],
     ["ease above maximum", { ...VALID_REVIEW, ease: 3.01 }],
