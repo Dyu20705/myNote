@@ -75,3 +75,47 @@ test("a source changed during normalization is rejected before any legacy write"
     }
   }
 });
+
+test("a source changed during invalid normalization rejects as a source conflict", async () => {
+  globalThis.localStorage = createLocalStorageStub();
+  await deleteTestDatabase();
+
+  const raw = JSON.stringify([
+    { id: "legacy-before-invalid-normalization", title: "Before", content: "Old source" },
+  ]);
+  const replacementRaw = JSON.stringify([
+    { id: "legacy-after-invalid-normalization", title: "After", content: "New source" },
+  ]);
+  globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, raw);
+  let database;
+
+  try {
+    database = await openDatabase();
+    let normalizeCalls = 0;
+
+    await assert.rejects(
+      () =>
+        migrateLegacyStorageIfNeeded(database, () => {
+          normalizeCalls += 1;
+          globalThis.localStorage.setItem(LEGACY_STORAGE_KEY, replacementRaw);
+          return null;
+        }),
+      (error) => {
+        assert.equal(error.code, "LEGACY_SOURCE_CHANGED");
+        return true;
+      }
+    );
+
+    assert.equal(normalizeCalls, 1);
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.equal(globalThis.localStorage.getItem(LEGACY_STORAGE_KEY), replacementRaw);
+  } finally {
+    database?.close();
+    await deleteTestDatabase();
+    if (previousLocalStorage === undefined) {
+      delete globalThis.localStorage;
+    } else {
+      globalThis.localStorage = previousLocalStorage;
+    }
+  }
+});
