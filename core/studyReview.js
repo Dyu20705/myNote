@@ -88,7 +88,7 @@ function isValidStudyReview(review) {
     && STUDY_REVIEW_STATUSES.includes(review.status)
     && (review.lastReviewedAt === null || isIsoDateTimeWithZone(review.lastReviewedAt))
     && isIsoDateTimeWithZone(review.nextReviewAt)
-    && Number.isInteger(review.interval)
+    && Number.isSafeInteger(review.interval)
     && review.interval >= 0
     && Number.isFinite(review.ease)
     && review.ease >= 1.3
