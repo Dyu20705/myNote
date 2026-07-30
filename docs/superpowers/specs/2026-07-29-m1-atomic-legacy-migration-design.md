@@ -30,6 +30,8 @@ read exact legacy string
 -> parse JSON once
 -> validate top-level array shape
 -> normalize candidates in order, fail-fast, at most once each through normalizeNote
+-> confirm the current source still equals the captured string after preflight
+-> changed source: preserve it and reject with a content-free conflict
 -> reject the complete candidate set if any normalized record is invalid
 -> reject the complete candidate set if normalized IDs collide
 -> queue every normalized record in the same ownership transaction
@@ -72,7 +74,7 @@ Outcomes never contain a raw source string, normalized note, ID, title, content,
 
 The decisive `count()` and all validated note writes share one `readwrite` transaction. This is the cross-connection exclusion boundary: a later tab's transaction observes the first committed import and returns `blocked-existing-data`. Request failures abort the transaction by IndexedDB semantics. Bubbling request `error` events record the first request error but do not settle the completion promise; only terminal `complete` or `abort` settles it. On abort, the first request error is preserved, then `transaction.error` is used, with a content-free `AbortError` fallback. A synchronous queueing failure is caught, the transaction is explicitly aborted, terminal settlement is observed, and the original failure is rethrown. Therefore no prefix of the candidate set can commit and callers cannot begin recovery before rollback finishes.
 
-The captured source is compared with the current `localStorage` value before queueing writes and again after the transaction `complete` event. A mismatch preserves the current value and rejects with a content-free error carrying `LEGACY_SOURCE_CHANGED`. The legacy key is removed only after the post-commit comparison succeeds. If the transaction rejects or aborts, no cleanup is attempted and the exact source remains available for retry.
+The captured source is compared with the current `localStorage` value before preflight, immediately after preflight before either returning a classification or queueing writes, and again after the transaction `complete` event. A mismatch preserves the current value and rejects with a content-free error carrying `LEGACY_SOURCE_CHANGED`. Source-conflict precedence prevents a caller from receiving a stale invalid classification for content that has already been replaced. The legacy key is removed only after the post-commit comparison succeeds. If the transaction rejects or aborts, no cleanup is attempted and the exact source remains available for retry.
 
 IndexedDB and `localStorage` cannot participate in one cross-store transaction, and Web Storage offers no atomic compare-and-remove primitive. A source change detected after IndexedDB commits therefore leaves the committed old notes and the newer source intact, then rejects; `removeItem` failure has the same recoverable pair. A retry observes non-empty IndexedDB and returns `blocked-existing-data`; it never imports duplicates or deletes the source automatically. A source change in the irreducible interval between the final comparison and `removeItem` cannot be made atomic without a new coordination mechanism, so this remains an explicit platform limitation.
 
@@ -97,9 +99,9 @@ Required RED evidence proves that the baseline:
 3. returns `undefined` instead of a completed or blocked outcome;
 4. can commit a queued prefix when a later synchronous `put` fails unless the transaction is explicitly aborted.
 
-Independent-review RED evidence additionally proves that separate readonly-count and write transactions let two connections both import, and that unconditional post-commit cleanup deletes a newer source written at the commit boundary.
+Independent-review RED evidence additionally proves that separate readonly-count and write transactions let two connections both import, that unconditional post-commit cleanup deletes a newer source written at the commit boundary, and that an invalid preflight can otherwise return a stale classification after the source has been replaced.
 
-GREEN coverage additionally proves valid and empty migrations, exact malformed/non-array preservation, existing-data blocking, deterministic retry after blocked/failure outcomes, retry-after-success no-op, canonical normalization/derived-field rebuilding, cross-connection serialization, source-conflict preservation, synchronous and asynchronous request-error identity, terminal abort settlement, transaction rollback, bounded outcome keys, and bootstrap call compatibility.
+GREEN coverage additionally proves valid and empty migrations, exact malformed/non-array preservation, existing-data blocking, deterministic retry after blocked/failure outcomes, retry-after-success no-op, canonical normalization/derived-field rebuilding, cross-connection serialization, source-conflict precedence after both successful and invalid normalization, source-conflict preservation, synchronous and asynchronous request-error identity, terminal abort settlement, transaction rollback, bounded outcome keys, and bootstrap call compatibility.
 
 ## Compatibility, security, and performance
 
