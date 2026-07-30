@@ -20,6 +20,12 @@ function createTransactionAbortError() {
   return new DOMException("IndexedDB transaction aborted.", "AbortError");
 }
 
+function createDatabaseUpgradeBlockedError() {
+  const error = new Error("Database upgrade is blocked by another open tab.");
+  error.code = "DATABASE_UPGRADE_BLOCKED";
+  return error;
+}
+
 function createInvalidNoteError() {
   const error = new TypeError("Invalid note");
   error.code = "INVALID_NOTE";
@@ -84,6 +90,7 @@ export function resetDatabase() {
 export function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let blocked = false;
 
     request.onupgradeneeded = (event) => {
       const db = request.result;
@@ -101,7 +108,19 @@ export function openDatabase() {
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onblocked = () => {
+      blocked = true;
+      reject(createDatabaseUpgradeBlockedError());
+    };
+    request.onsuccess = () => {
+      const database = request.result;
+      if (blocked) {
+        database.close();
+        return;
+      }
+      database.onversionchange = () => database.close();
+      resolve(database);
+    };
     request.onerror = () => reject(request.error);
   });
 }
