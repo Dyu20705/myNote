@@ -122,6 +122,17 @@ Required:
 - Every opened database connection closes itself on `versionchange` so a newer deployment is not indefinitely blocked by this client.
 - There is no automatic schema downgrade from v2 to v1. Rollback code must understand v2 and must not delete review data or rewrite notes.
 
+### Japanese templates and deterministic scheduling
+
+- `japaneseTemplates` accepts only the five persisted notebook types and returns fresh exact-shape template objects. Its vocabulary, kanji, and grammar seeds accept only empty options; output requires one valid calendar date and planner requires one valid ISO week.
+- Each template owns one exact reserved tag. Enrolled output and planner lookup succeeds only when an existing note, a valid matching review, an exact expected title, and the canonical parser-extracted reserved tag all agree. It returns the lexicographically smallest matching note ID and never classifies a note from its tag alone.
+- Template creation and duplicate lookup reject malformed, inherited, unknown, or hostile boundaries with fresh content-free errors. They do not mutate caller inputs or duplicate parser or persisted-review validation rules.
+- `studyScheduler` is caller-clocked and pure: it has no persistence, parser orchestration, dashboard, state/action, DOM, network, or ambient-clock responsibility.
+- Initial reviews have status `new`, interval `0`, ease `2.5`, no last-reviewed time, and a next-review time equal to the supplied valid timestamp spelling.
+- A rating always preserves the supplied valid `lastReviewedAt` spelling. `again` schedules ten minutes with learning status and a `1.3` ease floor; `hard`, `good`, and `easy` use the documented interval multipliers and branches, exact 24-hour days, and the documented `1.3`/`3.0` ease caps. Computed next-review timestamps are canonical UTC timestamps while retaining arbitrary fractional-second precision.
+- Due comparison is by instant rather than timestamp spelling, and suspended reviews are never due or rateable. Scheduler transitions return fresh validated records, never mutate the caller, and reject unsafe intervals or out-of-range computed timestamps.
+- Invalid persisted reviews retain `INVALID_STUDY_REVIEW` provenance. Application-created template and scheduler errors are fresh and content-free.
+
 Forbidden:
 
 - Recording history before canonical persistence.

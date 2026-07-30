@@ -68,6 +68,19 @@ UI → Actions → State → Core services → Persistence
 - Rejects malformed or unsafe metadata with bounded content-free errors.
 - Does not own note content, scheduling behavior, application state, or UI lifecycle.
 
+### `core/japaneseTemplates.js`
+
+- Owns deterministic Japanese template seeds, reserved-template tags, and enrolled duplicate lookup.
+- Reuses the canonical `extractTags` parser boundary and `validateStudyReview` persistence boundary; it does not duplicate tag parsing or review-schema rules.
+- Duplicate lookup requires an existing note, a valid matching review, an exact template title, and the canonical reserved tag before it returns the lexicographically smallest matching note ID.
+- Does not persist notes or reviews, orchestrate parsing, mutate caller data, schedule reviews, access application state or the DOM, use a clock, or perform network I/O.
+
+### `core/studyScheduler.js`
+
+- Owns pure, caller-clocked initial-review, due-check, and rating-transition calculations.
+- Reuses `validateStudyReview` as the canonical persisted review-shape and timestamp boundary.
+- Does not persist reviews, orchestrate parsing, mutate caller data, access application state or the DOM, use an ambient clock, or perform network I/O.
+
 ### `core/commandStack.js`, `core/notePatch.js`, and `core/history.js`
 
 - Execute, undo, and redo within explicit command boundaries.
