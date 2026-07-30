@@ -13,7 +13,16 @@ export const STUDY_REVIEW_STATUSES = Object.freeze([
   "suspended",
 ]);
 
-const ISO_DATE_TIME_WITH_ZONE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2}))$/;
+const ISO_DATE_TIME_WITH_ZONE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):?(\d{2}))$/;
+const STUDY_REVIEW_FIELDS = Object.freeze([
+  "noteId",
+  "notebookType",
+  "status",
+  "lastReviewedAt",
+  "nextReviewAt",
+  "interval",
+  "ease",
+]);
 
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
@@ -53,25 +62,34 @@ function isIsoDateTimeWithZone(value) {
     && Number.isFinite(Date.parse(value));
 }
 
-function isValidStudyReview(review) {
+function hasStudyReviewFields(review) {
   return review !== null
     && typeof review === "object"
     && !Array.isArray(review)
-    && hasOwn(review, "noteId")
-    && typeof review.noteId === "string"
+    && STUDY_REVIEW_FIELDS.every((field) => hasOwn(review, field));
+}
+
+function copyStudyReview(review) {
+  return {
+    noteId: review.noteId,
+    notebookType: review.notebookType,
+    status: review.status,
+    lastReviewedAt: review.lastReviewedAt,
+    nextReviewAt: review.nextReviewAt,
+    interval: review.interval,
+    ease: review.ease,
+  };
+}
+
+function isValidStudyReview(review) {
+  return typeof review.noteId === "string"
     && review.noteId.length > 0
-    && hasOwn(review, "notebookType")
     && STUDY_NOTEBOOK_TYPES.includes(review.notebookType)
-    && hasOwn(review, "status")
     && STUDY_REVIEW_STATUSES.includes(review.status)
-    && hasOwn(review, "lastReviewedAt")
     && (review.lastReviewedAt === null || isIsoDateTimeWithZone(review.lastReviewedAt))
-    && hasOwn(review, "nextReviewAt")
     && isIsoDateTimeWithZone(review.nextReviewAt)
-    && hasOwn(review, "interval")
     && Number.isInteger(review.interval)
     && review.interval >= 0
-    && hasOwn(review, "ease")
     && Number.isFinite(review.ease)
     && review.ease >= 1.3
     && review.ease <= 3;
@@ -84,17 +102,18 @@ function createInvalidStudyReviewError() {
 }
 
 export function validateStudyReview(review) {
-  if (!isValidStudyReview(review)) {
+  try {
+    if (!hasStudyReviewFields(review)) {
+      throw new Error();
+    }
+
+    const copy = copyStudyReview(review);
+    if (!isValidStudyReview(copy)) {
+      throw new Error();
+    }
+
+    return copy;
+  } catch {
     throw createInvalidStudyReviewError();
   }
-
-  return {
-    noteId: review.noteId,
-    notebookType: review.notebookType,
-    status: review.status,
-    lastReviewedAt: review.lastReviewedAt,
-    nextReviewAt: review.nextReviewAt,
-    interval: review.interval,
-    ease: review.ease,
-  };
 }

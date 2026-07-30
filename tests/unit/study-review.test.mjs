@@ -53,6 +53,17 @@ test("validateStudyReview accepts ISO timestamps with Z or numeric timezone offs
   assert.equal(offsetReview.nextReviewAt, "2026-07-30T07:00:00+07:00");
 });
 
+test("validateStudyReview preserves ISO timestamps with long fractions and basic numeric offsets", () => {
+  const review = validateStudyReview({
+    ...VALID_REVIEW,
+    lastReviewedAt: "2026-07-29T17:00:00.123456Z",
+    nextReviewAt: "2026-07-30T07:00:00.987654+0700",
+  });
+
+  assert.equal(review.lastReviewedAt, "2026-07-29T17:00:00.123456Z");
+  assert.equal(review.nextReviewAt, "2026-07-30T07:00:00.987654+0700");
+});
+
 test("validateStudyReview rejects invalid study review records without exposing record data", () => {
   const inherited = Object.create(VALID_REVIEW);
   const cases = [
@@ -83,6 +94,38 @@ test("validateStudyReview rejects invalid study review records without exposing 
         assert.equal(error.name, "TypeError", label);
         assert.equal(error.code, "INVALID_STUDY_REVIEW", label);
         assert.doesNotMatch(error.message, /note-study-1|2026-07-(29|30)/, label);
+        return true;
+      },
+    );
+  }
+});
+
+test("validateStudyReview converts hostile own getter failures into content-free contract errors", () => {
+  const fields = [
+    "noteId",
+    "notebookType",
+    "status",
+    "lastReviewedAt",
+    "nextReviewAt",
+    "interval",
+    "ease",
+  ];
+
+  for (const field of fields) {
+    const review = { ...VALID_REVIEW };
+    Object.defineProperty(review, field, {
+      enumerable: true,
+      get() {
+        throw new Error(`hostile ${field}: note-study-1 2026-07-30T00:00:00.000Z`);
+      },
+    });
+
+    assert.throws(
+      () => validateStudyReview(review),
+      (error) => {
+        assert.equal(error.name, "TypeError", field);
+        assert.equal(error.code, "INVALID_STUDY_REVIEW", field);
+        assert.doesNotMatch(error.message, /note-study-1|2026-07-30|hostile/, field);
         return true;
       },
     );
