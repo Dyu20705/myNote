@@ -34,11 +34,11 @@
 - Consumes: no application modules.
 - Produces: `STUDY_NOTEBOOK_TYPES`, `STUDY_REVIEW_STATUSES`, and `validateStudyReview(review)` returning a new exact-shape record or throwing a content-free `TypeError` with code `INVALID_STUDY_REVIEW`.
 
-- [ ] **Step 1: Add the unit suite to the public unit command**
+- [x] **Step 1: Add the unit suite to the public unit command**
 
 Insert `tests/unit/study-review.test.mjs` into `scripts.test:unit` in `package.json` so local and CI full verification cannot omit the new contract.
 
-- [ ] **Step 2: Write the failing validation tests**
+- [x] **Step 2: Write the failing validation tests**
 
 Create `tests/unit/study-review.test.mjs` with a canonical record:
 
@@ -56,7 +56,7 @@ const VALID_REVIEW = Object.freeze({
 
 Cover exact defensive-copy output and table-driven rejection of: null/non-object/array values, empty/non-string `noteId`, unknown `notebookType`, unknown `status`, invalid/non-string `nextReviewAt`, invalid non-null `lastReviewedAt`, negative/fractional/non-number `interval`, and `ease` outside `[1.3, 3.0]`. Assert every failure has `name === "TypeError"`, `code === "INVALID_STUDY_REVIEW"`, and a message that does not contain `noteId` or timestamps.
 
-- [ ] **Step 3: Run RED and record the missing-module failure**
+- [x] **Step 3: Run RED and record the missing-module failure**
 
 Run:
 
@@ -66,7 +66,7 @@ node --test tests/unit/study-review.test.mjs
 
 Expected: exit 1 because `core/studyReview.js` does not exist. Record command, exit code, failing test/module error, actual result, and expected result in the eventual PR evidence.
 
-- [ ] **Step 4: Implement the minimal pure record validator**
+- [x] **Step 4: Implement the minimal pure record validator**
 
 Create `core/studyReview.js` with frozen literal enums, strict field checks, a canonical UTC timestamp predicate, and an exact-shape copy:
 
@@ -96,7 +96,7 @@ export function validateStudyReview(review) {
 
 Use `Number.isInteger(interval) && interval >= 0`, `Number.isFinite(ease) && ease >= 1.3 && ease <= 3`, and an explicit ISO-8601 date-time-with-zone grammar plus a finite `Date.parse(value)` result. Accept `Z` and numeric offsets such as `+07:00`; do not silently canonicalize the caller's valid timestamp. Reject arrays and inherited/coerced values; never include record data in errors.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -106,7 +106,7 @@ node --test tests/unit/study-review.test.mjs
 
 Expected: all study-review tests pass, zero failures.
 
-- [ ] **Step 6: Commit the record contract**
+- [x] **Step 6: Commit the record contract**
 
 ```bash
 git add core/studyReview.js tests/unit/study-review.test.mjs package.json
@@ -124,11 +124,11 @@ git commit -m "feat: define study review persistence contract"
 - Consumes: `validateStudyReview(review)` from Task 1.
 - Produces: `openDatabase()` opening schema version 2, `listStudyReviewsFromDb(db)`, and `getStudyReviewFromDb(db, noteId)`.
 
-- [ ] **Step 1: Add the integration suite to the public integration command**
+- [x] **Step 1: Add the integration suite to the public integration command**
 
 Insert `tests/integration/storage.study-reviews.test.mjs` into `scripts.test:integration` in `package.json`, preserving `--test-concurrency=1`.
 
-- [ ] **Step 2: Write RED tests for fresh v2 and populated-v1 upgrade**
+- [x] **Step 2: Write RED tests for fresh v2 and populated-v1 upgrade**
 
 In `tests/integration/storage.study-reviews.test.mjs`, use `fake-indexeddb/auto`, close every handle in `afterEach`, and delete `myNoteDB` between tests. Add a helper that opens version 1 directly, creates the exact existing `notes` store/indexes, and writes a representative note with nested `tags`, `links`, `blocks`, and `ast` values.
 
@@ -145,7 +145,7 @@ assert.deepEqual(await listStudyReviewsFromDb(database), []);
 
 Snapshot the v1 note with `structuredClone` before closing v1 and compare deep equality after `openDatabase()` upgrades it. Instrument `IDBObjectStore.prototype.get`, `getAll`, `put`, and `openCursor` during `onupgradeneeded`; assert none are called for the `notes` store in the `oldVersion === 1` path.
 
-- [ ] **Step 3: Run schema RED**
+- [x] **Step 3: Run schema RED**
 
 Run:
 
@@ -155,7 +155,7 @@ node --test --test-concurrency=1 tests/integration/storage.study-reviews.test.mj
 
 Expected: exit 1 because the database remains version 1 and the study store/read APIs do not exist.
 
-- [ ] **Step 4: Implement existence-guarded schema creation**
+- [x] **Step 4: Implement existence-guarded schema creation**
 
 Change `DB_VERSION` to `2`, add `STORE_STUDY_REVIEWS = "studyReviews"`, and make `onupgradeneeded` conditional:
 
@@ -179,7 +179,7 @@ request.onupgradeneeded = (event) => {
 
 Add readonly `getAll`/`get` APIs that return defensive exact-shape review copies through `validateStudyReview`; an invalid persisted record must reject without rewriting it.
 
-- [ ] **Step 5: Run focused schema GREEN and migration neighbors**
+- [x] **Step 5: Run focused schema GREEN and migration neighbors**
 
 Run:
 
@@ -192,7 +192,7 @@ node --test --test-concurrency=1 tests/integration/storage.migration.source-chan
 
 Expected: all tests pass. Existing migration outcomes and exact source-preservation tests remain unchanged except assertions that explicitly inspect database version/schema.
 
-- [ ] **Step 6: Commit the additive schema**
+- [x] **Step 6: Commit the additive schema**
 
 ```bash
 git add core/storage.js tests/integration/storage.study-reviews.test.mjs package.json
@@ -209,7 +209,7 @@ git commit -m "feat: add isolated study review store"
 - Consumes: Task 1 validation and Task 2 store constants/read APIs.
 - Produces: `putStudyReviewToDb(db, review)`, `putJapaneseNoteWithReviewToDb(db, note, review)`, `deleteNoteWithReviewFromDb(db, noteId)`, and `restoreNoteWithReviewToDb(db, note, review)`.
 
-- [ ] **Step 1: Write RED tests for valid IO and preflight rejection**
+- [x] **Step 1: Write RED tests for valid IO and preflight rejection**
 
 Add tests proving:
 
@@ -220,11 +220,11 @@ Add tests proving:
 - a note-ID or review-ID collision rejects and preserves both pre-existing records exactly.
 - caller mutation after `put` and mutation of returned list/get values cannot change the durable record.
 
-- [ ] **Step 2: Run IO RED**
+- [x] **Step 2: Run IO RED**
 
 Run the focused integration file. Expected: exit 1 because the write APIs are missing.
 
-- [ ] **Step 3: Implement validated review update and atomic pair creation**
+- [x] **Step 3: Implement validated review update and atomic pair creation**
 
 Validate/clone all arguments before `db.transaction`. For single-record rating updates, use a `studyReviews` readwrite transaction, first `get(noteId)`, reject missing records with a bounded error, then `put(validatedReview)`. For pair creation, require a plain note with a non-empty string ID equal to `review.noteId`, then queue both adds in one transaction so a collision aborts instead of overwriting data:
 
@@ -244,11 +244,11 @@ try {
 
 Keep synchronous queue errors and asynchronous request errors content-free and preserve original error identity through `transactionDone`.
 
-- [ ] **Step 4: Run IO GREEN**
+- [x] **Step 4: Run IO GREEN**
 
 Run the focused integration file. Expected: all valid IO, missing-record, validation, defensive-copy, and atomic-create tests pass.
 
-- [ ] **Step 5: Write RED tests for delete/restore and rollback**
+- [x] **Step 5: Write RED tests for delete/restore and rollback**
 
 Add tests proving:
 
@@ -260,15 +260,15 @@ Add tests proving:
 
 Patch `IDBObjectStore.prototype.put`/`delete` only inside `try/finally`, discriminate with `this.name`, and always restore prototypes before assertions that reopen the database.
 
-- [ ] **Step 6: Run atomicity RED**
+- [x] **Step 6: Run atomicity RED**
 
 Run the focused integration file. Expected: delete/restore exports are missing and rollback assertions fail.
 
-- [ ] **Step 7: Implement delete capture and exact restore in one transaction**
+- [x] **Step 7: Implement delete capture and exact restore in one transaction**
 
 For delete, request the review from `studyReviews`, clone it if present, queue deletion from both stores, await transaction completion, then return the captured copy. For restore, validate IDs/review before starting the transaction and queue exact note/review puts in the shared transaction. Centralize only the small abort-and-settle pattern; do not build a generic repository abstraction.
 
-- [ ] **Step 8: Run atomicity GREEN and all storage neighbors**
+- [x] **Step 8: Run atomicity GREEN and all storage neighbors**
 
 Run:
 
@@ -281,7 +281,7 @@ node --test --test-concurrency=1 tests/integration/storage.migration.source-chan
 
 Expected: every test passes, with zero partial records after injected failures.
 
-- [ ] **Step 9: Commit atomic persistence**
+- [x] **Step 9: Commit atomic persistence**
 
 ```bash
 git add core/storage.js tests/integration/storage.study-reviews.test.mjs
@@ -299,11 +299,11 @@ git commit -m "feat: persist study note pairs atomically"
 - Consumes: final Task 1–3 behavior.
 - Produces: authoritative schema/data-safety/rollback documentation and recorded plan completion.
 
-- [ ] **Step 1: Update persistence invariants**
+- [x] **Step 1: Update persistence invariants**
 
 Replace the obsolete invariant that fixes the database at version 1 with exact v2 rules: additive-only upgrade, unchanged `notes` schema/records, no bootstrap enrollment, strict review validation, single-store review updates, paired cross-store atomicity, orphan-preserving reads, and rollback/old-code forward-data boundary. Update architecture ownership to name `studyReviews` as isolated metadata linked only by `noteId`.
 
-- [ ] **Step 2: Run focused and full verification outside the process-restricted sandbox**
+- [x] **Step 2: Run focused and full verification outside the process-restricted sandbox**
 
 Run exactly:
 
@@ -324,7 +324,7 @@ git diff --check origin/main...HEAD
 
 Expected: every command exits 0; record exact counts/durations, Node/npm/Playwright/Chromium versions, and distinguish the already-diagnosed sandbox-only `spawn EPERM` from repository results.
 
-- [ ] **Step 3: Inspect scope and cleanliness**
+- [x] **Step 3: Inspect scope and cleanliness**
 
 Run:
 
@@ -337,17 +337,17 @@ git log --oneline origin/main..HEAD
 
 Expected: only #47 plan/docs, `core/studyReview.js`, `core/storage.js`, `package.json`, and the two new/updated focused tests are changed; no generated browser artifacts or note-content fixtures remain.
 
-- [ ] **Step 4: Self-review the plan and implementation**
+- [x] **Step 4: Self-review the plan and implementation**
 
 Check spec coverage, placeholder scan, signature consistency, schema/index exactness, upgrade no-read/no-write proof, transaction terminal settlement, error identity, defensive copies, malformed persisted data, privacy, performance, rollback, and no accidental #48 behavior. Fix each valid finding with a focused RED test before production changes.
 
-- [ ] **Step 5: Commit documentation and verification record**
+- [x] **Step 5: Commit documentation and verification record**
 
 ```bash
 git add docs/INVARIANTS.md docs/ARCHITECTURE.md docs/superpowers/plans/2026-07-30-japanese-study-persistence.md
 git commit -m "docs: define Japanese study persistence invariants"
 ```
 
-- [ ] **Step 6: Hand the verified branch back for independent review**
+- [x] **Step 6: Hand the verified branch back for independent review**
 
 Report issue #47, approved design, this plan, base SHA `8ea579d95d8d57a0b470c3c9ae58e1f772a97b7b`, final head SHA, complete verification, and concerns to the controller. The controller owns independent whole-branch review, any reviewed fix wave, final re-verification, and publication through `github:yeet`. The controller will publish branch `codex/japanese-47-study-persistence` as one draft PR containing `Closes #47`, keep #48–#52 blocked, and stop after current-head CI succeeds and #47 moves to `status/review`.

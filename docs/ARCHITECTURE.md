@@ -8,7 +8,7 @@ Muc tieu tai lieu nay:
 ## 1) He thong hien tai (Baseline)
 
 myNote da co cac thanh phan cot loi:
-- Persistence: IndexedDB + migration tu localStorage.
+- Persistence: IndexedDB schema v2 + migration tu localStorage. `notes` giu nguyen schema v1; `studyReviews` la store metadata doc lap, lien ket duy nhat bang `noteId`.
 - Data model: note co cau truc (version, checksum, blocks, tags, links, ast).
 - Parser pipeline: parseDocument la nguon metadata chinh.
 - Search engine: worker-based + incremental index updates.
@@ -51,8 +51,14 @@ Mo ta:
   - Khong phu thuoc UI.
 
 - core/storage:
-  - IndexedDB schema, migration, IO.
+  - So huu IndexedDB schema v2, migration, va IO.
+  - So huu `notes` va `studyReviews` transactions; upgrade chi them `studyReviews`, khong doc hay rewrite `notes`.
+  - Paired note/review mutation commit atomically trong mot transaction; single review update chi dung `studyReviews` va khong tao orphan.
   - Khong duoc mutate UI/state truc tiep.
+
+- core/studyReview:
+  - So huu exact persisted review-record validation, enum, va defensive copies.
+  - `studyReviews` khong so huu note content hay lifecycle UI; quan he duy nhat voi note la `noteId`.
 
 - core/commandStack + core/notePatch + core/history:
   - Execute/undo/redo theo command boundary.
@@ -71,6 +77,8 @@ Mo ta:
 5. Render incremental.
 6. Metrics cap nhat.
 
+Study review persistence khong them state, scheduler, parser, hay UI behavior trong package nay. Bootstrap khong enroll note cu. Code cu yeu cau IndexedDB v1 khong the mo database da nang cap v2; rollback phai la deployment code tuong thich v2, khong phai schema downgrade hay data rewrite.
+
 ## 5) Phase 1 dong lai
 
 Phase 1 duoc xem la hoan tat khi:
@@ -86,3 +94,5 @@ Moi thay doi tu AI agent phai tra loi:
 - Co them synchronous heavy work tren main thread khong?
 - Co mo them memory structure khong gioi han khong?
 - Co ro transaction boundary giua state/persistence/history khong?
+- Co giu `notes` schema/records bat bien trong upgrade, va co tranh auto-enrollment khong?
+- Neu thay doi ca note va review, co dung mot cross-store transaction va terminal rollback khong?
