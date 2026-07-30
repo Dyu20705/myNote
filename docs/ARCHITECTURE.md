@@ -1,98 +1,117 @@
-# myNote Architecture Baseline (Phase 1 Closed)
+# myNote Architecture Baseline
 
-Muc tieu tai lieu nay:
-- Chot huong kien truc nen tang sau Phase 1.
-- Giam architectural drift khi tiep tuc dung AI agent coding.
-- Tao baseline de danh gia moi thay doi o Phase 2.
+This document defines the required architecture for the current application. Changes that violate these boundaries require an explicit architecture decision and matching tests.
 
-## 1) He thong hien tai (Baseline)
+## 1. System baseline
 
-myNote da co cac thanh phan cot loi:
-- Persistence: IndexedDB schema v2 + migration tu localStorage. `notes` giu nguyen schema v1; `studyReviews` la store metadata doc lap, lien ket duy nhat bang `noteId`.
-- Data model: note co cau truc (version, checksum, blocks, tags, links, ast).
-- Parser pipeline: parseDocument la nguon metadata chinh.
-- Search engine: worker-based + incremental index updates.
-- Backlinks: incremental backlinks index.
-- History: command stack undo/redo + patch-based history.
-- Rendering: virtualized note list.
-- Observability: metrics instrumentation trong UI.
-- Tests: parser invariant tests.
+myNote currently contains these core capabilities:
 
-## 2) So do kien truc bat buoc
+- **Persistence:** IndexedDB schema v2 with a bounded legacy localStorage migration.
+- **Study metadata:** isolated `studyReviews` records linked to notes only by `noteId`.
+- **Canonical model:** versioned notes with checksums, blocks, tags, links, AST data, and search material.
+- **Parser pipeline:** `parseDocument` and related parser functions own derived note metadata.
+- **Search:** worker-based querying with incremental index updates.
+- **Backlinks:** an incrementally maintained reverse-link index.
+- **History:** command-stack undo/redo and patch-based retained history.
+- **Rendering:** a virtualized note list.
+- **Observability:** bounded runtime metrics surfaced in the UI.
+- **Verification:** deterministic unit, integration, contract, and browser tests.
 
-Flow phu thuoc:
-UI -> Actions -> State -> Core services -> Persistence
+## 2. Required dependency direction
 
-Mo ta:
-- UI chi phat su kien, khong truy cap persistence truc tiep.
-- Actions la diem vao duy nhat de thay doi state.
-- State cap nhat co kiem soat va co the trace.
-- Core services xu ly parser, search, backlinks, history.
-- Persistence chi duoc goi tu action/effect layer.
+```text
+UI → Actions → State → Core services → Persistence
+```
 
-## 3) Ownership theo module
+- UI modules emit events and render state; they do not access persistence directly.
+- Actions are the application entry point for canonical mutations.
+- State transitions are explicit, deterministic, and observable.
+- Core services own parsing, indexing, backlinks, autosave, patches, history, and study-review validation.
+- Persistence is called only through action/effect or core lifecycle boundaries.
 
-- app.js:
-  - Bootstrap va dependency wiring.
-  - Event to Action routing.
-  - Khong chua business logic parser/search phuc tap.
+## 3. Module ownership
 
-- core/parser:
-  - Parse markdown, tags, wiki links, code blocks, tokenization.
-  - Tra ve cau truc deterministic.
+### `app.js`
 
-- core/search.worker + core/searchClient:
-  - Index/query bat dong bo.
-  - Validate worker payload.
-  - Ranking va incremental upsert/remove.
+- Bootstraps dependencies and application state.
+- Routes UI events to actions.
+- Coordinates effects without reimplementing parser, search, or storage logic.
 
-- core/backlinks:
-  - Incremental graph relation index.
-  - Khong phu thuoc UI.
+### `core/parser/`
 
-- core/storage:
-  - So huu IndexedDB schema v2, migration, va IO.
-  - So huu `notes` va `studyReviews` transactions; upgrade chi them `studyReviews`, khong doc hay rewrite `notes`.
-  - Paired note/review mutation commit atomically trong mot transaction; single review update chi dung `studyReviews` va khong tao orphan.
-  - Khong duoc mutate UI/state truc tiep.
+- Parses Markdown-oriented content, tags, wiki links, code blocks, and tokens.
+- Produces deterministic derived metadata.
+- Remains the only metadata extraction authority.
 
-- core/studyReview:
-  - So huu exact persisted review-record validation, enum, va defensive copies.
-  - `studyReviews` khong so huu note content hay lifecycle UI; quan he duy nhat voi note la `noteId`.
+### `core/search.worker.js` and `core/searchClient.js`
 
-- core/commandStack + core/notePatch + core/history:
-  - Execute/undo/redo theo command boundary.
-  - Patch-based ghi lich su thay doi.
+- Validate worker messages and bound payload sizes.
+- Maintain incremental upsert/remove indexing.
+- Execute asynchronous search and ranking away from the main thread.
 
-- ui/*:
-  - Render va interaction thuần UI.
-  - Khong parse metadata va khong goi storage.
+### `core/backlinks.js`
 
-## 4) Operational update cycle
+- Maintains reverse note relationships incrementally.
+- Has no UI dependency.
 
-1. UI event.
-2. Action nhan su kien va tao transition.
-3. State update (predictable).
-4. Effect (persist/index/backlinks) chay async.
-5. Render incremental.
-6. Metrics cap nhat.
+### `core/storage.js`
 
-Study review persistence khong them state, scheduler, parser, hay UI behavior trong package nay. Bootstrap khong enroll note cu. Code cu yeu cau IndexedDB v1 khong the mo database da nang cap v2; rollback phai la deployment code tuong thich v2, khong phai schema downgrade hay data rewrite.
+- Owns IndexedDB schema v2, transactions, migration, and database I/O.
+- Preserves the existing `notes` store and adds `studyReviews` without scanning or rewriting notes.
+- Owns atomic cross-store note/review mutations and terminal transaction settlement.
+- Rejects a blocked schema upgrade deterministically and closes connections on version changes.
+- Never mutates UI or application state directly.
 
-## 5) Phase 1 dong lai
+### `core/studyReview.js`
 
-Phase 1 duoc xem la hoan tat khi:
-- Kien truc baseline nay duoc giu on dinh.
-- Khong them feature lon ngoai roadmap Phase 2.
-- Moi PR/refactor deu duoc doi chieu voi INVARIANTS.md.
+- Owns the exact persisted study-review shape, enums, validation, and defensive copies.
+- Rejects malformed or unsafe metadata with bounded content-free errors.
+- Does not own note content, scheduling behavior, application state, or UI lifecycle.
 
-## 6) Gate cho moi thay doi moi
+### `core/commandStack.js`, `core/notePatch.js`, and `core/history.js`
 
-Moi thay doi tu AI agent phai tra loi:
-- Co tao dependency moi sai huong khong?
-- Co duplicate parsing logic ngoai parser pipeline khong?
-- Co them synchronous heavy work tren main thread khong?
-- Co mo them memory structure khong gioi han khong?
-- Co ro transaction boundary giua state/persistence/history khong?
-- Co giu `notes` schema/records bat bien trong upgrade, va co tranh auto-enrollment khong?
-- Neu thay doi ca note va review, co dung mot cross-store transaction va terminal rollback khong?
+- Execute, undo, and redo within explicit command boundaries.
+- Preserve bounded, reversible patch/history behavior.
+
+### `ui/`
+
+- Owns rendering and interaction behavior only.
+- Does not parse canonical metadata or call storage directly.
+
+## 4. Mutation lifecycle
+
+```text
+UI event
+→ action validation
+→ normalized mutation preparation
+→ canonical persistence
+→ canonical in-memory commit
+→ derived index/backlink update
+→ history success
+→ incremental render and metrics update
+```
+
+Canonical persistence failure stops the mutation before in-memory state and history report success. Derived index failure after canonical persistence is treated as a visible, rebuildable degradation.
+
+Study-review persistence in this work package adds no scheduler, parser behavior, state transition, automatic enrollment, or UI. Any operation that changes both a note and its review uses one cross-store transaction. Existing notes remain byte-for-byte untouched during the v1-to-v2 upgrade.
+
+## 5. Compatibility and rollback
+
+- Schema v2 is forward-only and additive.
+- A v1 client cannot open a database already upgraded to v2 by requesting version 1.
+- Rollback must deploy code that understands schema v2; it must not delete `studyReviews`, rewrite notes, or attempt an automatic downgrade.
+- A blocked upgrade rejects with `DATABASE_UPGRADE_BLOCKED`; the user can close other tabs and retry without data mutation.
+
+## 6. Change gate
+
+Every material change must answer:
+
+1. Does it preserve the required dependency direction?
+2. Does it avoid duplicate parsing or metadata ownership?
+3. Does it keep canonical persistence ahead of in-memory/history success?
+4. Does it avoid unbounded memory, cache, history, or listener growth?
+5. Does it keep heavy parsing and indexing off the main thread where required?
+6. Are transaction, failure, recovery, and rollback boundaries explicit?
+7. Does a schema upgrade preserve existing note records and avoid automatic enrollment?
+8. Do paired note/review mutations use one cross-store transaction with terminal rollback?
+9. Do tests cover the changed invariant?
