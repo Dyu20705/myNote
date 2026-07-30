@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - "maintenance/**"
 
 permissions: { contents: read }
 
