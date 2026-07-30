@@ -1,4 +1,4 @@
-import { STUDY_NOTEBOOK_TYPES } from "./studyReview.js";
+import { STUDY_NOTEBOOK_TYPES, validateStudyReview } from "./studyReview.js";
 
 export const JAPANESE_NOTEBOOK_TYPES = STUDY_NOTEBOOK_TYPES;
 
@@ -120,6 +120,94 @@ function assertEmptyOptions(options) {
   }
 }
 
+function readExactLookupQuery(query, selectorField, isSelector) {
+  if (query === null || typeof query !== "object" || Array.isArray(query)) {
+    throw createInvalidTemplateError();
+  }
+
+  if (Object.getPrototypeOf(query) !== Object.prototype) {
+    throw createInvalidTemplateError();
+  }
+
+  const expectedFields = ["notes", "reviews", selectorField];
+  const keys = Reflect.ownKeys(query);
+  if (keys.length !== expectedFields.length || !expectedFields.every((field) => keys.includes(field))) {
+    throw createInvalidTemplateError();
+  }
+
+  const values = {};
+  for (const field of expectedFields) {
+    const descriptor = Object.getOwnPropertyDescriptor(query, field);
+    if (descriptor === undefined || !Object.hasOwn(descriptor, "value") || descriptor.enumerable !== true) {
+      throw createInvalidTemplateError();
+    }
+    values[field] = descriptor.value;
+  }
+
+  if (!Array.isArray(values.notes) || !Array.isArray(values.reviews) || !isSelector(values[selectorField])) {
+    throw createInvalidTemplateError();
+  }
+
+  return values;
+}
+
+function readMatchingNoteId(note, expectedTitle, expectedTag) {
+  try {
+    if (note === null || typeof note !== "object" || Array.isArray(note)) {
+      return undefined;
+    }
+
+    const id = Object.getOwnPropertyDescriptor(note, "id");
+    const title = Object.getOwnPropertyDescriptor(note, "title");
+    const content = Object.getOwnPropertyDescriptor(note, "content");
+    if (id === undefined || title === undefined || content === undefined
+      || !Object.hasOwn(id, "value") || !Object.hasOwn(title, "value") || !Object.hasOwn(content, "value")) {
+      return undefined;
+    }
+
+    if (typeof id.value !== "string" || id.value.length === 0
+      || title.value !== expectedTitle || typeof content.value !== "string") {
+      return undefined;
+    }
+
+    const escapedTag = expectedTag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:^|\\s)${escapedTag}(?=$|\\s)`).test(content.value) ? id.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findEnrolledNoteId(query, notebookType, selectorField, isSelector, expectedTitle) {
+  const values = readExactLookupQuery(query, selectorField, isSelector);
+  const matchingNoteIds = new Set();
+  const expectedTag = getTemplate(notebookType).tag;
+  const title = expectedTitle(values[selectorField]);
+
+  for (const note of values.notes) {
+    const noteId = readMatchingNoteId(note, title, expectedTag);
+    if (noteId !== undefined) {
+      matchingNoteIds.add(noteId);
+    }
+  }
+
+  let smallest;
+  for (const review of values.reviews) {
+    let validReview;
+    try {
+      validReview = validateStudyReview(review);
+    } catch {
+      continue;
+    }
+
+    if (validReview.notebookType === notebookType && matchingNoteIds.has(validReview.noteId)
+      && (smallest === undefined || validReview.noteId < smallest)) {
+      smallest = validReview.noteId;
+    }
+  }
+
+  return smallest;
+}
+
 export function reservedTagFor(type) {
   try {
     return getTemplate(type).tag;
@@ -152,6 +240,22 @@ export function createJapaneseTemplate(type, options = {}) {
 
     assertEmptyOptions(options);
     return { title: template.title, content: template.content };
+  } catch {
+    throw createInvalidTemplateError();
+  }
+}
+
+export function findEnrolledOutputNoteId(query) {
+  try {
+    return findEnrolledNoteId(query, "output", "localDate", isCalendarDate, (localDate) => localDate);
+  } catch {
+    throw createInvalidTemplateError();
+  }
+}
+
+export function findEnrolledPlannerNoteId(query) {
+  try {
+    return findEnrolledNoteId(query, "planner", "isoWeek", isIsoWeek, (isoWeek) => `Japanese study plan — ${isoWeek}`);
   } catch {
     throw createInvalidTemplateError();
   }

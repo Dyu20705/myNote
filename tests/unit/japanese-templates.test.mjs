@@ -4,6 +4,8 @@ import { STUDY_NOTEBOOK_TYPES } from "../../core/studyReview.js";
 import {
   JAPANESE_NOTEBOOK_TYPES,
   createJapaneseTemplate,
+  findEnrolledOutputNoteId,
+  findEnrolledPlannerNoteId,
   reservedTagFor,
 } from "../../core/japaneseTemplates.js";
 
@@ -46,6 +48,27 @@ const TEMPLATES = Object.freeze([
 ]);
 
 function assertTemplateError(action, marker) {
+  assert.throws(action, (error) => {
+    assert.equal(error.name, "TypeError");
+    assert.doesNotMatch(error.message, new RegExp(marker));
+    return true;
+  });
+}
+
+function makeReview(noteId, notebookType, overrides = {}) {
+  return {
+    noteId,
+    notebookType,
+    status: "new",
+    lastReviewedAt: null,
+    nextReviewAt: "2026-07-30T00:00:00.000Z",
+    interval: 0,
+    ease: 2.5,
+    ...overrides,
+  };
+}
+
+function assertLookupError(action, marker) {
   assert.throws(action, (error) => {
     assert.equal(error.name, "TypeError");
     assert.doesNotMatch(error.message, new RegExp(marker));
@@ -143,4 +166,88 @@ test("template APIs turn unsupported and hostile inputs into content-free errors
     },
   });
   assertTemplateError(() => createJapaneseTemplate("planner", proxy), "leak-hostile-proxy");
+});
+
+test("enrolled output lookup requires a valid review, exact date title, and exact reserved tag", () => {
+  const localDate = "2026-07-30";
+  const notes = [
+    { id: "tag-only", title: localDate, content: "#jp-output" },
+    { id: "wrong-type", title: localDate, content: "#jp-output" },
+    { id: "wrong-title", title: "2026-07-29", content: "#jp-output" },
+    { id: "missing-tag", title: localDate, content: "Study draft" },
+    { id: "wrong-tag-token", title: localDate, content: "#jp-output-extra" },
+    { id: "invalid-review", title: localDate, content: "#jp-output" },
+    { id: "match-z", title: localDate, content: "## 今日の文\n\n#jp-output" },
+    { id: "match-a", title: localDate, content: "#jp-output" },
+    Object.create({ id: "inherited-note", title: localDate, content: "#jp-output" }),
+  ];
+  const reviews = [
+    makeReview("orphan", "output"),
+    makeReview("wrong-type", "planner"),
+    makeReview("wrong-title", "output"),
+    makeReview("missing-tag", "output"),
+    makeReview("wrong-tag-token", "output"),
+    makeReview("invalid-review", "output", { interval: -1 }),
+    makeReview("match-z", "output"),
+    makeReview("match-a", "output"),
+    Object.create(makeReview("inherited-review", "output")),
+  ];
+  const before = structuredClone({ notes, reviews });
+
+  assert.equal(findEnrolledOutputNoteId({ notes, reviews, localDate }), "match-a");
+  assert.deepEqual({ notes, reviews }, before);
+});
+
+test("enrolled planner lookup accepts only a matching planner enrollment", () => {
+  const isoWeek = "2026-W31";
+  const title = "Japanese study plan — 2026-W31";
+  const notes = [
+    { id: "planner-b", title, content: "#jp-planner" },
+    { id: "planner-a", title, content: "#jp-planner" },
+    { id: "output-review", title, content: "#jp-planner" },
+    { id: "wrong-week", title: "Japanese study plan — 2026-W30", content: "#jp-planner" },
+  ];
+  const reviews = [
+    makeReview("planner-b", "planner"),
+    makeReview("planner-a", "planner"),
+    makeReview("output-review", "output"),
+    makeReview("wrong-week", "planner"),
+  ];
+
+  assert.equal(findEnrolledPlannerNoteId({ notes, reviews, isoWeek }), "planner-a");
+  assert.equal(findEnrolledPlannerNoteId({ notes, reviews, isoWeek: "2026-W32" }), undefined);
+});
+
+test("enrolled duplicate lookups reject malformed or hostile query boundaries without exposing input", () => {
+  const finders = [
+    [findEnrolledOutputNoteId, "localDate", "2026-07-30"],
+    [findEnrolledPlannerNoteId, "isoWeek", "2026-W31"],
+  ];
+
+  for (const [finder, selector, value] of finders) {
+    assertLookupError(() => finder(null), "null");
+    assertLookupError(() => finder({ notes: [], reviews: [], [selector]: "leak-extra", unknown: "leak-extra" }), "leak-extra");
+    assertLookupError(() => finder({ notes: {}, reviews: [], [selector]: value }), "notes");
+    assertLookupError(() => finder({ notes: [], reviews: {}, [selector]: value }), "reviews");
+    assertLookupError(() => finder({ notes: [], reviews: [], [selector]: "leak-selector" }), "leak-selector");
+
+    const inherited = Object.create({ notes: [], reviews: [], [selector]: value });
+    assertLookupError(() => finder(inherited), "inherited");
+
+    const getter = { notes: [], reviews: [] };
+    Object.defineProperty(getter, selector, {
+      enumerable: true,
+      get() {
+        throw new Error("leak-hostile-query-getter");
+      },
+    });
+    assertLookupError(() => finder(getter), "leak-hostile-query-getter");
+
+    const proxy = new Proxy({}, {
+      ownKeys() {
+        throw new Error("leak-hostile-query-proxy");
+      },
+    });
+    assertLookupError(() => finder(proxy), "leak-hostile-query-proxy");
+  }
 });
