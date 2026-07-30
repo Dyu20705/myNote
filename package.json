@@ -9,7 +9,7 @@
   "scripts": {
     "lint": "eslint . --ext .js,.mjs",
     "test:unit": "node --test tests/governance.contract.test.mjs tests/unit/autosave.test.mjs tests/unit/command-stack.test.mjs tests/unit/history.test.mjs tests/unit/model.normalization.test.mjs tests/unit/note-patch.test.mjs tests/unit/parser.invariant.node.test.mjs tests/unit/parser.metadata.test.mjs tests/unit/state.test.mjs tests/unit/static-server.test.mjs tests/unit/study-review.test.mjs",
-    "test:integration": "node --test --test-concurrency=1 tests/integration/storage.lifecycle.test.mjs tests/integration/storage.migration.test.mjs tests/integration/storage.migration.source-change.test.mjs tests/integration/note-lifecycle.failure.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/storage.study-reviews.test.mjs tests/integration/storage.lifecycle.test.mjs tests/integration/storage.migration.test.mjs tests/integration/storage.migration.source-change.test.mjs tests/integration/note-lifecycle.failure.test.mjs",
     "test:e2e": "node scripts/run-e2e.mjs"
   },
   "devDependencies": {

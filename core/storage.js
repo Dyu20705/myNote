@@ -1,7 +1,10 @@
+import { validateStudyReview } from "./studyReview.js";
+
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NOTES = "notes";
+const STORE_STUDY_REVIEWS = "studyReviews";
 
 function createMigrationOutcome(status, count, errorCode) {
   return errorCode === undefined ? { status, count } : { status, count, errorCode };
@@ -33,12 +36,20 @@ export function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      const store = db.createObjectStore(STORE_NOTES, { keyPath: "id" });
-      store.createIndex("updatedAt", "updatedAt");
-      store.createIndex("pinned", "pinned");
-      store.createIndex("archived", "archived");
+      if (event.oldVersion < 1 && !db.objectStoreNames.contains(STORE_NOTES)) {
+        const store = db.createObjectStore(STORE_NOTES, { keyPath: "id" });
+        store.createIndex("updatedAt", "updatedAt");
+        store.createIndex("pinned", "pinned");
+        store.createIndex("archived", "archived");
+      }
+      if (event.oldVersion < 2 && !db.objectStoreNames.contains(STORE_STUDY_REVIEWS)) {
+        const store = db.createObjectStore(STORE_STUDY_REVIEWS, { keyPath: "noteId" });
+        store.createIndex("nextReviewAt", "nextReviewAt");
+        store.createIndex("notebookType", "notebookType");
+        store.createIndex("status", "status");
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -74,6 +85,18 @@ function requestResult(request) {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+export async function listStudyReviewsFromDb(db) {
+  const tx = db.transaction(STORE_STUDY_REVIEWS, "readonly");
+  const reviews = await requestResult(tx.objectStore(STORE_STUDY_REVIEWS).getAll());
+  return (reviews || []).map(validateStudyReview);
+}
+
+export async function getStudyReviewFromDb(db, noteId) {
+  const tx = db.transaction(STORE_STUDY_REVIEWS, "readonly");
+  const review = await requestResult(tx.objectStore(STORE_STUDY_REVIEWS).get(noteId));
+  return review === undefined ? undefined : validateStudyReview(review);
 }
 
 export async function putNoteToDb(db, note) {
