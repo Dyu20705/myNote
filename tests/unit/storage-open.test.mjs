@@ -3,31 +3,39 @@ import test from "node:test";
 
 import { openDatabase } from "../../core/storage.js";
 
-test("openDatabase rejects a blocked upgrade and closes a late connection", async () => {
+function installIndexedDbStub(schedule) {
   const originalIndexedDb = globalThis.indexedDB;
   const request = {};
-  let closeCalls = 0;
 
   globalThis.indexedDB = {
     open(name, version) {
       assert.equal(name, "myNoteDB");
       assert.equal(version, 2);
-
-      queueMicrotask(() => {
-        request.onblocked?.();
-        queueMicrotask(() => {
-          request.result = {
-            close() {
-              closeCalls += 1;
-            },
-          };
-          request.onsuccess?.();
-        });
-      });
-
+      schedule(request);
       return request;
     },
   };
+
+  return () => {
+    globalThis.indexedDB = originalIndexedDb;
+  };
+}
+
+test("openDatabase rejects a blocked upgrade and closes a late connection", async () => {
+  let closeCalls = 0;
+  const restoreIndexedDb = installIndexedDbStub((request) => {
+    queueMicrotask(() => {
+      request.onblocked?.();
+      queueMicrotask(() => {
+        request.result = {
+          close() {
+            closeCalls += 1;
+          },
+        };
+        request.onsuccess?.();
+      });
+    });
+  });
 
   try {
     await assert.rejects(
@@ -42,6 +50,30 @@ test("openDatabase rejects a blocked upgrade and closes a late connection", asyn
     await Promise.resolve();
     assert.equal(closeCalls, 1);
   } finally {
-    globalThis.indexedDB = originalIndexedDb;
+    restoreIndexedDb();
+  }
+});
+
+test("openDatabase closes an accepted connection when a newer version is requested", async () => {
+  let closeCalls = 0;
+  const database = {
+    close() {
+      closeCalls += 1;
+    },
+  };
+  const restoreIndexedDb = installIndexedDbStub((request) => {
+    queueMicrotask(() => {
+      request.result = database;
+      request.onsuccess?.();
+    });
+  });
+
+  try {
+    assert.equal(await openDatabase(), database);
+    assert.equal(typeof database.onversionchange, "function");
+    database.onversionchange();
+    assert.equal(closeCalls, 1);
+  } finally {
+    restoreIndexedDb();
   }
 });
