@@ -4,6 +4,7 @@ export const STUDY_RATINGS = Object.freeze(["again", "hard", "good", "easy"]);
 
 const INITIAL_REVIEW_FIELDS = Object.freeze(["noteId", "notebookType", "nowIso"]);
 const ZONED_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|([+-])(\d{2}):?(\d{2}))$/;
+const SECONDS_PER_DAY = 86400n;
 
 function createInvalidSchedulerInputError() {
   return new TypeError("Invalid study scheduler input");
@@ -96,6 +97,65 @@ function compareValidatedInstants(leftTimestamp, rightTimestamp) {
   return compareFractions(left.fraction, right.fraction);
 }
 
+function civilFromDays(daysSinceUnixEpoch) {
+  const shiftedDays = daysSinceUnixEpoch + 719468n;
+  const era = shiftedDays >= 0n
+    ? shiftedDays / 146097n
+    : (shiftedDays - 146096n) / 146097n;
+  const dayOfEra = shiftedDays - era * 146097n;
+  const yearOfEra = (dayOfEra - dayOfEra / 1460n + dayOfEra / 36524n - dayOfEra / 146096n) / 365n;
+  let year = yearOfEra + era * 400n;
+  const dayOfYear = dayOfEra - (365n * yearOfEra + yearOfEra / 4n - yearOfEra / 100n);
+  const marchMonth = (5n * dayOfYear + 2n) / 153n;
+  const day = dayOfYear - (153n * marchMonth + 2n) / 5n + 1n;
+  const month = marchMonth < 10n ? marchMonth + 3n : marchMonth - 9n;
+  year += month <= 2n ? 1n : 0n;
+
+  return { year, month, day };
+}
+
+function padTwo(value) {
+  return value.toString().padStart(2, "0");
+}
+
+function formatComputedInstant(seconds, fraction) {
+  const days = seconds >= 0n ? seconds / SECONDS_PER_DAY : (seconds - (SECONDS_PER_DAY - 1n)) / SECONDS_PER_DAY;
+  const secondsOfDay = seconds - days * SECONDS_PER_DAY;
+  const { year, month, day } = civilFromDays(days);
+
+  if (year < 0n || year > 9999n) {
+    throw createInvalidSchedulerInputError();
+  }
+
+  const hour = secondsOfDay / 3600n;
+  const minute = (secondsOfDay % 3600n) / 60n;
+  const second = secondsOfDay % 60n;
+  const renderedFraction = fraction === "" ? ".000" : `.${fraction}`;
+
+  return `${year.toString().padStart(4, "0")}-${padTwo(month)}-${padTwo(day)}T${padTwo(hour)}:${padTwo(minute)}:${padTwo(second)}${renderedFraction}Z`;
+}
+
+function addSecondsToValidatedInstant(timestamp, secondsToAdd) {
+  const instant = parseValidatedInstant(timestamp);
+  return formatComputedInstant(instant.seconds + secondsToAdd, instant.fraction);
+}
+
+function ensureSafeInterval(interval) {
+  if (!Number.isSafeInteger(interval) || interval < 0) {
+    throw createInvalidSchedulerInputError();
+  }
+
+  return interval;
+}
+
+function normalizeEase(value) {
+  return Math.round(value * 100) / 100;
+}
+
+function addIntervalDays(nowIso, interval) {
+  return addSecondsToValidatedInstant(nowIso, BigInt(interval) * SECONDS_PER_DAY);
+}
+
 export function createInitialReview(input) {
   try {
     const { noteId, notebookType, nowIso } = readInitialReviewInput(input);
@@ -124,4 +184,66 @@ export function isDue(review, nowIso) {
   }
 
   return compareValidatedInstants(validReview.nextReviewAt, validNowIso) <= 0;
+}
+
+export function rateReview(review, rating, nowIso) {
+  const validReview = validateStudyReview(review);
+  if (!STUDY_RATINGS.includes(rating)) {
+    throw createInvalidSchedulerInputError();
+  }
+
+  const validNowIso = validateCallerTime(nowIso);
+  if (validReview.status === "suspended") {
+    throw createInvalidSchedulerInputError();
+  }
+
+  const previousInterval = validReview.interval;
+  let status;
+  let interval;
+  let ease;
+  let nextReviewAt;
+
+  if (rating === "again") {
+    status = "learning";
+    interval = 0;
+    ease = Math.max(1.3, normalizeEase(validReview.ease - 0.2));
+    nextReviewAt = addSecondsToValidatedInstant(validNowIso, 600n);
+  } else if (rating === "hard") {
+    status = previousInterval === 0 ? "learning" : "review";
+    interval = ensureSafeInterval(Math.ceil(Math.max(previousInterval, 1) * 1.2));
+    ease = Math.max(1.3, normalizeEase(validReview.ease - 0.15));
+    nextReviewAt = addIntervalDays(validNowIso, interval);
+  } else if (rating === "good") {
+    status = "review";
+    interval = previousInterval === 0
+      ? 1
+      : previousInterval === 1
+        ? 3
+        : Math.max(previousInterval + 1, Math.round(previousInterval * validReview.ease));
+    interval = ensureSafeInterval(interval);
+    ease = validReview.ease;
+    nextReviewAt = addIntervalDays(validNowIso, interval);
+  } else {
+    status = "review";
+    interval = previousInterval === 0
+      ? 4
+      : Math.max(previousInterval + 1, Math.round(previousInterval * validReview.ease * 1.3));
+    interval = ensureSafeInterval(interval);
+    ease = Math.min(3, normalizeEase(validReview.ease + 0.15));
+    nextReviewAt = addIntervalDays(validNowIso, interval);
+  }
+
+  try {
+    return validateStudyReview({
+      noteId: validReview.noteId,
+      notebookType: validReview.notebookType,
+      status,
+      lastReviewedAt: validNowIso,
+      nextReviewAt,
+      interval,
+      ease,
+    });
+  } catch {
+    throw createInvalidSchedulerInputError();
+  }
 }
