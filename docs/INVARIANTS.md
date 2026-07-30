@@ -124,14 +124,37 @@ Required:
 
 ### Japanese templates and deterministic scheduling
 
-- `japaneseTemplates` accepts only the five persisted notebook types and returns fresh exact-shape template objects. Its vocabulary, kanji, and grammar seeds accept only empty options; output requires one valid calendar date and planner requires one valid ISO week.
-- Each template owns one exact reserved tag. Enrolled output and planner lookup succeeds only when an existing note, a valid matching review, an exact expected title, and the canonical parser-extracted reserved tag all agree. It returns the lexicographically smallest matching note ID and never classifies a note from its tag alone.
-- Template creation and duplicate lookup reject malformed, inherited, unknown, or hostile boundaries with fresh content-free errors. They do not mutate caller inputs or duplicate parser or persisted-review validation rules.
+#### Template boundary
+
+- `japaneseTemplates` accepts only the five persisted notebook types and returns fresh exact-shape template objects.
+- Vocabulary, kanji, and grammar seeds accept only an empty plain options object. Output requires exactly one valid calendar date; planner requires exactly one valid ISO week.
+- Each template owns one exact reserved tag.
+- Enrolled output and planner lookup succeeds only when an existing note, a valid matching review, an exact expected title, and the canonical parser-extracted reserved tag all agree.
+- A tag inside fenced code is not enrollment metadata because lookup delegates to the canonical parser.
+- Lookup returns the lexicographically smallest matching note ID, never classifies a note from its tag alone, and does not sort or mutate caller arrays.
+- Template creation and duplicate lookup reject malformed, inherited, unknown, or hostile top-level boundaries with fresh content-free errors.
+
+#### Scheduler boundary
+
 - `studyScheduler` is caller-clocked and pure: it has no persistence, parser orchestration, dashboard, state/action, DOM, network, or ambient-clock responsibility.
 - Initial reviews have status `new`, interval `0`, ease `2.5`, no last-reviewed time, and a next-review time equal to the supplied valid timestamp spelling.
-- A rating always preserves the supplied valid `lastReviewedAt` spelling. `again` schedules ten minutes with learning status and a `1.3` ease floor; `hard`, `good`, and `easy` use the documented interval multipliers and branches, exact 24-hour days, and the documented `1.3`/`3.0` ease caps. Computed next-review timestamps are canonical UTC timestamps while retaining arbitrary fractional-second precision.
-- Due comparison is by instant rather than timestamp spelling, and suspended reviews are never due or rateable. Scheduler transitions return fresh validated records, never mutate the caller, and reject unsafe intervals or out-of-range computed timestamps.
-- Invalid persisted reviews retain `INVALID_STUDY_REVIEW` provenance. Application-created template and scheduler errors are fresh and content-free.
+- Every rating preserves the supplied valid `nowIso` spelling as `lastReviewedAt`.
+- Day scheduling adds exact 24-hour multiples to the represented instant; it does not use calendar-day or daylight-saving transitions.
+- Computed `nextReviewAt` values are canonical UTC timestamps. A supplied fractional-second sequence is retained exactly; a supplied timestamp without a fractional part produces `.000` in computed output.
+- Due comparison is by instant rather than timestamp spelling. Suspended reviews are never due and cannot be rated.
+
+| Rating | Status | Interval | Ease | Next review |
+|---|---|---|---|---|
+| `again` | `learning` | `0` | `max(1.3, round2(ease - 0.20))` | 10 minutes |
+| `hard` | `learning` when previous interval is `0`, otherwise `review` | `ceil(max(previous, 1) × 1.20)` | `max(1.3, round2(ease - 0.15))` | Exact interval days |
+| `good` | `review` | `1` from `0`; `3` from `1`; otherwise `max(previous + 1, round(previous × ease))` | Unchanged | Exact interval days |
+| `easy` | `review` | `4` from `0`; otherwise `max(previous + 1, round(previous × ease × 1.30))` | `min(3.0, round2(ease + 0.15))` | Exact interval days |
+
+`round2` means deterministic rounding to two decimal places after the rating adjustment. Every calculated interval remains a non-negative safe integer, and every calculated timestamp remains within the persisted four-digit-year contract.
+
+- Scheduler transitions return fresh validated records and never mutate the caller.
+- Invalid persisted reviews retain `INVALID_STUDY_REVIEW` provenance.
+- Application-created template and scheduler errors are fresh, bounded, and content-free.
 
 Forbidden:
 
@@ -139,6 +162,8 @@ Forbidden:
 - Undo/redo that skips persistence.
 - Treating canonical storage failure and derived-index failure as the same error path.
 - Adding polling, background retry loops, optimistic queues, or schema changes inside the autosave boundary.
+- Reading the system clock, locale, timezone, persistence, state, DOM, or network from template or scheduler modules.
+- Treating a reserved tag without a valid matching review as enrollment.
 
 ## 5. Search and backlink consistency
 
@@ -175,7 +200,7 @@ Normal editing must not trigger a full index rebuild. Any mismatch must expose a
 
 ## 8. Verification
 
-Changes to parser, model, index, backlinks, state, history, persistence, migration, autosave, or study-review metadata require focused regression tests covering the affected contract, including as applicable:
+Changes to parser, model, index, backlinks, state, history, persistence, migration, autosave, study-review metadata, Japanese templates, or study scheduling require focused regression tests covering the affected contract, including as applicable:
 
 - Deterministic parsing and normalization.
 - Reversible patch and index transitions.
@@ -184,3 +209,5 @@ Changes to parser, model, index, backlinks, state, history, persistence, migrati
 - Autosave coalescing, serialization, flushing, trailing work, and rejection handling.
 - Migration atomicity, compatibility, retry behavior, and bounded diagnostics.
 - Schema upgrades, blocked upgrades, cross-store rollback, collision handling, orphan preservation, and defensive validation.
+- Exact template titles, bodies, tags, date/week validation, hostile boundaries, parser-owned tag semantics, duplicate tie-breaking, and caller immutability.
+- Initial review values, due comparisons across equivalent timestamp spellings, suspension behavior, all rating branches, ease normalization and caps, safe-integer overflow, timestamp-range overflow, error provenance, and caller immutability.
