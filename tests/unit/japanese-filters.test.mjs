@@ -13,6 +13,7 @@ const reviews = [
   { noteId: "vocab", notebookType: "vocabulary" },
   { noteId: "kanji", notebookType: "kanji" },
   { noteId: "grammar", notebookType: "grammar" },
+  { noteId: "ghost", notebookType: "grammar" },
 ];
 
 test("returns search order unchanged when filters are empty", () => {
@@ -40,9 +41,18 @@ test("filters by notebook type", () => {
 
 test("combines date and notebook type without inventing missing metadata", () => {
   assert.deepEqual(filterJapaneseNoteIds({
-    ids: ["grammar", "kanji", "vocab", "missing"],
+    ids: ["grammar", "kanji", "vocab", "ghost", "missing"],
     notes,
     reviews,
     filters: { fromDate: "2026-07-30", toDate: "", notebookType: "grammar" },
+  }), ["grammar"]);
+});
+
+test("type-only filtering excludes orphan review IDs", () => {
+  assert.deepEqual(filterJapaneseNoteIds({
+    ids: ["ghost", "grammar"],
+    notes,
+    reviews,
+    filters: { notebookType: "grammar" },
   }), ["grammar"]);
 });
