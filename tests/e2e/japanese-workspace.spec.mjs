@@ -125,3 +125,43 @@ test("rating persistence failure remains visible and retryable without advancing
   await page.getByRole("button", { name: "Easy" }).click();
   await expect(page.getByText("Review complete")).toBeVisible();
 });
+
+test("review session deterministically skips missing and archived current notes", async ({ page }) => {
+  await openJapaneseWorkspace(page);
+  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await page.getByRole("button", { name: "Create kanji note" }).click();
+  await page.getByRole("button", { name: "Create grammar note" }).click();
+  await expect(page.locator("#japaneseDueCount")).toHaveText("3");
+
+  await page.getByRole("button", { name: "Start review" }).click();
+  await page.evaluate(async () => {
+    const { getActiveStore } = await import("/core/state.js");
+    const store = getActiveStore();
+    const state = store.getState();
+    store.setState({
+      notes: state.notes.filter((note) => note.id !== state.reviewSession.currentNoteId),
+    });
+  });
+  await page.getByRole("button", { name: "Reveal review content" }).click();
+  await expect(page.getByText("Skipped missing note")).toBeVisible();
+  await expect(page.locator("#reviewContent")).toBeHidden();
+
+  await page.evaluate(async () => {
+    const { getActiveStore } = await import("/core/state.js");
+    const store = getActiveStore();
+    const state = store.getState();
+    store.setState({
+      notes: state.notes.map((note) => note.id === state.reviewSession.currentNoteId
+        ? { ...note, archived: true }
+        : note),
+    });
+  });
+  await page.getByRole("button", { name: "Reveal review content" }).click();
+  await expect(page.getByText("Skipped archived note")).toBeVisible();
+  await expect(page.locator("#reviewContent")).toBeHidden();
+
+  await page.getByRole("button", { name: "Reveal review content" }).click();
+  await expect(page.locator("#reviewContent")).toBeVisible();
+  await page.getByRole("button", { name: "Good" }).click();
+  await expect(page.getByText("Review complete")).toBeVisible();
+});
