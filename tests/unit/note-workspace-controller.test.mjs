@@ -41,8 +41,8 @@ test("refresh owns query, result, active-note, and render coordination without D
     onSearchMetrics(elapsed) {
       assert.equal(Number.isFinite(elapsed), true);
     },
-    onRender(snapshot) {
-      calls.push(["render", snapshot.query, snapshot.activeId]);
+    onRender(snapshot, context) {
+      calls.push(["render", snapshot.query, snapshot.activeId, context]);
     },
   });
 
@@ -68,6 +68,73 @@ test("refresh owns query, result, active-note, and render coordination without D
     emptyLabel: "No Japanese notes",
   });
   assert.deepEqual(calls.map((entry) => entry[0]), ["query", "flush", "render"]);
+  assert.deepEqual(calls.at(-1)[3], { reason: "refresh", activeChanged: true });
+});
+
+test("same-note refresh declares that the editor must remain untouched", async () => {
+  const store = createStore({
+    notes: [{ id: "a" }, { id: "b" }],
+    activeId: "a",
+    filteredIds: ["a", "b"],
+    query: "",
+    dirty: true,
+    recentIds: ["a"],
+    emptyLabel: "Ready",
+  });
+  let renderContext = null;
+  const controller = createNoteWorkspaceController({
+    getState: store.getState,
+    setState: store.setState,
+    async query() {
+      return ["a"];
+    },
+    async flush() {
+      throw new Error("same-note refresh must not flush");
+    },
+    onSearchMetrics() {},
+    onRender(_snapshot, context) {
+      renderContext = context;
+    },
+  });
+
+  await controller.refresh({ query: "active" });
+
+  assert.deepEqual(renderContext, { reason: "refresh", activeChanged: false });
+  assert.equal(store.getState().dirty, true);
+  assert.equal(store.getState().activeId, "a");
+});
+
+test("refresh queries again after flushing a canonical draft mutation", async () => {
+  const store = createStore({
+    notes: [{ id: "a" }, { id: "b" }],
+    activeId: "a",
+    filteredIds: ["a"],
+    query: "",
+    dirty: true,
+    recentIds: ["a"],
+    emptyLabel: "Ready",
+  });
+  let queryCount = 0;
+  const controller = createNoteWorkspaceController({
+    getState: store.getState,
+    setState: store.setState,
+    async query() {
+      queryCount += 1;
+      return queryCount === 1 ? ["b"] : ["b", "a"];
+    },
+    async flush() {
+      store.setState({ dirty: false });
+      return true;
+    },
+    onSearchMetrics() {},
+    onRender() {},
+  });
+
+  const result = await controller.refresh({ query: "saved draft", preferredId: "b" });
+
+  assert.equal(queryCount, 2);
+  assert.deepEqual(result.ids, ["b", "a"]);
+  assert.deepEqual(store.getState().filteredIds, ["b", "a"]);
 });
 
 test("only the latest asynchronous refresh may commit state", async () => {
