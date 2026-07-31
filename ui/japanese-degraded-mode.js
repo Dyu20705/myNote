@@ -8,6 +8,10 @@ const quickCreateButtons = [...document.querySelectorAll("[data-japanese-templat
 let requestedWorkspace = "notes";
 let studyDataUnavailable = false;
 
+export function isJapaneseStudyDataUnavailable() {
+  return studyDataUnavailable;
+}
+
 function degradedDashboard() {
   return {
     dueCount: 0,
