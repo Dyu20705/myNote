@@ -77,6 +77,7 @@ const searchClient = createSearchClient();
 const backlinkIndex = createBacklinkIndex();
 let noteWorkspace = null;
 let enrolledDeleteHandler = null;
+let workspaceFlushDepth = 0;
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat("en", {
@@ -196,18 +197,42 @@ function renderList() {
   updateMetrics({ renderMs: performance.now() - startedAt });
 }
 
-function renderAll() {
-  const state = store.getState();
-  if (els.searchInput.value !== state.query) {
-    els.searchInput.value = state.query;
+function synchronizeSearchInput() {
+  const query = store.getState().query;
+  if (els.searchInput.value !== query) {
+    els.searchInput.value = query;
   }
+}
+
+function renderAll() {
+  synchronizeSearchInput();
   renderTopline();
   renderEditor();
   renderList();
   renderBacklinks();
 }
 
+function renderWorkspace(_snapshot, context = {}) {
+  synchronizeSearchInput();
+  renderTopline();
+  renderList();
+  if (context.activeChanged) {
+    renderEditor();
+    renderBacklinks();
+  }
+}
+
 async function refreshSearch(options = {}) {
+  if (options.source === "derived" && workspaceFlushDepth > 0) {
+    const state = store.getState();
+    return {
+      stale: true,
+      query: state.query,
+      ids: [...state.filteredIds],
+      activeId: state.activeId,
+    };
+  }
+
   const state = store.getState();
   return noteWorkspace.refresh({
     query: Object.hasOwn(options, "query") ? options.query : state.query,
@@ -297,14 +322,14 @@ const noteLifecycle = createNoteLifecycle({
     setBacklinksFromIndex();
     renderBacklinks();
     await searchClient.upsert(note);
-    await refreshSearch();
+    await refreshSearch({ source: "derived" });
   },
   async updateDerivedRemove(id) {
     backlinkIndex.remove(id);
     setBacklinksFromIndex();
     renderBacklinks();
     await searchClient.remove(id);
-    await refreshSearch();
+    await refreshSearch({ source: "derived" });
   },
   onCanonicalFailure() {
     store.setState({ saveMessage: "Storage unavailable" });
@@ -428,15 +453,26 @@ const autosave = createAutosave({
   onSave: saveCurrentNote,
 });
 
+async function flushWorkspace() {
+  const canonicalChanged = store.getState().dirty;
+  workspaceFlushDepth += 1;
+  try {
+    await autosave.flush();
+    return canonicalChanged;
+  } finally {
+    workspaceFlushDepth -= 1;
+  }
+}
+
 noteWorkspace = createNoteWorkspaceController({
   getState: store.getState,
   setState: store.setState,
   query: searchClient.query,
-  flush: autosave.flush,
+  flush: flushWorkspace,
   onSearchMetrics(elapsed) {
     updateMetrics({ searchMs: elapsed, workerMs: elapsed });
   },
-  onRender: renderAll,
+  onRender: renderWorkspace,
 });
 
 async function createNote(seed = {}) {
