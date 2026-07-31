@@ -56,6 +56,15 @@ function chooseActiveId(state, ids, preferredId) {
   return ids[0] ?? null;
 }
 
+function isInitialHydration(state) {
+  return Array.isArray(state.filteredIds)
+    && state.filteredIds.length === 0
+    && Array.isArray(state.notes)
+    && state.notes.length > 0
+    && noteExists(state, state.activeId)
+    && !state.dirty;
+}
+
 export function createNoteWorkspaceController(options) {
   validateDependencies(options);
   let refreshToken = 0;
@@ -90,6 +99,7 @@ export function createNoteWorkspaceController(options) {
     options.onRender(options.getState(), {
       reason: "select",
       activeChanged: true,
+      stateActiveChanged: true,
       reconcileActive: true,
       synchronizeEditor: true,
     });
@@ -100,8 +110,9 @@ export function createNoteWorkspaceController(options) {
     const token = ++refreshToken;
     const beforeQuery = options.getState();
     const queryText = normalizedQuery(input.query, beforeQuery.query);
-    const reconcileActive = input.reconcileActive !== false;
+    const reconcileActive = input.reconcileActive === true;
     const requestedEditorSync = input.synchronizeEditor === true;
+    const initialHydration = isInitialHydration(beforeQuery);
     let ids = await queryIds(queryText);
 
     if (token !== refreshToken) {
@@ -118,9 +129,9 @@ export function createNoteWorkspaceController(options) {
     let activeId = reconcileActive
       ? chooseActiveId(state, ids, preferredId)
       : state.activeId ?? null;
-    let activeChanged = state.activeId !== activeId;
+    let stateActiveChanged = state.activeId !== activeId;
 
-    if (reconcileActive && activeChanged) {
+    if (reconcileActive && stateActiveChanged) {
       const canonicalChanged = await options.flush({ reason: "refresh" });
       if (token !== refreshToken) {
         return {
@@ -145,7 +156,7 @@ export function createNoteWorkspaceController(options) {
         state = options.getState();
       }
       activeId = chooseActiveId(state, ids, preferredId);
-      activeChanged = state.activeId !== activeId;
+      stateActiveChanged = state.activeId !== activeId;
     }
 
     const patch = {
@@ -156,18 +167,20 @@ export function createNoteWorkspaceController(options) {
         ? input.emptyLabel
         : state.emptyLabel || "Ready",
     };
-    if (activeChanged) {
+    if (stateActiveChanged) {
       patch.dirty = false;
       patch.recentIds = nextRecentIds(state, activeId);
     }
 
     options.setState(patch);
+    const synchronizeEditor = stateActiveChanged || requestedEditorSync || initialHydration;
     const snapshot = options.getState();
     options.onRender(snapshot, {
       reason: "refresh",
-      activeChanged,
+      activeChanged: synchronizeEditor,
+      stateActiveChanged,
       reconcileActive,
-      synchronizeEditor: activeChanged || requestedEditorSync,
+      synchronizeEditor,
     });
     return {
       stale: false,
