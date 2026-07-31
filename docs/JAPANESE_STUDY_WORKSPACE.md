@@ -34,7 +34,7 @@ The Japanese workspace exposes additive filters for creation date and notebook t
 
 - Created from and Created to use native date inputs and form an inclusive range.
 - Date comparison uses each note's canonical `createdAt` timestamp converted to the browser's local calendar date.
-- Note type is derived from validated `studyReviews.notebookType` metadata and supports vocabulary, kanji, grammar, output, planner, or all types.
+- Note type is derived through the canonical `validateStudyReview` boundary and supports vocabulary, kanji, grammar, output, planner, or all types.
 - Date, type, enrollment, and text search filters compose by intersection while preserving the search worker's result order.
 - Missing notes, invalid creation timestamps, missing review metadata, invalid review metadata, and conflicting duplicate notebook-type metadata never gain an inferred match.
 - An inverted date range is invalid, marks both date controls with `aria-invalid`, exposes one live validation message, and returns no matches until corrected or cleared.
@@ -141,9 +141,6 @@ Rollback is a one-PR revert of:
 - the Japanese browser entrypoint and filter controller;
 - the Japanese filter domain policy and pure selector;
 - the bounded search-result policy pipeline and search-client registration API;
-- active-runtime getters and their tests;
-- additive palette command providers;
-- static-server root-asset declarations;
-- browser regressions, focused unit coverage, and this document.
+- browser regressions, focused unit coverage, package test registration, and this document.
 
 No schema downgrade, note rewrite, review deletion, or migration is required.
