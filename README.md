@@ -35,10 +35,11 @@ npm run test:e2e
 - Serialized autosave and explicit save handling.
 - Keyboard-first navigation and command palette.
 - Worker-based incremental search.
-- Wiki-link parsing and backlinks.
+- Wiki-link and Markdown task parsing with backlinks.
 - Bounded undo/redo and patch history.
 - Markdown and JSON export.
 - Legacy localStorage migration to IndexedDB.
+- Isolated Japanese study-review persistence, deterministic templates, scheduling, and dashboard derivation.
 - Safe-mode local database reset.
 
 ## Documentation
@@ -46,6 +47,7 @@ npm run test:e2e
 - [Architecture](docs/ARCHITECTURE.md)
 - [Engineering rules](docs/ENGINEERING_RULES.md)
 - [Technical invariants](docs/INVARIANTS.md)
+- [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
 - [Governance](docs/GOVERNANCE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
@@ -64,7 +66,7 @@ npm run test:e2e
 ## Repository structure
 
 - `app.js`: bootstrap, orchestration, and action wiring.
-- `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, and history.
+- `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study derivation.
 - `ui/`: rendering and interaction modules.
 - `scripts/`: local verification and static-server utilities.
 - `tests/`: deterministic unit, integration, contract, and browser tests.
