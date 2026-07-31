@@ -117,16 +117,20 @@ test("repair status is bounded with an explicit omitted count", () => {
 });
 
 test("workspace and review-session transitions are immutable and deterministic", () => {
-  const base = createJapaneseAppState({
-    notes: [note("a", "A"), note("b", "B")],
-    reviews: [
-      review("b", "kanji", { nextReviewAt: NOW }),
-      review("a", "vocabulary", { nextReviewAt: NOW }),
-    ],
-    nowIso: NOW,
-    localDate: LOCAL_DATE,
-    isoWeek: ISO_WEEK,
-  });
+  const notes = [note("a", "A"), note("b", "B")];
+  const base = {
+    ...createJapaneseAppState({
+      notes,
+      reviews: [
+        review("b", "kanji", { nextReviewAt: NOW }),
+        review("a", "vocabulary", { nextReviewAt: NOW }),
+      ],
+      nowIso: NOW,
+      localDate: LOCAL_DATE,
+      isoWeek: ISO_WEEK,
+    }),
+    notes,
+  };
   const before = structuredClone(base);
 
   const japanese = selectWorkspace(base, "japanese");
