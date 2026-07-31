@@ -1,0 +1,221 @@
+.workspace-switcher {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.workspace-switcher button,
+.japanese-actions button,
+.review-dialog button {
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 9px 12px;
+  color: var(--text);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.workspace-switcher button[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: #242424;
+}
+
+.workspace-switcher button:focus-visible,
+.japanese-actions button:focus-visible,
+.review-dialog button:focus-visible {
+  border-color: var(--focus);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.japanese-dashboard {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.japanese-dashboard[hidden] {
+  display: none;
+}
+
+.dashboard-header,
+.repair-header,
+.review-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-header h2,
+.repair-header h3,
+.review-dialog h2,
+.review-dialog h3 {
+  margin: 0;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dashboard-card {
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.dashboard-card span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.dashboard-card strong {
+  font-size: 1.35rem;
+}
+
+.japanese-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.repair-region {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: #080808;
+}
+
+.repair-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.repair-list:empty::before {
+  content: "No repairs required";
+  display: block;
+  margin-left: -18px;
+}
+
+.review-dialog {
+  width: min(720px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  color: var(--text);
+  background: #090909;
+}
+
+.review-dialog::backdrop {
+  background: rgb(0 0 0 / 78%);
+}
+
+.review-dialog-header > button {
+  align-self: flex-start;
+}
+
+.review-progress,
+.review-status {
+  color: var(--muted);
+}
+
+.review-note-title {
+  margin-block: 14px 8px;
+  font-size: 1.15rem;
+}
+
+.review-content {
+  max-height: 46vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+}
+
+.review-ratings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.review-complete {
+  margin: 16px 0 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+body[data-workspace="japanese"] #newNoteButton {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .japanese-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .workspace-switcher {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .dashboard-header,
+  .review-dialog-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-grid,
+  .japanese-actions,
+  .review-ratings {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
