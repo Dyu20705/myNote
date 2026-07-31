@@ -1,3 +1,5 @@
+import { isJapaneseStudyDataUnavailable } from "./japanese-degraded-mode.js";
+
 const commandProviders = new Set();
 
 export function registerPaletteCommands(provider) {
@@ -25,6 +27,9 @@ function mergeCommands(baseCommands) {
     merged.set(command.id, command);
   }
   for (const command of providedCommands()) {
+    if (isJapaneseStudyDataUnavailable() && command.id.startsWith("japanese-create-")) {
+      continue;
+    }
     merged.set(command.id, command);
   }
   return [...merged.values()];

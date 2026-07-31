@@ -20,6 +20,9 @@ const history = getActiveHistory();
 const searchClient = getActiveSearchClient();
 const backlinkIndex = getActiveBacklinkIndex();
 const searchInput = document.querySelector("#searchInput");
+const reviewDialog = document.querySelector("#reviewDialog");
+const startReviewButton = document.querySelector("#startReviewButton");
+const japaneseWorkspaceButton = document.querySelector("#japaneseWorkspaceButton");
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -133,4 +136,12 @@ if (store && commandStack && history && searchClient && backlinkIndex && searchI
     event.stopImmediatePropagation();
     deleteEnrolledActiveNote().catch(() => undefined);
   }, { capture: true });
+}
+
+if (reviewDialog && startReviewButton && japaneseWorkspaceButton) {
+  reviewDialog.addEventListener("close", () => {
+    if (startReviewButton.disabled) {
+      japaneseWorkspaceButton.focus();
+    }
+  });
 }
