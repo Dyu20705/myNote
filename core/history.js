@@ -1,8 +1,14 @@
+let activeHistory = null;
+
 function deepClone(value) {
   if (typeof structuredClone === "function") {
     return structuredClone(value);
   }
   return JSON.parse(JSON.stringify(value));
+}
+
+export function getActiveHistory() {
+  return activeHistory;
 }
 
 export function createHistory(maxEntries = 300) {
@@ -55,5 +61,6 @@ export function createHistory(maxEntries = 300) {
     return deepClone(snapshots);
   }
 
-  return { record, snapshot, getOperations, getSnapshots };
+  activeHistory = { record, snapshot, getOperations, getSnapshots };
+  return activeHistory;
 }
