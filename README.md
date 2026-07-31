@@ -39,7 +39,7 @@ npm run test:e2e
 - Bounded undo/redo and patch history.
 - Markdown and JSON export.
 - Legacy localStorage migration to IndexedDB.
-- Isolated Japanese study-review persistence, deterministic templates, scheduling, and dashboard derivation.
+- Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
 - Safe-mode local database reset.
 
 ## Documentation
@@ -48,6 +48,7 @@ npm run test:e2e
 - [Engineering rules](docs/ENGINEERING_RULES.md)
 - [Technical invariants](docs/INVARIANTS.md)
 - [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
+- [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
 - [Governance](docs/GOVERNANCE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
@@ -66,7 +67,7 @@ npm run test:e2e
 ## Repository structure
 
 - `app.js`: bootstrap, orchestration, and action wiring.
-- `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study derivation.
+- `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study state/action derivation.
 - `ui/`: rendering and interaction modules.
 - `scripts/`: local verification and static-server utilities.
 - `tests/`: deterministic unit, integration, contract, and browser tests.
