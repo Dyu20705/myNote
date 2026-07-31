@@ -83,6 +83,16 @@ function scanMarkdown(source) {
       continue;
     }
 
+    const taskMatch = trimmed.match(/^- \[([ xX])\](?:\s+(.*))?$/);
+    if (taskMatch) {
+      textNodes.push({
+        type: "task",
+        checked: taskMatch[1].toLowerCase() === "x",
+        text: (taskMatch[2] ?? "").trim(),
+      });
+      continue;
+    }
+
     textNodes.push({ type: "paragraph", text: trimmed });
   }
 
