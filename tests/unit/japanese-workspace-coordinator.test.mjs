@@ -295,3 +295,166 @@ test("invalid persisted review data becomes bounded read-only Japanese state wit
   );
   coordinator.destroy();
 });
+
+test("initialization uses live notes and preserves user view changes made while reviews load", async () => {
+  const store = createStore({
+    db: { id: "db" },
+    notes: [{ id: "ordinary" }],
+    activeId: "ordinary",
+    query: "initial query",
+    workspace: "notes",
+    studyReviews: [],
+    japaneseNoteIds: [],
+    reviewSession: { status: "idle" },
+  });
+  let resolveReviews;
+  let bootstrapInput = null;
+  const reviewsPending = new Promise((resolve) => {
+    resolveReviews = resolve;
+  });
+  const actions = {
+    async bootstrap(input) {
+      bootstrapInput = input;
+      store.setState({
+        db: input.db,
+        notes: input.notes,
+        activeId: input.notes[0]?.id ?? null,
+        workspace: "notes",
+        studyReviews: input.reviews,
+        japaneseNoteIds: [],
+        reviewSession: { status: "idle" },
+      });
+    },
+    chooseWorkspace(workspace) {
+      store.setState({ workspace });
+    },
+    async createJapaneseNote() {
+      return { id: "created" };
+    },
+    async deleteNote() {},
+  };
+  const coordinator = createJapaneseWorkspaceCoordinator({
+    getState: store.getState,
+    setState: store.setState,
+    subscribe: store.subscribe,
+    actions,
+    noteWorkspace: createWorkspaceStub(store, []),
+    async loadReviews() {
+      return reviewsPending;
+    },
+    getContext: context,
+  });
+
+  const liveNotes = [{ id: "new" }, { id: "ordinary" }];
+  store.setState({
+    notes: liveNotes,
+    activeId: "new",
+    query: "user query",
+  });
+  resolveReviews([]);
+  await coordinator.ready;
+
+  assert.equal(bootstrapInput.db, store.getState().db);
+  assert.deepEqual(bootstrapInput.notes, liveNotes);
+  assert.equal(store.getState().activeId, "new");
+  assert.equal(store.getState().query, "user query");
+  coordinator.destroy();
+});
+
+test("rapid workspace switches keep the last committed view for each workspace", async () => {
+  const store = createStore({
+    db: {},
+    notes: [{ id: "ordinary" }, { id: "jp-1" }, { id: "jp-2" }],
+    activeId: "ordinary",
+    query: "notes query",
+    workspace: "notes",
+    studyReviews: [],
+    japaneseNoteIds: [],
+    reviewSession: { status: "idle" },
+  });
+  const pending = [];
+  let deferRefresh = false;
+  const noteWorkspace = {
+    refresh(options) {
+      if (!deferRefresh) {
+        store.setState({
+          query: options.query,
+          activeId: options.preferredId,
+          filteredIds: options.preferredId ? [options.preferredId] : [],
+        });
+        return Promise.resolve({
+          stale: false,
+          query: options.query,
+          activeId: options.preferredId,
+        });
+      }
+      return new Promise((resolve) => pending.push({ options, resolve }));
+    },
+  };
+  const actions = {
+    async bootstrap() {
+      store.setState({ japaneseNoteIds: ["jp-1", "jp-2"], studyReviews: [] });
+    },
+    chooseWorkspace(workspace) {
+      store.setState({ workspace });
+    },
+    async createJapaneseNote() {
+      return { id: "created" };
+    },
+    async deleteNote() {},
+  };
+  const coordinator = createJapaneseWorkspaceCoordinator({
+    getState: store.getState,
+    setState: store.setState,
+    subscribe: store.subscribe,
+    actions,
+    noteWorkspace,
+    async loadReviews() {
+      return [];
+    },
+    getContext: context,
+  });
+
+  await coordinator.ready;
+  await coordinator.switchWorkspace("japanese");
+  store.setState({ query: "kanji query", activeId: "jp-2" });
+  await coordinator.refreshCurrent();
+  await coordinator.switchWorkspace("notes");
+
+  deferRefresh = true;
+  const firstSwitch = coordinator.switchWorkspace("japanese");
+  await Promise.resolve();
+  const secondSwitch = coordinator.switchWorkspace("notes");
+  await Promise.resolve();
+
+  assert.equal(pending.length, 2);
+  store.setState({
+    workspace: "notes",
+    query: pending[1].options.query,
+    activeId: pending[1].options.preferredId,
+  });
+  pending[1].resolve({
+    stale: false,
+    query: pending[1].options.query,
+    activeId: pending[1].options.preferredId,
+  });
+  await secondSwitch;
+  pending[0].resolve({
+    stale: true,
+    query: pending[0].options.query,
+    activeId: store.getState().activeId,
+  });
+  await firstSwitch;
+
+  const returnToJapanese = coordinator.switchWorkspace("japanese");
+  await Promise.resolve();
+  assert.equal(pending[2].options.query, "kanji query");
+  assert.equal(pending[2].options.preferredId, "jp-2");
+  pending[2].resolve({
+    stale: false,
+    query: pending[2].options.query,
+    activeId: pending[2].options.preferredId,
+  });
+  await returnToJapanese;
+  coordinator.destroy();
+});
