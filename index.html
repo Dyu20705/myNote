@@ -55,7 +55,7 @@
           </select>
         </label>
         <button id="clearJapaneseFilters" type="button" aria-label="Clear Japanese filters" disabled>Clear filters</button>
-        <span id="japaneseFilterStatus" class="japanese-filter-status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+        <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
       </section>
 
       <section id="japaneseDashboard" class="japanese-dashboard" aria-label="Japanese learning dashboard" hidden>
@@ -170,7 +170,6 @@
 
     <script type="module" src="app.js"></script>
     <script type="module" src="japaneseApp.js"></script>
-    <script type="module" src="ui/japanese-filters.js"></script>
     <script type="module" src="ui/japanese-delete-bridge.js"></script>
   </body>
 </html>
