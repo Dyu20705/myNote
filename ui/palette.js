@@ -1,3 +1,5 @@
+import "./japanese-degraded-mode.js";
+
 const commandProviders = new Set();
 
 export function registerPaletteCommands(provider) {
