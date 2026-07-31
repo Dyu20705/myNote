@@ -10,6 +10,18 @@ function localIso(year, month, day) {
   return new Date(year, month - 1, day, 12).toISOString();
 }
 
+function review(noteId, notebookType) {
+  return {
+    noteId,
+    notebookType,
+    status: "new",
+    lastReviewedAt: null,
+    nextReviewAt: "2026-07-31T00:00:00.000Z",
+    interval: 0,
+    ease: 2.5,
+  };
+}
+
 const notes = [
   { id: "vocab", createdAt: localIso(2026, 7, 29) },
   { id: "kanji", createdAt: localIso(2026, 7, 30) },
@@ -19,10 +31,10 @@ const notes = [
 ];
 
 const reviews = [
-  { noteId: "vocab", notebookType: "vocabulary" },
-  { noteId: "kanji", notebookType: "kanji" },
-  { noteId: "grammar", notebookType: "grammar" },
-  { noteId: "ghost", notebookType: "grammar" },
+  review("vocab", "vocabulary"),
+  review("kanji", "kanji"),
+  review("grammar", "grammar"),
+  review("ghost", "grammar"),
 ];
 
 const enrolledIds = ["vocab", "kanji", "grammar", "broken", "missing"];
@@ -73,7 +85,7 @@ test("conflicting duplicate review metadata is excluded from type matches", () =
   assert.deepEqual(filterJapaneseNoteIds({
     ids: ["grammar"],
     notes,
-    reviews: [...reviews, { noteId: "grammar", notebookType: "kanji" }],
+    reviews: [...reviews, review("grammar", "kanji")],
     enrolledIds,
     filters: { notebookType: "grammar" },
   }), []);
