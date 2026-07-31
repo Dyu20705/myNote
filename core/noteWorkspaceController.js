@@ -46,9 +46,26 @@ function nowMs() {
     : Date.now();
 }
 
+function chooseActiveId(state, ids, preferredId) {
+  if (preferredId && ids.includes(preferredId)) {
+    return preferredId;
+  }
+  if (ids.includes(state.activeId)) {
+    return state.activeId;
+  }
+  return ids[0] ?? null;
+}
+
 export function createNoteWorkspaceController(options) {
   validateDependencies(options);
   let refreshToken = 0;
+
+  async function queryIds(queryText) {
+    const startedAt = nowMs();
+    const ids = validateIds(await options.query(queryText));
+    options.onSearchMetrics(Math.max(0, nowMs() - startedAt));
+    return ids;
+  }
 
   async function select(id) {
     const state = options.getState();
@@ -81,9 +98,7 @@ export function createNoteWorkspaceController(options) {
     const token = ++refreshToken;
     const beforeQuery = options.getState();
     const queryText = normalizedQuery(input.query, beforeQuery.query);
-    const startedAt = nowMs();
-    const ids = validateIds(await options.query(queryText));
-    options.onSearchMetrics(Math.max(0, nowMs() - startedAt));
+    let ids = await queryIds(queryText);
 
     if (token !== refreshToken) {
       return {
@@ -96,15 +111,11 @@ export function createNoteWorkspaceController(options) {
 
     let state = options.getState();
     const preferredId = typeof input.preferredId === "string" ? input.preferredId : null;
-    const activeId = preferredId && ids.includes(preferredId)
-      ? preferredId
-      : ids.includes(state.activeId)
-        ? state.activeId
-        : ids[0] ?? null;
-    const activeChanged = state.activeId !== activeId;
+    let activeId = chooseActiveId(state, ids, preferredId);
+    let activeChanged = state.activeId !== activeId;
 
     if (activeChanged) {
-      await options.flush({ reason: "refresh" });
+      const canonicalChanged = await options.flush({ reason: "refresh" });
       if (token !== refreshToken) {
         return {
           stale: true,
@@ -113,7 +124,22 @@ export function createNoteWorkspaceController(options) {
           activeId: options.getState().activeId ?? null,
         };
       }
+
       state = options.getState();
+      if (canonicalChanged === true) {
+        ids = await queryIds(queryText);
+        if (token !== refreshToken) {
+          return {
+            stale: true,
+            query: queryText,
+            ids,
+            activeId: options.getState().activeId ?? null,
+          };
+        }
+        state = options.getState();
+      }
+      activeId = chooseActiveId(state, ids, preferredId);
+      activeChanged = state.activeId !== activeId;
     }
 
     const patch = {
