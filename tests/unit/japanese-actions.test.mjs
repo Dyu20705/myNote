@@ -107,13 +107,16 @@ function createHarness(initialState) {
 }
 
 function emptyState() {
-  return createJapaneseAppState({
+  return {
+    ...createJapaneseAppState({
+      notes: [],
+      reviews: [],
+      nowIso: NOW,
+      localDate: LOCAL_DATE,
+      isoWeek: ISO_WEEK,
+    }),
     notes: [],
-    reviews: [],
-    nowIso: NOW,
-    localDate: LOCAL_DATE,
-    isoWeek: ISO_WEEK,
-  });
+  };
 }
 
 test("bootstrap installs loaded reviews without persistence or automatic enrollment", async () => {
@@ -197,13 +200,16 @@ test("failed pair creation preserves canonical state and history", async () => {
 test("generic delete routes enrolled records through atomic pair deletion and restores exact values", async () => {
   const enrolledNote = note("enrolled", "Vocabulary", "exact content");
   const enrolledReview = review("enrolled", "vocabulary", { ease: 2.35 });
-  const initial = createJapaneseAppState({
+  const initial = {
+    ...createJapaneseAppState({
+      notes: [enrolledNote],
+      reviews: [enrolledReview],
+      nowIso: NOW,
+      localDate: LOCAL_DATE,
+      isoWeek: ISO_WEEK,
+    }),
     notes: [enrolledNote],
-    reviews: [enrolledReview],
-    nowIso: NOW,
-    localDate: LOCAL_DATE,
-    isoWeek: ISO_WEEK,
-  });
+  };
   const harness = createHarness(initial);
 
   await harness.actions.deleteNote("enrolled");
@@ -223,13 +229,16 @@ test("generic delete routes enrolled records through atomic pair deletion and re
 
 test("ordinary note deletion uses the generic durable route", async () => {
   const ordinary = note("ordinary", "Ordinary");
-  const initial = createJapaneseAppState({
+  const initial = {
+    ...createJapaneseAppState({
+      notes: [ordinary],
+      reviews: [],
+      nowIso: NOW,
+      localDate: LOCAL_DATE,
+      isoWeek: ISO_WEEK,
+    }),
     notes: [ordinary],
-    reviews: [],
-    nowIso: NOW,
-    localDate: LOCAL_DATE,
-    isoWeek: ISO_WEEK,
-  });
+  };
   const harness = createHarness(initial);
 
   await harness.actions.deleteNote("ordinary");
@@ -241,13 +250,16 @@ test("ordinary note deletion uses the generic durable route", async () => {
 test("rating persists before replacing review state and advancing the session", async () => {
   const dueNote = note("due", "Vocabulary");
   const dueReview = review("due", "vocabulary");
-  let initial = createJapaneseAppState({
+  let initial = {
+    ...createJapaneseAppState({
+      notes: [dueNote],
+      reviews: [dueReview],
+      nowIso: NOW,
+      localDate: LOCAL_DATE,
+      isoWeek: ISO_WEEK,
+    }),
     notes: [dueNote],
-    reviews: [dueReview],
-    nowIso: NOW,
-    localDate: LOCAL_DATE,
-    isoWeek: ISO_WEEK,
-  });
+  };
   initial = startReviewSession(initial, { nowIso: NOW });
   const harness = createHarness(initial);
 
@@ -264,13 +276,16 @@ test("rating persists before replacing review state and advancing the session", 
 test("failed rating preserves the review and current queue position with retry intent", async () => {
   const dueNote = note("due", "Vocabulary");
   const dueReview = review("due", "vocabulary");
-  let initial = createJapaneseAppState({
+  let initial = {
+    ...createJapaneseAppState({
+      notes: [dueNote],
+      reviews: [dueReview],
+      nowIso: NOW,
+      localDate: LOCAL_DATE,
+      isoWeek: ISO_WEEK,
+    }),
     notes: [dueNote],
-    reviews: [dueReview],
-    nowIso: NOW,
-    localDate: LOCAL_DATE,
-    isoWeek: ISO_WEEK,
-  });
+  };
   initial = startReviewSession(initial, { nowIso: NOW });
   const harness = createHarness(initial);
   const storageError = new Error("offline");
