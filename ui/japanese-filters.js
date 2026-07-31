@@ -1,92 +1,134 @@
-import { filterJapaneseNoteIds } from "../core/japaneseFilters.js";
-import { getActiveSearchClient } from "../core/searchClient.js";
-import { getActiveStore } from "../core/state.js";
+import { JAPANESE_FILTER_ERRORS } from "../core/japaneseFilters.js";
 
-const store = getActiveStore();
-const searchClient = getActiveSearchClient();
-const elements = {
-  root: document.querySelector("#japaneseFilters"),
-  dateFrom: document.querySelector("#japaneseDateFrom"),
-  dateTo: document.querySelector("#japaneseDateTo"),
-  notebookType: document.querySelector("#japaneseNoteType"),
-  clear: document.querySelector("#clearJapaneseFilters"),
-  status: document.querySelector("#japaneseFilterStatus"),
-  searchInput: document.querySelector("#searchInput"),
-};
+const REQUIRED_ELEMENTS = Object.freeze([
+  "root",
+  "dateFrom",
+  "dateTo",
+  "notebookType",
+  "clear",
+  "status",
+]);
 
-if (!store || !searchClient || Object.values(elements).some((element) => !element)) {
-  throw new Error("Japanese note filters are unavailable");
-}
-
-const filters = {
-  fromDate: "",
-  toDate: "",
-  notebookType: "all",
-};
-
-const originalQuery = searchClient.query.bind(searchClient);
-searchClient.query = async (queryText) => {
-  const ids = await originalQuery(queryText);
-  const state = store.getState();
-  if (state.workspace !== "japanese") {
-    return ids;
+function validateDependencies(options) {
+  const validElements = options.elements
+    && REQUIRED_ELEMENTS.every((name) => options.elements[name] instanceof HTMLElement);
+  const validFilter = options.filter
+    && typeof options.filter.getFilters === "function"
+    && typeof options.filter.update === "function"
+    && typeof options.filter.reset === "function"
+    && typeof options.filter.isActive === "function"
+    && typeof options.filter.getValidationError === "function";
+  if (!validElements
+    || !validFilter
+    || typeof options.getState !== "function"
+    || typeof options.subscribe !== "function"
+    || typeof options.requestRefresh !== "function") {
+    throw new TypeError("Invalid Japanese filter controller dependencies");
   }
-  return filterJapaneseNoteIds({
-    ids,
-    notes: state.notes,
-    reviews: state.studyReviews,
-    filters,
-  });
-};
-
-function hasActiveFilters() {
-  return Boolean(filters.fromDate || filters.toDate || filters.notebookType !== "all");
 }
 
-function refreshList() {
-  elements.searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+function resultCount(state) {
+  const enrolled = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []);
+  return (Array.isArray(state.filteredIds) ? state.filteredIds : [])
+    .filter((id) => enrolled.has(id)).length;
 }
 
-function readFilters() {
-  filters.fromDate = elements.dateFrom.value;
-  filters.toDate = elements.dateTo.value;
-  filters.notebookType = elements.notebookType.value;
-  elements.dateTo.min = filters.fromDate;
-  elements.dateFrom.max = filters.toDate;
-  elements.clear.disabled = !hasActiveFilters();
-}
+export function createJapaneseFilterController(options) {
+  validateDependencies(options);
+  const {
+    elements,
+    filter,
+    getState,
+    subscribe,
+    requestRefresh,
+  } = options;
+  const onError = typeof options.onError === "function" ? options.onError : () => {};
+  let refreshToken = 0;
 
-function render(state = store.getState()) {
-  const japanese = state.workspace === "japanese";
-  elements.root.hidden = !japanese;
-  if (!japanese) {
-    return;
+  function syncControls() {
+    const values = filter.getFilters();
+    elements.dateFrom.value = values.fromDate;
+    elements.dateTo.value = values.toDate;
+    elements.notebookType.value = values.notebookType;
+    elements.dateTo.min = values.fromDate;
+    elements.dateFrom.max = values.toDate;
   }
 
-  const enrolledIds = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []);
-  const visibleCount = (Array.isArray(state.filteredIds) ? state.filteredIds : [])
-    .filter((id) => enrolledIds.has(id)).length;
-  const totalCount = enrolledIds.size;
-  elements.status.textContent = `Showing ${visibleCount} of ${totalCount} Japanese ${totalCount === 1 ? "note" : "notes"}`;
-  elements.clear.disabled = !hasActiveFilters();
+  function render(state = getState()) {
+    const japanese = state?.workspace === "japanese";
+    elements.root.hidden = !japanese;
+    if (!japanese) {
+      return;
+    }
+
+    const error = filter.getValidationError();
+    const invalidRange = error === JAPANESE_FILTER_ERRORS.INVALID_DATE_RANGE;
+    elements.dateFrom.setAttribute("aria-invalid", String(invalidRange));
+    elements.dateTo.setAttribute("aria-invalid", String(invalidRange));
+    elements.status.dataset.state = invalidRange ? "error" : "ready";
+    elements.clear.disabled = !filter.isActive();
+
+    if (invalidRange) {
+      elements.status.textContent = "Created from must be on or before Created to";
+      return;
+    }
+
+    const total = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []).size;
+    const visible = resultCount(state);
+    elements.status.textContent = `Showing ${visible} of ${total} Japanese ${total === 1 ? "note" : "notes"}`;
+  }
+
+  async function refresh() {
+    const token = ++refreshToken;
+    elements.root.setAttribute("aria-busy", "true");
+    try {
+      await requestRefresh();
+    } catch (error) {
+      onError(error);
+    } finally {
+      if (token === refreshToken) {
+        elements.root.removeAttribute("aria-busy");
+        render();
+      }
+    }
+  }
+
+  function readControls() {
+    filter.update({
+      fromDate: elements.dateFrom.value,
+      toDate: elements.dateTo.value,
+      notebookType: elements.notebookType.value,
+    });
+    syncControls();
+    render();
+    refresh();
+  }
+
+  function clearFilters() {
+    filter.reset();
+    syncControls();
+    render();
+    refresh();
+    elements.notebookType.focus();
+  }
+
+  elements.dateFrom.addEventListener("input", readControls);
+  elements.dateTo.addEventListener("input", readControls);
+  elements.notebookType.addEventListener("change", readControls);
+  elements.clear.addEventListener("click", clearFilters);
+  const unsubscribe = subscribe(render);
+
+  syncControls();
+  render();
+
+  return {
+    destroy() {
+      elements.dateFrom.removeEventListener("input", readControls);
+      elements.dateTo.removeEventListener("input", readControls);
+      elements.notebookType.removeEventListener("change", readControls);
+      elements.clear.removeEventListener("click", clearFilters);
+      unsubscribe();
+    },
+    render,
+  };
 }
-
-for (const control of [elements.dateFrom, elements.dateTo, elements.notebookType]) {
-  control.addEventListener("input", () => {
-    readFilters();
-    refreshList();
-  });
-}
-
-elements.clear.addEventListener("click", () => {
-  elements.dateFrom.value = "";
-  elements.dateTo.value = "";
-  elements.notebookType.value = "all";
-  readFilters();
-  refreshList();
-  elements.notebookType.focus();
-});
-
-store.subscribe(render);
-readFilters();
-render();
