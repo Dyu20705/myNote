@@ -1,4 +1,4 @@
-import { STUDY_NOTEBOOK_TYPES } from "./studyReview.js";
+import { STUDY_NOTEBOOK_TYPES, validateStudyReview } from "./studyReview.js";
 
 const ALL_NOTEBOOK_TYPES = "all";
 const INVALID_DATE_RANGE = "INVALID_DATE_RANGE";
@@ -69,16 +69,17 @@ function noteIndex(notes) {
 function notebookTypeIndex(reviews) {
   const index = new Map();
   for (const review of Array.isArray(reviews) ? reviews : []) {
-    if (!review
-      || typeof review.noteId !== "string"
-      || !STUDY_NOTEBOOK_TYPES.includes(review.notebookType)) {
+    let validated;
+    try {
+      validated = validateStudyReview(review);
+    } catch {
       continue;
     }
-    const current = index.get(review.noteId);
-    if (current && current !== review.notebookType) {
-      index.set(review.noteId, null);
-    } else if (!index.has(review.noteId)) {
-      index.set(review.noteId, review.notebookType);
+    const current = index.get(validated.noteId);
+    if (current && current !== validated.notebookType) {
+      index.set(validated.noteId, null);
+    } else if (!index.has(validated.noteId)) {
+      index.set(validated.noteId, validated.notebookType);
     }
   }
   return index;
