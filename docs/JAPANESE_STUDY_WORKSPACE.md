@@ -24,6 +24,21 @@ shared DOM shell
 - Switching workspaces never enrolls, tags, rewrites, archives, or deletes a note.
 - The ordinary Notes count continues to describe all canonical notes.
 
+## Japanese note filters
+
+The Japanese workspace exposes additive filters for creation date and notebook type. The controls are hidden in the ordinary Notes workspace.
+
+- Created from and Created to use native date inputs and form an inclusive range.
+- Date comparison uses each note's canonical `createdAt` timestamp converted to the browser's local calendar date.
+- Note type is derived from validated `studyReviews.notebookType` metadata and supports vocabulary, kanji, grammar, output, planner, or all types.
+- Date, type, and text search filters compose by intersection while preserving the search worker's result order.
+- Missing notes, invalid creation timestamps, and missing or invalid review metadata never gain an inferred match.
+- Clear filters resets only the date and type controls. It does not change the workspace search query.
+- Filter state is session-local and retained while switching workspaces. It is not persisted or exported.
+- The live filter status reports visible Japanese results against the total enrolled Japanese note count.
+
+Filtering is read-only. It does not write to IndexedDB, update review scheduling, modify note metadata, or rebuild the search index.
+
 ## Dashboard
 
 The Japanese workspace renders exactly six cards from `studyDashboard`:
@@ -81,29 +96,32 @@ Browser regressions cover the ordinary Notes workspace after the Japanese UI is 
 - recovery-reset cancellation;
 - save-triggered reload persistence.
 
-The shared command palette retains its original API and accepts additive command providers. The static server allowlist exposes only the two declared root assets `japaneseApp.js` and `japanese.css`; repository-sensitive paths remain forbidden.
+The shared command palette retains its original API and accepts additive command providers. The static server allowlist exposes only the two declared root assets `japaneseApp.js` and `japanese.css`; repository-sensitive paths remain forbidden. Japanese filter logic is served through the existing bounded `/core/*.js` and `/ui/*.js` rules.
 
 ## Accessibility and responsive behavior
 
-- Workspace controls, quick-create controls, review actions, and ratings use native buttons.
-- The dashboard, Needs repair region, palette, and review dialog have explicit accessible names.
+- Workspace controls, filter controls, quick-create controls, review actions, and ratings use native form elements and buttons.
+- The filter region, dashboard, Needs repair region, palette, and review dialog have explicit accessible names.
+- Filter result counts are exposed through one polite live region.
 - Focus enters the modal at Reveal or the first rating and returns to Start/Resume after close.
+- Clearing filters restores focus to the note-type control.
 - The native modal dialog prevents interaction with the background while open.
-- Keyboard users can switch workspaces, create notes from the command palette, reveal, rate, close, and resume without pointer input.
-- Narrow layouts reduce dashboard, quick-create, and rating grids to fewer columns and then one column.
+- Keyboard users can switch workspaces, filter notes, create notes from the command palette, reveal, rate, close, and resume without pointer input.
+- Narrow layouts reduce filter, dashboard, quick-create, and rating grids to fewer columns and then one column.
 - Reduced-motion preference disables smooth scrolling behavior.
 
 ## Performance and retained resources
 
-The UI adds one fixed set of DOM listeners, one shared-store subscription, and one palette command provider. It adds no polling, background timer, cache, retry loop, worker, or unbounded collection.
+The filter UI adds three fixed input listeners, one clear listener, and one shared-store subscription. It adds no polling, background timer, cache, retry loop, worker, or unbounded collection.
 
-A note-array replacement re-derives the bounded Japanese slice using the lifecycle contract. Ordinary keystrokes do not replace the note array and therefore do not trigger full Japanese re-derivation. Japanese search reuses the existing worker result and performs a bounded enrolled-ID intersection.
+A note-array replacement re-derives the bounded Japanese slice using the lifecycle contract. Ordinary keystrokes do not replace the note array and therefore do not trigger full Japanese re-derivation. Japanese text search reuses the existing worker result, performs the enrolled-ID intersection, and then applies bounded date/type filtering while preserving order.
 
 ## Failure and recovery
 
-- Missing runtime instances fail initialization instead of constructing parallel state.
+- Missing runtime instances or required filter controls fail initialization instead of constructing parallel state.
 - Canonical storage failures remain owned by the lifecycle actions.
 - Derived search/backlink failures retain durable success and surface bounded degradation.
+- Invalid filter metadata is excluded rather than repaired or inferred.
 - Rating failure is explicit and retryable; there is no automatic retry.
 - The ordinary safe-mode reset remains available and requires confirmation.
 
@@ -111,11 +129,12 @@ A note-array replacement re-derives the bounded Japanese slice using the lifecyc
 
 Rollback is a one-PR revert of:
 
-- the workspace markup and CSS;
-- the Japanese browser entrypoint;
+- the workspace and filter markup and CSS;
+- the Japanese browser entrypoint and filter adapter;
+- the pure Japanese filter selector;
 - active-runtime getters and their tests;
 - additive palette command providers;
 - static-server root-asset declarations;
-- browser regressions and this document.
+- browser regressions, filter unit coverage, and this document.
 
 No schema downgrade, note rewrite, review deletion, or migration is required.
