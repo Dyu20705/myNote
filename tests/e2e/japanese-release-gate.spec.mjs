@@ -74,8 +74,9 @@ async function readDatabaseSnapshot(page, noteId) {
 }
 
 async function openJapaneseWorkspace(page) {
-  await page.getByRole("button", { name: "日本語" }).click();
-  await expect(page.getByRole("button", { name: "日本語" })).toHaveAttribute("aria-pressed", "true");
+  const japaneseButton = page.getByRole("button", { name: "日本語", exact: true });
+  await japaneseButton.click();
+  await expect(japaneseButton).toHaveAttribute("aria-pressed", "true");
 }
 
 async function runCommand(page, title) {
@@ -304,7 +305,7 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
 
-  const japaneseButton = page.getByRole("button", { name: "日本語" });
+  const japaneseButton = page.getByRole("button", { name: "日本語", exact: true });
   await japaneseButton.focus();
   await page.keyboard.press("Enter");
   await expect(japaneseButton).toHaveAttribute("aria-pressed", "true");
@@ -323,7 +324,8 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await page.keyboard.press("1");
   await expect(page.getByText("Review complete")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(startButton).toBeFocused();
+  await expect(startButton).toBeDisabled();
+  await expect(japaneseButton).toBeFocused();
 
   const viewportFits = await page.evaluate(() => (
     globalThis.document.documentElement.scrollWidth <= globalThis.document.documentElement.clientWidth
