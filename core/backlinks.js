@@ -1,3 +1,5 @@
+let activeBacklinkIndex = null;
+
 function keyOf(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -8,6 +10,10 @@ function cloneMapOfSets(input) {
     output.set(key, new Set(values));
   }
   return output;
+}
+
+export function getActiveBacklinkIndex() {
+  return activeBacklinkIndex;
 }
 
 export function createBacklinkIndex() {
@@ -193,10 +199,11 @@ export function createBacklinkIndex() {
     return cloneMapOfSets(backlinks);
   }
 
-  return {
+  activeBacklinkIndex = {
     rebuild,
     upsert,
     remove,
     toMap,
   };
+  return activeBacklinkIndex;
 }
