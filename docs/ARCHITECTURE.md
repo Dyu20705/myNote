@@ -12,7 +12,8 @@ myNote currently contains these core capabilities:
 - **Study scheduling:** pure caller-clocked review creation, due checks, and rating transitions.
 - **Canonical model:** versioned notes with checksums, blocks, tags, links, AST data, and search material.
 - **Parser pipeline:** `parseDocument` and related parser functions own derived note metadata.
-- **Search:** worker-based querying with incremental index updates.
+- **Search:** worker-based querying with incremental index updates and bounded result policies.
+- **Workspace coordination:** explicit note-workspace and Japanese-workspace application services.
 - **Backlinks:** an incrementally maintained reverse-link index.
 - **History:** command-stack undo/redo and patch-based retained history.
 - **Rendering:** a virtualized note list.
@@ -22,11 +23,16 @@ myNote currently contains these core capabilities:
 ## 2. Required dependency direction
 
 ```text
-UI → Actions → State → Core services → Persistence
+Browser composition and UI adapters
+→ application controllers and actions
+→ state and core services
+→ persistence
 ```
 
-- UI modules emit events and render state; they do not access persistence directly.
-- Actions are the application entry point for canonical mutations.
+- `app.js` is the only browser composition entrypoint.
+- Browser adapters emit intents and render state; they do not coordinate through synthetic DOM events, element discovery, or programmatic clicks.
+- Application controllers own multi-step query, selection, workspace-switch, and refresh workflows.
+- Actions are the mutation entry point for canonical writes.
 - State transitions are explicit, deterministic, and observable.
 - Core services own parsing, indexing, backlinks, autosave, patches, history, Japanese templates, study scheduling, and study-review validation.
 - Persistence is called only through action/effect or core lifecycle boundaries.
@@ -36,9 +42,34 @@ UI → Actions → State → Core services → Persistence
 
 ### `app.js`
 
-- Bootstraps dependencies and application state.
-- Routes UI events to actions.
-- Coordinates effects without reimplementing parser, search, or storage logic.
+- Is the single browser composition root.
+- Creates the shared store, command stack, history, search client, backlink index, autosave, lifecycle, and workspace controller.
+- Injects the shared runtime into `createJapaneseApp`.
+- Binds generic Notes DOM events and rendering adapters.
+- Does not coordinate Japanese workflows through active-singleton getters or DOM bridges.
+
+### `core/noteWorkspaceController.js`
+
+- Owns text-query refresh, stale-result suppression, active-note selection, keyboard movement, and boundary jumps.
+- Flushes an editor draft before an active-note transition.
+- Requeries after a flush only when the injected flush boundary reports a canonical mutation.
+- Reports render intent explicitly so same-note search refreshes cannot overwrite an in-progress editor draft.
+- Depends only on injected state, query, flush, metrics, and render functions; it has no DOM, persistence, or worker construction dependency.
+
+### `core/japaneseWorkspaceCoordinator.js`
+
+- Owns Japanese initialization, per-workspace query and active-note snapshots, workspace switching, quick-create refresh, enrolled deletion refresh, and Japanese slice synchronization.
+- Calls the injected note-workspace API directly; it never dispatches synthetic input events, observes list mutations, queries rendered note items, or clicks list controls.
+- Owns bounded recovery for invalid persisted review data and resolves initialization into a read-only Japanese state.
+- Has no DOM dependency and does not open IndexedDB directly.
+
+### `japaneseApp.js`
+
+- Exports `createJapaneseApp({ runtime, document })` as an injected browser adapter.
+- Creates Japanese lifecycle persistence adapters and registers the Japanese search-result policy.
+- Binds dashboard, filter, quick-create, review, and workspace controls to coordinator/action APIs.
+- Renders state but does not own workspace refresh sequencing.
+- Does not retrieve active runtime singletons or create a second store, command stack, search worker, history, or backlink index.
 
 ### `core/parser/`
 
@@ -51,6 +82,7 @@ UI → Actions → State → Core services → Persistence
 - Validate worker messages and bound payload sizes.
 - Maintain incremental upsert/remove indexing.
 - Execute asynchronous search and ranking away from the main thread.
+- Apply registered result policies after worker ranking without allowing consumers to replace `query`.
 
 ### `core/backlinks.js`
 
@@ -94,10 +126,38 @@ UI → Actions → State → Core services → Persistence
 
 ### `ui/`
 
-- Owns rendering and interaction behavior only.
-- Does not parse canonical metadata or call storage directly.
+- Owns rendering and local interaction behavior only.
+- Command providers own their own availability rules.
+- Does not parse canonical metadata, call storage directly, retrieve active application singletons, or trigger workspace refresh through synthetic DOM events.
 
-## 4. Mutation lifecycle
+## 4. Query and workspace refresh lifecycle
+
+```text
+UI intent
+→ NoteWorkspaceController.refresh(...)
+→ worker-backed search query
+→ registered result policies
+→ optional draft flush before active-note transition
+→ optional requery after canonical mutation
+→ state commit
+→ render intent
+```
+
+A same-active-note refresh updates the search field, list, counts, and metrics without rewriting editor fields. An active-note transition flushes the current draft first. Derived-index refresh is suppressed while that flush is nested inside a controller refresh; the controller performs the authoritative post-flush query instead.
+
+Japanese switching uses the same lifecycle:
+
+```text
+workspace control
+→ JapaneseWorkspaceCoordinator.switchWorkspace(...)
+→ restore workspace query and preferred active note
+→ NoteWorkspaceController.refresh(...)
+→ shared state and list render
+```
+
+The coordinator never treats rendered DOM as application state.
+
+## 5. Mutation lifecycle
 
 ```text
 UI event
@@ -116,7 +176,7 @@ The schema-v2 persistence package adds no automatic scheduler, parser behavior, 
 
 The template and scheduler modules in the current package are preparation boundaries only. They return values to their caller; a later action is responsible for normalization, canonical persistence, state commit, and derived updates.
 
-## 5. Japanese study core flows
+## 6. Japanese study core flows
 
 ### Template creation
 
@@ -161,27 +221,32 @@ validated review + rating + explicit nowIso
 | Template creation or reserved-tag lookup | O(1) | None |
 | Enrolled duplicate lookup | O(notes + reviews) | One bounded call-local set |
 | Initial review, due check, or rating transition | O(1) for bounded timestamp records | None |
+| Workspace refresh | O(search results) after worker query | One request-local ID array |
+| Japanese slice synchronization | O(notes + reviews) | Bounded derived state |
 
-## 6. Compatibility and rollback
+## 7. Failure, compatibility, and rollback
 
 - Schema v2 is forward-only and additive.
 - A v1 client cannot open a database already upgraded to v2 by requesting version 1.
 - Rollback must deploy code that understands schema v2; it must not delete `studyReviews`, rewrite notes, or attempt an automatic downgrade.
 - A blocked upgrade rejects with `DATABASE_UPGRADE_BLOCKED`; the user can close other tabs and retry without data mutation.
+- Invalid persisted study reviews produce bounded `study-data-unavailable` state. Japanese quick-create and review actions remain disabled while ordinary Notes stays operational.
+- Workspace-controller rollback is code-only: restore the prior composition, controller/coordinator modules, tests, and documentation. It performs no migration or data rewrite.
 - Template and scheduler rollback is code-only: revert their modules, tests, and documentation. They perform no migration and leave stored notes and reviews unchanged.
 
-## 7. Change gate
+## 8. Change gate
 
 Every material change must answer:
 
 1. Does it preserve the required dependency direction?
-2. Does it avoid duplicate parsing or metadata ownership?
-3. Does it keep canonical persistence ahead of in-memory/history success?
-4. Does it avoid unbounded memory, cache, history, or listener growth?
-5. Does it keep heavy parsing and indexing off the main thread where required?
-6. Are transaction, failure, recovery, and rollback boundaries explicit?
-7. Does a schema upgrade preserve existing note records and avoid automatic enrollment?
-8. Do paired note/review mutations use one cross-store transaction with terminal rollback?
-9. Are template and scheduler calculations explicit, caller-clocked, immutable, and independent of persistence/UI?
-10. Do application-created errors remain bounded and content-free while invalid persisted reviews retain their canonical provenance?
-11. Do tests cover the changed invariant?
+2. Does it avoid using rendered DOM as an application coordination channel?
+3. Does it avoid duplicate parsing or metadata ownership?
+4. Does it keep canonical persistence ahead of in-memory/history success?
+5. Does it avoid unbounded memory, cache, history, listener, or policy growth?
+6. Does it keep heavy parsing and indexing off the main thread where required?
+7. Are transaction, failure, recovery, and rollback boundaries explicit?
+8. Does a schema upgrade preserve existing note records and avoid automatic enrollment?
+9. Do paired note/review mutations use one cross-store transaction with terminal rollback?
+10. Are template and scheduler calculations explicit, caller-clocked, immutable, and independent of persistence/UI?
+11. Do application-created errors remain bounded and content-free while invalid persisted reviews retain their canonical provenance?
+12. Do tests cover the changed invariant, including asynchronous stale-result and draft-preservation behavior?
