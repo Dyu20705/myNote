@@ -76,6 +76,7 @@ function collectElements(document) {
     repairCount: document.querySelector("#japaneseRepairCount"),
     repairList: document.querySelector("#japaneseRepairList"),
     startReview: document.querySelector("#startReviewButton"),
+    quickCreateButtons: [...document.querySelectorAll("[data-japanese-template]")],
     titleInput: document.querySelector("#titleInput"),
     reviewDialog: document.querySelector("#reviewDialog"),
     closeReview: document.querySelector("#closeReviewButton"),
@@ -205,10 +206,14 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     }
 
     const japanese = state.workspace === "japanese";
+    const unavailable = Boolean(state.studyDataUnavailable);
     document.body.dataset.workspace = japanese ? "japanese" : "notes";
     elements.notesButton.setAttribute("aria-pressed", String(!japanese));
     elements.japaneseButton.setAttribute("aria-pressed", String(japanese));
     elements.dashboard.hidden = !japanese;
+    for (const button of elements.quickCreateButtons) {
+      button.disabled = unavailable;
+    }
 
     const dashboard = state.studyDashboard;
     elements.dueCount.textContent = String(dashboard.dueCount);
@@ -232,7 +237,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
     const activeSession = state.reviewSession?.status === "active";
     elements.startReview.textContent = activeSession ? "Resume review" : "Start review";
-    elements.startReview.disabled = !activeSession && dashboard.dueCount === 0;
+    elements.startReview.disabled = unavailable || (!activeSession && dashboard.dueCount === 0);
   }
 
   const filterController = createJapaneseFilterController({
@@ -265,9 +270,15 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       return note;
     },
   }));
-  const unregisterCommands = registerPaletteCommands(() => quickCreateCommands);
+  const unregisterCommands = registerPaletteCommands(() => (
+    store.getState().studyDataUnavailable ? [] : quickCreateCommands
+  ));
   const unregisterDelete = runtime.registerEnrolledDelete(async (noteId) => {
-    const enrolled = store.getState().studyReviews?.some((review) => review.noteId === noteId);
+    const state = store.getState();
+    if (state.studyDataUnavailable && state.workspace === "japanese") {
+      return true;
+    }
+    const enrolled = state.studyReviews?.some((review) => review.noteId === noteId);
     if (!enrolled) {
       return false;
     }
@@ -282,7 +293,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   elements.japaneseButton.addEventListener("click", () => {
     coordinator.switchWorkspace("japanese").catch(() => undefined);
   });
-  for (const button of document.querySelectorAll("[data-japanese-template]")) {
+  for (const button of elements.quickCreateButtons) {
     button.addEventListener("click", () => {
       coordinator.quickCreate(button.dataset.japaneseTemplate)
         .then(() => elements.titleInput.focus())
