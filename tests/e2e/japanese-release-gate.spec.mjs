@@ -267,15 +267,22 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
   await page.goto("/");
   await openJapaneseWorkspace(page);
   await page.getByRole("button", { name: "Create vocabulary note" }).click();
-  await page.locator("#titleInput").fill(title);
-  await page.locator("#contentInput").fill(content);
-  await page.locator("#saveButton").click();
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
-
   const activeId = await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
     return getActiveStore().getState().activeId;
   });
+
+  await page.locator("#titleInput").fill(title);
+  await page.locator("#contentInput").fill(content);
+  await page.locator("#saveButton").click();
+  await expect.poll(async () => {
+    const snapshot = await readDatabaseSnapshot(page, activeId);
+    return {
+      title: snapshot.note?.title,
+      content: snapshot.note?.content,
+    };
+  }).toEqual({ title, content });
+  await expect(page.locator("#saveState")).toHaveText("Saved locally");
 
   const jsonDownload = await runCommand(page, "Export all as JSON");
   const exportedJson = JSON.parse(await downloadText(jsonDownload));
