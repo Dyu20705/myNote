@@ -104,14 +104,14 @@ test("rating persistence failure remains visible and retryable without advancing
   await page.getByRole("button", { name: "Reveal review content" }).click();
 
   await page.evaluate(() => {
-    const original = IDBObjectStore.prototype.put;
-    Object.defineProperty(window, "__restoreStudyPut", {
+    const original = globalThis.IDBObjectStore.prototype.put;
+    Object.defineProperty(globalThis, "__restoreStudyPut", {
       configurable: true,
       value() {
-        IDBObjectStore.prototype.put = original;
+        globalThis.IDBObjectStore.prototype.put = original;
       },
     });
-    IDBObjectStore.prototype.put = function put() {
+    globalThis.IDBObjectStore.prototype.put = function put() {
       throw new Error("Synthetic review write failure");
     };
   });
@@ -121,7 +121,7 @@ test("rating persistence failure remains visible and retryable without advancing
   await expect(page.getByRole("button", { name: "Easy" })).toBeEnabled();
   await expect(page.locator("#reviewContent")).toBeVisible();
 
-  await page.evaluate(() => window.__restoreStudyPut());
+  await page.evaluate(() => globalThis.__restoreStudyPut());
   await page.getByRole("button", { name: "Easy" }).click();
   await expect(page.getByText("Review complete")).toBeVisible();
 });
