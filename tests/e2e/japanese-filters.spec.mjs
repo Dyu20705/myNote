@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("Japanese filters combine created-date range and notebook type", async ({ page }) => {
+test("Japanese filters compose with search, validate ranges, and stay workspace-local", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#noteCount")).toHaveText("1 note");
   await expect(page.getByRole("region", { name: "Japanese note filters" })).toBeHidden();
@@ -40,7 +40,22 @@ test("Japanese filters combine created-date range and notebook type", async ({ p
   await expect(page.locator("#noteList .note-item-title")).toHaveText("New grammar pattern");
   await expect(page.locator("#japaneseFilterStatus")).toHaveText("Showing 1 of 3 Japanese notes");
 
+  await page.getByRole("button", { name: "Notes" }).click();
+  await expect(filters).toBeHidden();
+  await expect(page.locator("#noteList .note-item-title")).toHaveCount(4);
+
+  await page.getByRole("button", { name: "日本語" }).click();
+  await expect(page.locator("#japaneseNoteType")).toHaveValue("grammar");
+  await expect(page.locator("#noteList .note-item-title")).toHaveCount(1);
+
+  await page.locator("#japaneseDateFrom").fill("2026-08-01");
+  await expect(page.locator("#japaneseDateFrom")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#japaneseDateTo")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#japaneseFilterStatus")).toHaveText("Created from must be on or before Created to");
+  await expect(page.locator("#noteList .note-item-title")).toHaveCount(0);
+
   await page.getByRole("button", { name: "Clear Japanese filters" }).click();
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(3);
   await expect(page.locator("#japaneseFilterStatus")).toHaveText("Showing 3 of 3 Japanese notes");
+  await expect(page.locator("#japaneseNoteType")).toBeFocused();
 });
