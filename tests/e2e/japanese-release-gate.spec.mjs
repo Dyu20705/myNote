@@ -267,6 +267,15 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
   await page.goto("/");
   await openJapaneseWorkspace(page);
   await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await expect.poll(async () => page.evaluate(async () => {
+    const { getActiveStore } = await import("/core/state.js");
+    const state = getActiveStore().getState();
+    return state.studyReviews.some((review) => (
+      review.noteId === state.activeId && review.notebookType === "vocabulary"
+    ));
+  })).toBe(true);
+  await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
+
   const activeId = await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
     return getActiveStore().getState().activeId;
