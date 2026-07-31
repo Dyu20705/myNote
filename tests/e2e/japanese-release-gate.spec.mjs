@@ -1,7 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-const DATABASE_NAME = "myNoteDB";
-
 async function openBlankOrigin(page) {
   await page.route("**/", async (route) => {
     await route.fulfill({
@@ -279,7 +277,7 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
   });
 
   const jsonDownload = await runCommand(page, "Export all as JSON");
-  const exportedJson = JSON.parse(await downloadText(await jsonDownload));
+  const exportedJson = JSON.parse(await downloadText(jsonDownload));
   const exportedNote = exportedJson.find((note) => note.id === activeId);
   expect(exportedNote.title).toBe(title);
   expect(exportedNote.content).toBe(content);
@@ -288,7 +286,7 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
   expect(exportedNote).not.toHaveProperty("ease");
 
   const markdownDownload = await runCommand(page, "Export all as Markdown");
-  const exportedMarkdown = await downloadText(await markdownDownload);
+  const exportedMarkdown = await downloadText(markdownDownload);
   expect(exportedMarkdown).toContain(`# ${title}`);
   expect(exportedMarkdown).toContain(content);
   expect(exportedMarkdown).not.toContain("nextReviewAt");
