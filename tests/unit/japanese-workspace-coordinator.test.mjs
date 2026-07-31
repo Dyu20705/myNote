@@ -32,7 +32,24 @@ function context() {
   };
 }
 
-test("workspace switching restores query and active-note state through the workspace API", async () => {
+function createWorkspaceStub(store, calls) {
+  return {
+    async refresh(options) {
+      calls.push(options);
+      store.setState({
+        query: options.query,
+        activeId: options.preferredId,
+        filteredIds: options.preferredId ? [options.preferredId] : [],
+      });
+      return {
+        query: options.query,
+        activeId: options.preferredId,
+      };
+    },
+  };
+}
+
+test("workspace switching restores view state and requests editor synchronization", async () => {
   const store = createStore({
     db: {},
     notes: [{ id: "ordinary" }, { id: "jp" }],
@@ -61,20 +78,7 @@ test("workspace switching restores query and active-note state through the works
     setState: store.setState,
     subscribe: store.subscribe,
     actions,
-    noteWorkspace: {
-      async refresh(options) {
-        refreshes.push(options);
-        store.setState({
-          query: options.query,
-          activeId: options.preferredId,
-          filteredIds: options.preferredId ? [options.preferredId] : [],
-        });
-        return {
-          query: options.query,
-          activeId: options.preferredId,
-        };
-      },
-    },
+    noteWorkspace: createWorkspaceStub(store, refreshes),
     async loadReviews() {
       return [];
     },
@@ -87,6 +91,8 @@ test("workspace switching restores query and active-note state through the works
     query: "",
     preferredId: "jp",
     emptyLabel: "No Japanese notes",
+    reconcileActive: true,
+    synchronizeEditor: true,
   });
 
   store.setState({ query: "jp query", activeId: "jp" });
@@ -95,6 +101,8 @@ test("workspace switching restores query and active-note state through the works
     query: "ordinary query",
     preferredId: "ordinary",
     emptyLabel: "No notes",
+    reconcileActive: true,
+    synchronizeEditor: true,
   });
 
   await coordinator.switchWorkspace("japanese");
@@ -102,11 +110,13 @@ test("workspace switching restores query and active-note state through the works
     query: "jp query",
     preferredId: "jp",
     emptyLabel: "No Japanese notes",
+    reconcileActive: true,
+    synchronizeEditor: true,
   });
   coordinator.destroy();
 });
 
-test("quick create and enrolled delete refresh through the explicit workspace API", async () => {
+test("quick create and enrolled delete request authoritative editor refresh", async () => {
   const store = createStore({
     db: {},
     notes: [{ id: "ordinary" }, { id: "jp" }],
@@ -118,6 +128,7 @@ test("quick create and enrolled delete refresh through the explicit workspace AP
     reviewSession: { status: "idle" },
   });
   const calls = [];
+  const refreshes = [];
   const actions = {
     async bootstrap() {
       store.setState({ japaneseNoteIds: ["jp"], studyReviews: [] });
@@ -139,16 +150,7 @@ test("quick create and enrolled delete refresh through the explicit workspace AP
     setState: store.setState,
     subscribe: store.subscribe,
     actions,
-    noteWorkspace: {
-      async refresh(options) {
-        calls.push(["refresh", options]);
-        store.setState({ query: options.query, activeId: options.preferredId });
-        return {
-          query: options.query,
-          activeId: options.preferredId,
-        };
-      },
-    },
+    noteWorkspace: createWorkspaceStub(store, refreshes),
     async loadReviews() {
       return [];
     },
@@ -164,14 +166,73 @@ test("quick create and enrolled delete refresh through the explicit workspace AP
     { localDate: "2026-07-31" },
     context(),
   ]);
-  assert.deepEqual(calls.filter((entry) => entry[0] === "refresh").at(-1), [
-    "refresh",
-    { query: "", preferredId: "created", emptyLabel: "No Japanese notes" },
-  ]);
+  assert.deepEqual(refreshes.at(-1), {
+    query: "",
+    preferredId: "created",
+    emptyLabel: "No Japanese notes",
+    reconcileActive: true,
+    synchronizeEditor: true,
+  });
 
   await coordinator.deleteNote("jp");
   assert.deepEqual(calls.find((entry) => entry[0] === "delete"), ["delete", "jp", context()]);
-  assert.equal(calls.filter((entry) => entry[0] === "refresh").length, 2);
+  assert.deepEqual(refreshes.at(-1), {
+    query: "",
+    preferredId: "created",
+    emptyLabel: "No Japanese notes",
+    reconcileActive: true,
+    synchronizeEditor: true,
+  });
+  coordinator.destroy();
+});
+
+test("filter refresh reconciles visibility without forcing same-note editor synchronization", async () => {
+  const store = createStore({
+    db: {},
+    notes: [{ id: "ordinary" }, { id: "jp" }],
+    activeId: "jp",
+    query: "filter query",
+    workspace: "japanese",
+    studyReviews: [],
+    japaneseNoteIds: [],
+    reviewSession: { status: "idle" },
+  });
+  const refreshes = [];
+  const actions = {
+    async bootstrap() {
+      store.setState({ japaneseNoteIds: ["jp"], studyReviews: [] });
+    },
+    chooseWorkspace(workspace) {
+      store.setState({ workspace });
+    },
+    async createJapaneseNote() {
+      return { id: "created" };
+    },
+    async deleteNote() {},
+  };
+  const coordinator = createJapaneseWorkspaceCoordinator({
+    getState: store.getState,
+    setState: store.setState,
+    subscribe: store.subscribe,
+    actions,
+    noteWorkspace: createWorkspaceStub(store, refreshes),
+    async loadReviews() {
+      return [];
+    },
+    getContext: context,
+  });
+
+  await coordinator.ready;
+  store.setState({ workspace: "japanese", query: "filter query", activeId: "jp" });
+  await coordinator.refreshCurrent();
+
+  assert.deepEqual(refreshes.at(-1), {
+    query: "filter query",
+    preferredId: "jp",
+    emptyLabel: "No Japanese notes",
+    reconcileActive: true,
+    synchronizeEditor: false,
+  });
   coordinator.destroy();
 });
 
@@ -202,16 +263,7 @@ test("invalid persisted review data becomes bounded read-only Japanese state wit
     setState: store.setState,
     subscribe: store.subscribe,
     actions,
-    noteWorkspace: {
-      async refresh(options) {
-        refreshes.push(options);
-        store.setState({ query: options.query, activeId: options.preferredId });
-        return {
-          query: options.query,
-          activeId: options.preferredId,
-        };
-      },
-    },
+    noteWorkspace: createWorkspaceStub(store, refreshes),
     async loadReviews() {
       const error = new TypeError("Invalid study review");
       error.code = "INVALID_STUDY_REVIEW";
@@ -233,6 +285,8 @@ test("invalid persisted review data becomes bounded read-only Japanese state wit
     query: "",
     preferredId: null,
     emptyLabel: "No Japanese notes",
+    reconcileActive: true,
+    synchronizeEditor: true,
   });
 
   await assert.rejects(
