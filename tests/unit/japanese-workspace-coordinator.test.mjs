@@ -69,7 +69,10 @@ test("workspace switching restores query and active-note state through the works
           activeId: options.preferredId,
           filteredIds: options.preferredId ? [options.preferredId] : [],
         });
-        return { activeId: options.preferredId };
+        return {
+          query: options.query,
+          activeId: options.preferredId,
+        };
       },
     },
     async loadReviews() {
@@ -140,7 +143,10 @@ test("quick create and enrolled delete refresh through the explicit workspace AP
       async refresh(options) {
         calls.push(["refresh", options]);
         store.setState({ query: options.query, activeId: options.preferredId });
-        return { activeId: options.preferredId };
+        return {
+          query: options.query,
+          activeId: options.preferredId,
+        };
       },
     },
     async loadReviews() {
@@ -166,5 +172,72 @@ test("quick create and enrolled delete refresh through the explicit workspace AP
   await coordinator.deleteNote("jp");
   assert.deepEqual(calls.find((entry) => entry[0] === "delete"), ["delete", "jp", context()]);
   assert.equal(calls.filter((entry) => entry[0] === "refresh").length, 2);
+  coordinator.destroy();
+});
+
+test("invalid persisted review data becomes bounded read-only Japanese state without blocking workspace access", async () => {
+  const store = createStore({
+    db: {},
+    notes: [{ id: "ordinary" }],
+    activeId: "ordinary",
+    query: "",
+    workspace: "notes",
+    studyReviews: [],
+    japaneseNoteIds: [],
+    reviewSession: { status: "idle" },
+  });
+  const refreshes = [];
+  const actions = {
+    async bootstrap() {},
+    chooseWorkspace(workspace) {
+      store.setState({ workspace });
+    },
+    async createJapaneseNote() {
+      throw new Error("must stay disabled");
+    },
+    async deleteNote() {},
+  };
+  const coordinator = createJapaneseWorkspaceCoordinator({
+    getState: store.getState,
+    setState: store.setState,
+    subscribe: store.subscribe,
+    actions,
+    noteWorkspace: {
+      async refresh(options) {
+        refreshes.push(options);
+        store.setState({ query: options.query, activeId: options.preferredId });
+        return {
+          query: options.query,
+          activeId: options.preferredId,
+        };
+      },
+    },
+    async loadReviews() {
+      const error = new TypeError("Invalid study review");
+      error.code = "INVALID_STUDY_REVIEW";
+      throw error;
+    },
+    getContext: context,
+  });
+
+  await coordinator.ready;
+  assert.equal(store.getState().studyDataUnavailable, true);
+  assert.deepEqual(store.getState().japaneseNoteIds, []);
+  assert.deepEqual(store.getState().studyStatus, [
+    { code: "study-data-unavailable", count: 1 },
+  ]);
+
+  await coordinator.switchWorkspace("japanese");
+  assert.equal(store.getState().workspace, "japanese");
+  assert.deepEqual(refreshes.at(-1), {
+    query: "",
+    preferredId: null,
+    emptyLabel: "No Japanese notes",
+  });
+
+  await assert.rejects(
+    coordinator.quickCreate("vocabulary"),
+    (error) => error?.code === "STUDY_DATA_UNAVAILABLE",
+  );
   coordinator.destroy();
 });
