@@ -58,6 +58,10 @@ function isEnrolledActiveNote() {
     && state.studyReviews?.some((review) => review.noteId === state.activeId);
 }
 
+function refreshSharedSearch() {
+  searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 if (store && commandStack && history && searchClient && backlinkIndex && searchInput) {
   const actions = createJapaneseActions({
     getState: store.getState,
@@ -88,11 +92,13 @@ if (store && commandStack && history && searchClient && backlinkIndex && searchI
         backlinkIndex.upsert(note, previousNote);
         store.setState({ backlinksMap: backlinkIndex.toMap() });
         await searchClient.upsert(note);
+        refreshSharedSearch();
       },
       async remove(noteId) {
         backlinkIndex.remove(noteId);
         store.setState({ backlinksMap: backlinkIndex.toMap() });
         await searchClient.remove(noteId);
+        refreshSharedSearch();
       },
     },
     history,
@@ -104,7 +110,6 @@ if (store && commandStack && history && searchClient && backlinkIndex && searchI
       return false;
     }
     await actions.deleteNote(noteId, currentContext());
-    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
     return true;
   }
 
