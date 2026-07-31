@@ -19,8 +19,15 @@ test("Japanese search filtering uses the policy API instead of replacing searchC
   assert.doesNotMatch(filterController, /getActive(?:SearchClient|Store)/);
 });
 
-test("Japanese filter controller is composed by japaneseApp rather than a standalone entrypoint", async () => {
-  const index = await source("index.html");
-  assert.doesNotMatch(index, /<script[^>]+src="ui\/japanese-filters\.js"/);
-  assert.match(index, /<script[^>]+src="japaneseApp\.js"/);
+test("Japanese filter controller is composed through the single application entrypoint", async () => {
+  const [index, app, japaneseApp] = await Promise.all([
+    source("index.html"),
+    source("app.js"),
+    source("japaneseApp.js"),
+  ]);
+
+  assert.doesNotMatch(index, /<script[^>]+src="japaneseApp\.js"/);
+  assert.match(index, /<script[^>]+src="app\.js"/);
+  assert.match(app, /import \{ createJapaneseApp \} from "\.\/japaneseApp\.js"/);
+  assert.match(japaneseApp, /createJapaneseFilterController\s*\(/);
 });
