@@ -9,6 +9,7 @@
 
 .workspace-switcher button,
 .japanese-actions button,
+.japanese-filters button,
 .review-dialog button {
   border: 1px solid var(--border);
   border-radius: 0;
@@ -25,10 +26,58 @@
 
 .workspace-switcher button:focus-visible,
 .japanese-actions button:focus-visible,
+.japanese-filters button:focus-visible,
+.japanese-filter-field input:focus-visible,
+.japanese-filter-field select:focus-visible,
 .review-dialog button:focus-visible {
   border-color: var(--focus);
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.japanese-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.japanese-filters[hidden] {
+  display: none;
+}
+
+.japanese-filter-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.japanese-filter-field input,
+.japanese-filter-field select {
+  min-height: 39px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--panel-2);
+  color-scheme: dark;
+}
+
+.japanese-filters button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.japanese-filter-status {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .japanese-dashboard {
@@ -183,6 +232,10 @@ body[data-workspace="japanese"] #newNoteButton {
 }
 
 @media (max-width: 980px) {
+  .japanese-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -205,6 +258,7 @@ body[data-workspace="japanese"] #newNoteButton {
     flex-direction: column;
   }
 
+  .japanese-filters,
   .dashboard-grid,
   .japanese-actions,
   .review-ratings {
