@@ -16,16 +16,21 @@ function createStore(initialState) {
   };
 }
 
-test("refresh owns query, result, active-note, and render coordination without DOM events", async () => {
-  const store = createStore({
+function initialState(overrides = {}) {
+  return {
     notes: [{ id: "a" }, { id: "b" }],
     activeId: "a",
     filteredIds: ["a"],
     query: "",
-    dirty: true,
+    dirty: false,
     recentIds: ["a"],
     emptyLabel: "Ready",
-  });
+    ...overrides,
+  };
+}
+
+test("refresh owns query, result, active-note, and render coordination without DOM events", async () => {
+  const store = createStore(initialState({ dirty: true }));
   const calls = [];
   const controller = createNoteWorkspaceController({
     getState: store.getState,
@@ -58,29 +63,28 @@ test("refresh owns query, result, active-note, and render coordination without D
     ids: ["b", "a"],
     activeId: "b",
   });
-  assert.deepEqual(store.getState(), {
-    notes: [{ id: "a" }, { id: "b" }],
+  assert.deepEqual(store.getState(), initialState({
     activeId: "b",
     filteredIds: ["b", "a"],
     query: "kanji",
     dirty: false,
     recentIds: ["b", "a"],
     emptyLabel: "No Japanese notes",
-  });
+  }));
   assert.deepEqual(calls.map((entry) => entry[0]), ["query", "flush", "render"]);
-  assert.deepEqual(calls.at(-1)[3], { reason: "refresh", activeChanged: true });
+  assert.deepEqual(calls.at(-1)[3], {
+    reason: "refresh",
+    activeChanged: true,
+    reconcileActive: true,
+    synchronizeEditor: true,
+  });
 });
 
-test("same-note refresh declares that the editor must remain untouched", async () => {
-  const store = createStore({
-    notes: [{ id: "a" }, { id: "b" }],
-    activeId: "a",
+test("same-note search refresh declares that the editor must remain untouched", async () => {
+  const store = createStore(initialState({
     filteredIds: ["a", "b"],
-    query: "",
     dirty: true,
-    recentIds: ["a"],
-    emptyLabel: "Ready",
-  });
+  }));
   let renderContext = null;
   const controller = createNoteWorkspaceController({
     getState: store.getState,
@@ -99,21 +103,90 @@ test("same-note refresh declares that the editor must remain untouched", async (
 
   await controller.refresh({ query: "active" });
 
-  assert.deepEqual(renderContext, { reason: "refresh", activeChanged: false });
+  assert.deepEqual(renderContext, {
+    reason: "refresh",
+    activeChanged: false,
+    reconcileActive: true,
+    synchronizeEditor: false,
+  });
   assert.equal(store.getState().dirty, true);
   assert.equal(store.getState().activeId, "a");
 });
 
-test("refresh queries again after flushing a canonical draft mutation", async () => {
-  const store = createStore({
-    notes: [{ id: "a" }, { id: "b" }],
-    activeId: "a",
-    filteredIds: ["a"],
-    query: "",
-    dirty: true,
-    recentIds: ["a"],
-    emptyLabel: "Ready",
+test("caller may synchronize the editor even when active state was committed before refresh", async () => {
+  const store = createStore(initialState());
+  let renderContext = null;
+  const controller = createNoteWorkspaceController({
+    getState: store.getState,
+    setState: store.setState,
+    async query() {
+      return ["a"];
+    },
+    async flush() {
+      throw new Error("same-note synchronization must not flush");
+    },
+    onSearchMetrics() {},
+    onRender(_snapshot, context) {
+      renderContext = context;
+    },
   });
+
+  await controller.refresh({
+    query: "",
+    preferredId: "a",
+    synchronizeEditor: true,
+  });
+
+  assert.deepEqual(renderContext, {
+    reason: "refresh",
+    activeChanged: false,
+    reconcileActive: true,
+    synchronizeEditor: true,
+  });
+});
+
+test("non-reconciling refresh updates results without replacing the active editor note", async () => {
+  const store = createStore(initialState({ dirty: true }));
+  let renderContext = null;
+  const controller = createNoteWorkspaceController({
+    getState: store.getState,
+    setState: store.setState,
+    async query() {
+      return ["b"];
+    },
+    async flush() {
+      throw new Error("non-reconciling refresh must not flush");
+    },
+    onSearchMetrics() {},
+    onRender(_snapshot, context) {
+      renderContext = context;
+    },
+  });
+
+  const result = await controller.refresh({
+    query: "other",
+    reconcileActive: false,
+  });
+
+  assert.deepEqual(result, {
+    stale: false,
+    query: "other",
+    ids: ["b"],
+    activeId: "a",
+  });
+  assert.equal(store.getState().activeId, "a");
+  assert.deepEqual(store.getState().filteredIds, ["b"]);
+  assert.equal(store.getState().dirty, true);
+  assert.deepEqual(renderContext, {
+    reason: "refresh",
+    activeChanged: false,
+    reconcileActive: false,
+    synchronizeEditor: false,
+  });
+});
+
+test("refresh queries again after flushing a canonical draft mutation", async () => {
+  const store = createStore(initialState({ dirty: true }));
   let queryCount = 0;
   const controller = createNoteWorkspaceController({
     getState: store.getState,
@@ -138,15 +211,7 @@ test("refresh queries again after flushing a canonical draft mutation", async ()
 });
 
 test("only the latest asynchronous refresh may commit state", async () => {
-  const store = createStore({
-    notes: [{ id: "a" }, { id: "b" }],
-    activeId: "a",
-    filteredIds: ["a"],
-    query: "",
-    dirty: false,
-    recentIds: ["a"],
-    emptyLabel: "Ready",
-  });
+  const store = createStore(initialState());
   const resolvers = new Map();
   const controller = createNoteWorkspaceController({
     getState: store.getState,
@@ -180,15 +245,10 @@ test("only the latest asynchronous refresh may commit state", async () => {
 });
 
 test("select flushes before changing the active note and rejects missing notes", async () => {
-  const store = createStore({
-    notes: [{ id: "a" }, { id: "b" }],
-    activeId: "a",
+  const store = createStore(initialState({
     filteredIds: ["a", "b"],
-    query: "",
     dirty: true,
-    recentIds: ["a"],
-    emptyLabel: "Ready",
-  });
+  }));
   const order = [];
   const controller = createNoteWorkspaceController({
     getState: store.getState,
