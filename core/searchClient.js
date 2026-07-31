@@ -1,3 +1,5 @@
+import { createSearchResultPipeline } from "./searchResultPipeline.js";
+
 let activeSearchClient = null;
 
 export function getActiveSearchClient() {
@@ -6,6 +8,7 @@ export function getActiveSearchClient() {
 
 export function createSearchClient() {
   const worker = new Worker(new URL("./search.worker.js", import.meta.url), { type: "module" });
+  const resultPipeline = createSearchResultPipeline();
   let sequence = 0;
   const pending = new Map();
 
@@ -41,8 +44,12 @@ export function createSearchClient() {
     remove(id) {
       return ask("remove", { id });
     },
-    query(queryText) {
-      return ask("query", { query: queryText });
+    async query(queryText) {
+      const ids = await ask("query", { query: queryText });
+      return resultPipeline.apply(ids, { queryText });
+    },
+    registerResultPolicy(policy) {
+      return resultPipeline.register(policy);
     },
     close() {
       worker.terminate();
