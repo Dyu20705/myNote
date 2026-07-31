@@ -29,7 +29,7 @@ function initialState(overrides = {}) {
   };
 }
 
-test("refresh owns query, result, active-note, and render coordination without DOM events", async () => {
+test("refresh owns query, selection, and render coordination without DOM events", async () => {
   const store = createStore(initialState({ dirty: true }));
   const calls = [];
   const controller = createNoteWorkspaceController({
@@ -55,6 +55,7 @@ test("refresh owns query, result, active-note, and render coordination without D
     query: "kanji",
     preferredId: "b",
     emptyLabel: "No Japanese notes",
+    reconcileActive: true,
   });
 
   assert.deepEqual(result, {
@@ -75,6 +76,7 @@ test("refresh owns query, result, active-note, and render coordination without D
   assert.deepEqual(calls.at(-1)[3], {
     reason: "refresh",
     activeChanged: true,
+    stateActiveChanged: true,
     reconcileActive: true,
     synchronizeEditor: true,
   });
@@ -106,14 +108,15 @@ test("same-note search refresh declares that the editor must remain untouched", 
   assert.deepEqual(renderContext, {
     reason: "refresh",
     activeChanged: false,
-    reconcileActive: true,
+    stateActiveChanged: false,
+    reconcileActive: false,
     synchronizeEditor: false,
   });
   assert.equal(store.getState().dirty, true);
   assert.equal(store.getState().activeId, "a");
 });
 
-test("caller may synchronize the editor even when active state was committed before refresh", async () => {
+test("caller may synchronize a rendered editor after active state was committed elsewhere", async () => {
   const store = createStore(initialState());
   let renderContext = null;
   const controller = createNoteWorkspaceController({
@@ -134,13 +137,44 @@ test("caller may synchronize the editor even when active state was committed bef
   await controller.refresh({
     query: "",
     preferredId: "a",
+    reconcileActive: true,
     synchronizeEditor: true,
   });
 
   assert.deepEqual(renderContext, {
     reason: "refresh",
-    activeChanged: false,
+    activeChanged: true,
+    stateActiveChanged: false,
     reconcileActive: true,
+    synchronizeEditor: true,
+  });
+});
+
+test("first clean result hydration synchronizes the existing active editor", async () => {
+  const store = createStore(initialState({ filteredIds: [] }));
+  let renderContext = null;
+  const controller = createNoteWorkspaceController({
+    getState: store.getState,
+    setState: store.setState,
+    async query() {
+      return ["a", "b"];
+    },
+    async flush() {
+      throw new Error("initial hydration must not flush");
+    },
+    onSearchMetrics() {},
+    onRender(_snapshot, context) {
+      renderContext = context;
+    },
+  });
+
+  await controller.refresh({ query: "" });
+
+  assert.deepEqual(renderContext, {
+    reason: "refresh",
+    activeChanged: true,
+    stateActiveChanged: false,
+    reconcileActive: false,
     synchronizeEditor: true,
   });
 });
@@ -180,6 +214,7 @@ test("non-reconciling refresh updates results without replacing the active edito
   assert.deepEqual(renderContext, {
     reason: "refresh",
     activeChanged: false,
+    stateActiveChanged: false,
     reconcileActive: false,
     synchronizeEditor: false,
   });
@@ -203,7 +238,11 @@ test("refresh queries again after flushing a canonical draft mutation", async ()
     onRender() {},
   });
 
-  const result = await controller.refresh({ query: "saved draft", preferredId: "b" });
+  const result = await controller.refresh({
+    query: "saved draft",
+    preferredId: "b",
+    reconcileActive: true,
+  });
 
   assert.equal(queryCount, 2);
   assert.deepEqual(result.ids, ["b", "a"]);
@@ -224,8 +263,8 @@ test("only the latest asynchronous refresh may commit state", async () => {
     onRender() {},
   });
 
-  const first = controller.refresh({ query: "first" });
-  const second = controller.refresh({ query: "second" });
+  const first = controller.refresh({ query: "first", reconcileActive: true });
+  const second = controller.refresh({ query: "second", reconcileActive: true });
   resolvers.get("second")(["b"]);
   assert.deepEqual(await second, {
     stale: false,
