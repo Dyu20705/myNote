@@ -5,6 +5,7 @@ const japaneseButton = document.querySelector("#japaneseWorkspaceButton");
 const searchInput = document.querySelector("#searchInput");
 const quickCreateButtons = [...document.querySelectorAll("[data-japanese-template]")];
 
+let requestedWorkspace = "notes";
 let studyDataUnavailable = false;
 
 function degradedDashboard() {
@@ -48,7 +49,7 @@ function installDegradedState() {
   }
 
   store.setState({
-    workspace: "notes",
+    workspace: requestedWorkspace,
     studyReviews: [],
     japaneseNoteIds: [],
     studyDashboard: degradedDashboard(),
@@ -56,6 +57,7 @@ function installDegradedState() {
     studyStatusOmitted: 0,
     reviewSession: idleReviewSession(),
   });
+  refreshWorkspaceList();
 }
 
 window.addEventListener("unhandledrejection", (event) => {
@@ -67,19 +69,21 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 notesButton?.addEventListener("click", () => {
+  requestedWorkspace = "notes";
   const store = getActiveStore();
   if (!studyDataUnavailable || !store) {
     return;
   }
-  store.setState({ workspace: "notes" });
+  store.setState({ workspace: requestedWorkspace });
   refreshWorkspaceList();
 });
 
 japaneseButton?.addEventListener("click", () => {
+  requestedWorkspace = "japanese";
   const store = getActiveStore();
   if (!studyDataUnavailable || !store) {
     return;
   }
-  store.setState({ workspace: "japanese" });
+  store.setState({ workspace: requestedWorkspace });
   refreshWorkspaceList();
 });
