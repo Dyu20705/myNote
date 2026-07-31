@@ -1,76 +1,91 @@
-export function createPalette({ root, input, list, onRun }) {
+const commandProviders = new Set();
+
+export function registerPaletteCommands(provider) {
+  if (typeof provider !== "function") {
+    throw new TypeError("Palette command provider must be a function");
+  }
+  commandProviders.add(provider);
+  return () => commandProviders.delete(provider);
+}
+
+function providedCommands() {
+  const commands = [];
+  for (const provider of commandProviders) {
+    const next = provider();
+    if (Array.isArray(next)) {
+      commands.push(...next);
+    }
+  }
+  return commands;
+}
+
+export function createPalette({ overlay, input, list, onRun }) {
   let commands = [];
-  let query = "";
+  let activeIndex = 0;
 
   function filtered() {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      return commands;
-    }
-    return commands.filter((item) => item.title.toLowerCase().includes(q));
+    const query = input.value.trim().toLowerCase();
+    return commands.filter((command) => command.title.toLowerCase().includes(query));
   }
 
   function render() {
-    const current = filtered();
-    list.replaceChildren();
-
-    for (const command of current) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "command-item";
-      button.textContent = command.title;
-      button.addEventListener("click", () => {
+    const visible = filtered();
+    list.textContent = "";
+    visible.forEach((command, index) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = `palette-item ${index === activeIndex ? "active" : ""}`;
+      item.textContent = command.title;
+      item.addEventListener("click", () => {
         close();
         onRun(command);
       });
-      list.append(button);
-    }
+      list.appendChild(item);
+    });
   }
 
   function open(nextCommands) {
-    commands = nextCommands;
-    query = "";
-    root.hidden = false;
+    commands = [...nextCommands, ...providedCommands()];
+    activeIndex = 0;
+    overlay.classList.remove("hidden");
     input.value = "";
     render();
     input.focus();
   }
 
   function close() {
-    root.hidden = true;
+    overlay.classList.add("hidden");
   }
 
-  function isOpen() {
-    return !root.hidden;
-  }
-
-  input.addEventListener("input", (event) => {
-    query = event.target.value;
+  input.addEventListener("input", () => {
+    activeIndex = 0;
     render();
   });
 
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    const visible = filtered();
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, Math.max(0, visible.length - 1));
+      render();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      activeIndex = Math.max(0, activeIndex - 1);
+      render();
+    } else if (event.key === "Enter" && visible[activeIndex]) {
       event.preventDefault();
       close();
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const first = filtered()[0];
-      if (first) {
-        close();
-        onRun(first);
-      }
-    }
-  });
-
-  root.addEventListener("click", (event) => {
-    if (event.target === root) {
+      onRun(visible[activeIndex]);
+    } else if (event.key === "Escape") {
       close();
     }
   });
 
-  return { open, close, isOpen };
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      close();
+    }
+  });
+
+  return { open, close };
 }
