@@ -90,6 +90,8 @@ export function createNoteWorkspaceController(options) {
     options.onRender(options.getState(), {
       reason: "select",
       activeChanged: true,
+      reconcileActive: true,
+      synchronizeEditor: true,
     });
     return true;
   }
@@ -98,6 +100,8 @@ export function createNoteWorkspaceController(options) {
     const token = ++refreshToken;
     const beforeQuery = options.getState();
     const queryText = normalizedQuery(input.query, beforeQuery.query);
+    const reconcileActive = input.reconcileActive !== false;
+    const requestedEditorSync = input.synchronizeEditor === true;
     let ids = await queryIds(queryText);
 
     if (token !== refreshToken) {
@@ -111,10 +115,12 @@ export function createNoteWorkspaceController(options) {
 
     let state = options.getState();
     const preferredId = typeof input.preferredId === "string" ? input.preferredId : null;
-    let activeId = chooseActiveId(state, ids, preferredId);
+    let activeId = reconcileActive
+      ? chooseActiveId(state, ids, preferredId)
+      : state.activeId ?? null;
     let activeChanged = state.activeId !== activeId;
 
-    if (activeChanged) {
+    if (reconcileActive && activeChanged) {
       const canonicalChanged = await options.flush({ reason: "refresh" });
       if (token !== refreshToken) {
         return {
@@ -160,6 +166,8 @@ export function createNoteWorkspaceController(options) {
     options.onRender(snapshot, {
       reason: "refresh",
       activeChanged,
+      reconcileActive,
+      synchronizeEditor: activeChanged || requestedEditorSync,
     });
     return {
       stale: false,
