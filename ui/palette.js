@@ -19,73 +19,79 @@ function providedCommands() {
   return commands;
 }
 
-export function createPalette({ overlay, input, list, onRun }) {
+export function createPalette({ root, input, list, onRun }) {
   let commands = [];
-  let activeIndex = 0;
+  let query = "";
 
   function filtered() {
-    const query = input.value.trim().toLowerCase();
-    return commands.filter((command) => command.title.toLowerCase().includes(query));
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return commands;
+    }
+    return commands.filter((item) => item.title.toLowerCase().includes(q));
   }
 
   function render() {
-    const visible = filtered();
-    list.textContent = "";
-    visible.forEach((command, index) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = `palette-item ${index === activeIndex ? "active" : ""}`;
-      item.textContent = command.title;
-      item.addEventListener("click", () => {
+    const current = filtered();
+    list.replaceChildren();
+
+    for (const command of current) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "command-item";
+      button.textContent = command.title;
+      button.addEventListener("click", () => {
         close();
         onRun(command);
       });
-      list.appendChild(item);
-    });
+      list.append(button);
+    }
   }
 
   function open(nextCommands) {
     commands = [...nextCommands, ...providedCommands()];
-    activeIndex = 0;
-    overlay.classList.remove("hidden");
+    query = "";
+    root.hidden = false;
     input.value = "";
     render();
     input.focus();
   }
 
   function close() {
-    overlay.classList.add("hidden");
+    root.hidden = true;
   }
 
-  input.addEventListener("input", () => {
-    activeIndex = 0;
+  function isOpen() {
+    return !root.hidden;
+  }
+
+  input.addEventListener("input", (event) => {
+    query = event.target.value;
     render();
   });
 
   input.addEventListener("keydown", (event) => {
-    const visible = filtered();
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      activeIndex = Math.min(activeIndex + 1, Math.max(0, visible.length - 1));
-      render();
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      activeIndex = Math.max(0, activeIndex - 1);
-      render();
-    } else if (event.key === "Enter" && visible[activeIndex]) {
+    if (event.key === "Escape") {
       event.preventDefault();
       close();
-      onRun(visible[activeIndex]);
-    } else if (event.key === "Escape") {
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const first = filtered()[0];
+      if (first) {
+        close();
+        onRun(first);
+      }
+    }
+  });
+
+  root.addEventListener("click", (event) => {
+    if (event.target === root) {
       close();
     }
   });
 
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) {
-      close();
-    }
-  });
-
-  return { open, close };
+  return { open, close, isOpen };
 }
