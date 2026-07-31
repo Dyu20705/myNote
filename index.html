@@ -34,6 +34,30 @@
         <button id="newNoteButton" class="primary-button" type="button">New note</button>
       </section>
 
+      <section id="japaneseFilters" class="japanese-filters" aria-label="Japanese note filters" hidden>
+        <label class="japanese-filter-field" for="japaneseDateFrom">
+          <span>Created from</span>
+          <input id="japaneseDateFrom" type="date" />
+        </label>
+        <label class="japanese-filter-field" for="japaneseDateTo">
+          <span>Created to</span>
+          <input id="japaneseDateTo" type="date" />
+        </label>
+        <label class="japanese-filter-field" for="japaneseNoteType">
+          <span>Note type</span>
+          <select id="japaneseNoteType">
+            <option value="all">All types</option>
+            <option value="vocabulary">Vocabulary</option>
+            <option value="kanji">Kanji</option>
+            <option value="grammar">Grammar</option>
+            <option value="output">Output</option>
+            <option value="planner">Planner</option>
+          </select>
+        </label>
+        <button id="clearJapaneseFilters" type="button" aria-label="Clear Japanese filters" disabled>Clear filters</button>
+        <span id="japaneseFilterStatus" class="japanese-filter-status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+      </section>
+
       <section id="japaneseDashboard" class="japanese-dashboard" aria-label="Japanese learning dashboard" hidden>
         <div class="dashboard-header">
           <div>
@@ -146,6 +170,7 @@
 
     <script type="module" src="app.js"></script>
     <script type="module" src="japaneseApp.js"></script>
+    <script type="module" src="ui/japanese-filters.js"></script>
     <script type="module" src="ui/japanese-delete-bridge.js"></script>
   </body>
 </html>
