@@ -9,11 +9,14 @@ The application keeps one runtime for both workspaces:
 ```text
 shared DOM shell
 → shared application store, command stack, history, search client, and backlink index
+→ bounded search-result policy pipeline
 → Japanese lifecycle actions and immutable state
 → canonical IndexedDB note/review APIs
 ```
 
 `japaneseApp.js` is a thin UI orchestration layer. It retrieves the active runtime instances created by `app.js`; it does not create a second note store, command stack, history, search worker, or backlink index. UI code never opens or mutates IndexedDB directly. All Japanese writes pass through `createJapaneseActions`.
+
+The search worker remains responsible only for text indexing and ranking. `searchClient` applies registered result policies after a worker query. Policies have unique bounded IDs, run in registration order, receive defensive result-array copies, and cannot replace `searchClient.query`. The Japanese workspace registers exactly one `JapaneseNoteFilter` policy for enrollment, date, and notebook-type filtering.
 
 ## Workspace switching
 
@@ -21,6 +24,7 @@ shared DOM shell
 - The Notes and 日本語 controls are native buttons inside a labelled navigation region and expose their selected state through `aria-pressed`.
 - Each workspace retains its own search query and last active note when switching.
 - The Japanese workspace reuses the existing virtualized list and editor. Search results are intersected with the validated enrolled-note ID set.
+- Registered Japanese filtering is workspace-aware and returns the worker result unchanged in the ordinary Notes workspace.
 - Switching workspaces never enrolls, tags, rewrites, archives, or deletes a note.
 - The ordinary Notes count continues to describe all canonical notes.
 
@@ -31,8 +35,9 @@ The Japanese workspace exposes additive filters for creation date and notebook t
 - Created from and Created to use native date inputs and form an inclusive range.
 - Date comparison uses each note's canonical `createdAt` timestamp converted to the browser's local calendar date.
 - Note type is derived from validated `studyReviews.notebookType` metadata and supports vocabulary, kanji, grammar, output, planner, or all types.
-- Date, type, and text search filters compose by intersection while preserving the search worker's result order.
-- Missing notes, invalid creation timestamps, and missing or invalid review metadata never gain an inferred match.
+- Date, type, enrollment, and text search filters compose by intersection while preserving the search worker's result order.
+- Missing notes, invalid creation timestamps, missing review metadata, invalid review metadata, and conflicting duplicate notebook-type metadata never gain an inferred match.
+- An inverted date range is invalid, marks both date controls with `aria-invalid`, exposes one live validation message, and returns no matches until corrected or cleared.
 - Clear filters resets only the date and type controls. It does not change the workspace search query.
 - Filter state is session-local and retained while switching workspaces. It is not persisted or exported.
 - The live filter status reports visible Japanese results against the total enrolled Japanese note count.
@@ -94,15 +99,17 @@ Browser regressions cover the ordinary Notes workspace after the Japanese UI is 
 - pin and archive commands;
 - JSON export;
 - recovery-reset cancellation;
-- save-triggered reload persistence.
+- save-triggered reload persistence;
+- Japanese filter isolation while switching between workspaces.
 
-The shared command palette retains its original API and accepts additive command providers. The static server allowlist exposes only the two declared root assets `japaneseApp.js` and `japanese.css`; repository-sensitive paths remain forbidden. Japanese filter logic is served through the existing bounded `/core/*.js` and `/ui/*.js` rules.
+The shared command palette retains its original API and accepts additive command providers. The static server allowlist exposes only the two declared root assets `japaneseApp.js` and `japanese.css`; repository-sensitive paths remain forbidden. Japanese filter and search-policy logic is served through the existing bounded `/core/*.js` and `/ui/*.js` rules.
 
 ## Accessibility and responsive behavior
 
 - Workspace controls, filter controls, quick-create controls, review actions, and ratings use native form elements and buttons.
 - The filter region, dashboard, Needs repair region, palette, and review dialog have explicit accessible names.
-- Filter result counts are exposed through one polite live region.
+- Filter result counts and range validation share one polite status region.
+- Invalid date controls expose `aria-invalid` without silently rewriting user input.
 - Focus enters the modal at Reveal or the first rating and returns to Start/Resume after close.
 - Clearing filters restores focus to the note-type control.
 - The native modal dialog prevents interaction with the background while open.
@@ -112,13 +119,14 @@ The shared command palette retains its original API and accepts additive command
 
 ## Performance and retained resources
 
-The filter UI adds three fixed input listeners, one clear listener, and one shared-store subscription. It adds no polling, background timer, cache, retry loop, worker, or unbounded collection.
+The filter UI adds two date-input listeners, one type-change listener, one clear listener, and one shared-store subscription. It adds no polling, background timer, cache, retry loop, worker, or unbounded collection.
 
-A note-array replacement re-derives the bounded Japanese slice using the lifecycle contract. Ordinary keystrokes do not replace the note array and therefore do not trigger full Japanese re-derivation. Japanese text search reuses the existing worker result, performs the enrolled-ID intersection, and then applies bounded date/type filtering while preserving order.
+The search-result pipeline retains at most 16 policies and copies only bounded search-ID arrays at policy boundaries. A note-array replacement re-derives the bounded Japanese slice using the lifecycle contract. Ordinary keystrokes do not replace the note array and therefore do not trigger full Japanese re-derivation. Japanese text search reuses the existing worker result and applies one O(ids + notes + reviews) Japanese policy while preserving order.
 
 ## Failure and recovery
 
-- Missing runtime instances or required filter controls fail initialization instead of constructing parallel state.
+- Missing runtime instances, an unavailable policy registration API, or missing required filter controls fail initialization instead of constructing parallel state.
+- Duplicate, malformed, excessive, or invalid-output search policies fail with bounded content-free errors.
 - Canonical storage failures remain owned by the lifecycle actions.
 - Derived search/backlink failures retain durable success and surface bounded degradation.
 - Invalid filter metadata is excluded rather than repaired or inferred.
@@ -130,11 +138,12 @@ A note-array replacement re-derives the bounded Japanese slice using the lifecyc
 Rollback is a one-PR revert of:
 
 - the workspace and filter markup and CSS;
-- the Japanese browser entrypoint and filter adapter;
-- the pure Japanese filter selector;
+- the Japanese browser entrypoint and filter controller;
+- the Japanese filter domain policy and pure selector;
+- the bounded search-result policy pipeline and search-client registration API;
 - active-runtime getters and their tests;
 - additive palette command providers;
 - static-server root-asset declarations;
-- browser regressions, filter unit coverage, and this document.
+- browser regressions, focused unit coverage, and this document.
 
 No schema downgrade, note rewrite, review deletion, or migration is required.
