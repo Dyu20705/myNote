@@ -46,6 +46,10 @@ export function filterJapaneseNoteIds(input = {}) {
     .map((review) => [review.noteId, review.notebookType]));
 
   return ids.filter((id) => {
+    const note = notesById.get(id);
+    if (!note) {
+      return false;
+    }
     if (notebookType !== "all" && notebookTypeById.get(id) !== notebookType) {
       return false;
     }
@@ -53,7 +57,7 @@ export function filterJapaneseNoteIds(input = {}) {
       return true;
     }
 
-    const noteDate = localDateFromIso(notesById.get(id)?.createdAt);
+    const noteDate = localDateFromIso(note.createdAt);
     if (!noteDate) {
       return false;
     }
