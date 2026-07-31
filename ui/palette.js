@@ -19,6 +19,17 @@ function providedCommands() {
   return commands;
 }
 
+function mergeCommands(baseCommands) {
+  const merged = new Map();
+  for (const command of baseCommands) {
+    merged.set(command.id, command);
+  }
+  for (const command of providedCommands()) {
+    merged.set(command.id, command);
+  }
+  return [...merged.values()];
+}
+
 export function createPalette({ root, input, list, onRun }) {
   let commands = [];
   let query = "";
@@ -49,7 +60,7 @@ export function createPalette({ root, input, list, onRun }) {
   }
 
   function open(nextCommands) {
-    commands = [...nextCommands, ...providedCommands()];
+    commands = mergeCommands(nextCommands);
     query = "";
     root.hidden = false;
     input.value = "";
