@@ -6,6 +6,12 @@ function createCoordinatorError() {
   return new TypeError("Invalid Japanese workspace coordinator dependencies");
 }
 
+function createUnavailableError() {
+  const error = new Error("Japanese study data is unavailable");
+  error.code = "STUDY_DATA_UNAVAILABLE";
+  return error;
+}
+
 function validateDependencies(options) {
   const actions = options?.actions;
   const noteWorkspace = options?.noteWorkspace;
@@ -51,6 +57,31 @@ function fallbackId(state, workspace) {
   return Array.isArray(state.notes) ? state.notes[0]?.id ?? null : null;
 }
 
+function degradedDashboard() {
+  return {
+    dueCount: 0,
+    newVocabulary: 0,
+    dueKanji: 0,
+    grammarTotal: 0,
+    outputStreak: 0,
+    plannerProgress: { completed: 0, total: 0 },
+    needsRepair: [],
+    needsRepairOmitted: 0,
+  };
+}
+
+function idleReviewSession() {
+  return {
+    status: "idle",
+    queue: [],
+    index: 0,
+    currentNoteId: null,
+    revealed: false,
+    message: null,
+    pendingRating: null,
+  };
+}
+
 export function createJapaneseWorkspaceCoordinator(options) {
   validateDependencies(options);
   const views = {
@@ -78,7 +109,10 @@ export function createJapaneseWorkspaceCoordinator(options) {
   }
 
   function synchronizeSlice(state) {
-    if (!initialized || synchronizing || state.notes === lastNotesReference) {
+    if (!initialized
+      || state.studyDataUnavailable
+      || synchronizing
+      || state.notes === lastNotesReference) {
       return;
     }
     lastNotesReference = state.notes;
@@ -107,6 +141,31 @@ export function createJapaneseWorkspaceCoordinator(options) {
     }
   }
 
+  function completeInitialization(state, previousQuery, previousActiveId) {
+    options.setState({ activeId: previousActiveId, query: previousQuery });
+    views.notes = { query: previousQuery, activeId: previousActiveId };
+    lastNotesReference = options.getState().notes;
+    initialized = true;
+    resolveReady();
+  }
+
+  function installUnavailableState(state) {
+    const previousActiveId = state.activeId ?? null;
+    const previousQuery = typeof state.query === "string" ? state.query : "";
+    options.setState({
+      workspace: workspaceOf(state),
+      studyDataUnavailable: true,
+      studyReviews: [],
+      japaneseNoteIds: [],
+      studyDashboard: degradedDashboard(),
+      studyStatus: [{ code: "study-data-unavailable", count: 1 }],
+      studyStatusOmitted: 0,
+      studyContext: options.getContext(),
+      reviewSession: idleReviewSession(),
+    });
+    completeInitialization(state, previousQuery, previousActiveId);
+  }
+
   async function initialize(state) {
     const previousActiveId = state.activeId ?? null;
     const previousQuery = typeof state.query === "string" ? state.query : "";
@@ -118,11 +177,8 @@ export function createJapaneseWorkspaceCoordinator(options) {
       reviews,
       ...context,
     });
-    options.setState({ activeId: previousActiveId, query: previousQuery });
-    views.notes = { query: previousQuery, activeId: previousActiveId };
-    lastNotesReference = options.getState().notes;
-    initialized = true;
-    resolveReady();
+    options.setState({ studyDataUnavailable: false });
+    completeInitialization(state, previousQuery, previousActiveId);
   }
 
   function beginInitialization(state) {
@@ -130,7 +186,13 @@ export function createJapaneseWorkspaceCoordinator(options) {
       return;
     }
     initializing = true;
-    initialize(state).catch(rejectReady).finally(() => {
+    initialize(state).catch((error) => {
+      if (error?.code === "INVALID_STUDY_REVIEW") {
+        installUnavailableState(state);
+        return;
+      }
+      rejectReady(error);
+    }).finally(() => {
       initializing = false;
     });
   }
@@ -169,6 +231,9 @@ export function createJapaneseWorkspaceCoordinator(options) {
 
   async function quickCreate(type) {
     await ready;
+    if (options.getState().studyDataUnavailable) {
+      throw createUnavailableError();
+    }
     const context = options.getContext();
     const note = await options.actions.createJapaneseNote(type, templateOptions(type, context), context);
     options.actions.chooseWorkspace("japanese");
