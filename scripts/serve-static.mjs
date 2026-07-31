@@ -11,7 +11,13 @@ const repositoryRoot = path.resolve(
   "..",
 );
 const canonicalRepositoryRoot = await realpath(repositoryRoot);
-const rootAssets = new Set(["/app.js", "/index.html", "/styles.css"]);
+const rootAssets = new Set([
+  "/app.js",
+  "/index.html",
+  "/japanese.css",
+  "/japaneseApp.js",
+  "/styles.css",
+]);
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
