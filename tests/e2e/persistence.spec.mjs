@@ -7,6 +7,7 @@ test("edited synthetic note survives a save-triggered reload", async ({ page }) 
   await page.goto("/");
   await expect(page.locator("#noteCount")).toHaveText("1 note");
   await page.locator("#newNoteButton").click();
+  await expect(page.locator("#contentInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
