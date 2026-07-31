@@ -59,7 +59,7 @@ export function createNoteWorkspaceController(options) {
       return true;
     }
 
-    await options.flush();
+    await options.flush({ reason: "select" });
     const current = options.getState();
     if (!noteExists(current, id)) {
       return false;
@@ -70,7 +70,10 @@ export function createNoteWorkspaceController(options) {
       dirty: false,
       recentIds: nextRecentIds(current, id),
     });
-    options.onRender(options.getState());
+    options.onRender(options.getState(), {
+      reason: "select",
+      activeChanged: true,
+    });
     return true;
   }
 
@@ -101,7 +104,7 @@ export function createNoteWorkspaceController(options) {
     const activeChanged = state.activeId !== activeId;
 
     if (activeChanged) {
-      await options.flush();
+      await options.flush({ reason: "refresh" });
       if (token !== refreshToken) {
         return {
           stale: true,
@@ -128,7 +131,10 @@ export function createNoteWorkspaceController(options) {
 
     options.setState(patch);
     const snapshot = options.getState();
-    options.onRender(snapshot);
+    options.onRender(snapshot, {
+      reason: "refresh",
+      activeChanged,
+    });
     return {
       stale: false,
       query: queryText,
