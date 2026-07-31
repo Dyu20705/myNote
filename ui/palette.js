@@ -1,3 +1,35 @@
+const commandProviders = new Set();
+
+export function registerPaletteCommands(provider) {
+  if (typeof provider !== "function") {
+    throw new TypeError("Palette command provider must be a function");
+  }
+  commandProviders.add(provider);
+  return () => commandProviders.delete(provider);
+}
+
+function providedCommands() {
+  const commands = [];
+  for (const provider of commandProviders) {
+    const next = provider();
+    if (Array.isArray(next)) {
+      commands.push(...next);
+    }
+  }
+  return commands;
+}
+
+function mergeCommands(baseCommands) {
+  const merged = new Map();
+  for (const command of baseCommands) {
+    merged.set(command.id, command);
+  }
+  for (const command of providedCommands()) {
+    merged.set(command.id, command);
+  }
+  return [...merged.values()];
+}
+
 export function createPalette({ root, input, list, onRun }) {
   let commands = [];
   let query = "";
@@ -28,7 +60,7 @@ export function createPalette({ root, input, list, onRun }) {
   }
 
   function open(nextCommands) {
-    commands = nextCommands;
+    commands = mergeCommands(nextCommands);
     query = "";
     root.hidden = false;
     input.value = "";

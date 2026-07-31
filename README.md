@@ -39,6 +39,10 @@ npm run test:e2e
 - Bounded undo/redo and patch history.
 - Markdown and JSON export.
 - Legacy localStorage migration to IndexedDB.
+- Notes and 日本語 workspace switching through one shared application runtime.
+- Six-card Japanese study dashboard with bounded repair diagnostics.
+- Five Japanese template actions in both the dashboard and command palette.
+- Reveal-first, keyboard-operable review sessions with durable ratings, close/resume, deterministic skips, and explicit retry state.
 - Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
 - Safe-mode local database reset.
 
@@ -49,6 +53,7 @@ npm run test:e2e
 - [Technical invariants](docs/INVARIANTS.md)
 - [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
 - [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
+- [Japanese study workspace interaction contract](docs/JAPANESE_STUDY_WORKSPACE.md)
 - [Governance](docs/GOVERNANCE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
@@ -58,17 +63,20 @@ npm run test:e2e
 ## Keyboard shortcuts
 
 - `Ctrl/Cmd+K`: open the command palette.
-- `Ctrl/Cmd+N`: create a note.
+- `Ctrl/Cmd+N`: create an ordinary note.
 - `Ctrl/Cmd+Z`: undo.
 - `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y`: redo.
 - `j` / `k`: select the next or previous note.
 - `gg` / `G`: select the first or last note.
+- Review dialog `1` / `2` / `3` / `4`: Again / Hard / Good / Easy after reveal.
+- Review dialog `Escape`: close without discarding queue position.
 
 ## Repository structure
 
-- `app.js`: bootstrap, orchestration, and action wiring.
+- `app.js`: ordinary Notes bootstrap, orchestration, and action wiring.
+- `japaneseApp.js`: thin Japanese workspace UI bridge into the shared runtime and lifecycle actions.
 - `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study state/action derivation.
-- `ui/`: rendering and interaction modules.
+- `ui/`: rendering and shared interaction modules.
 - `scripts/`: local verification and static-server utilities.
 - `tests/`: deterministic unit, integration, contract, and browser tests.
 - `docs/`: architecture, governance, safety, and operating constraints.

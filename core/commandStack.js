@@ -1,3 +1,9 @@
+let activeCommandStack = null;
+
+export function getActiveCommandStack() {
+  return activeCommandStack;
+}
+
 export function createCommandStack(limit = 300) {
   const undoStack = [];
   const redoStack = [];
@@ -49,11 +55,12 @@ export function createCommandStack(limit = 300) {
     return redoStack.length > 0;
   }
 
-  return {
+  activeCommandStack = {
     execute,
     undo,
     redo,
     canUndo,
     canRedo,
   };
+  return activeCommandStack;
 }

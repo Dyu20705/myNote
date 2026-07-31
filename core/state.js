@@ -1,3 +1,9 @@
+let activeStore = null;
+
+export function getActiveStore() {
+  return activeStore;
+}
+
 export function createStore(initialState) {
   let state = { ...initialState };
   const listeners = new Set();
@@ -20,5 +26,6 @@ export function createStore(initialState) {
     return () => listeners.delete(listener);
   }
 
-  return { getState, setState, subscribe };
+  activeStore = { getState, setState, subscribe };
+  return activeStore;
 }
