@@ -44,6 +44,8 @@ npm run test:e2e
 - Five Japanese template actions in both the dashboard and command palette.
 - Reveal-first, keyboard-operable review sessions with durable ratings, close/resume, deterministic skips, and explicit retry state.
 - Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
+- Additive schema-v2 compatibility that preserves existing schema-v1 note records and never enrolls them automatically.
+- Japanese note export with review scheduling metadata retained separately in `studyReviews`.
 - Safe-mode local database reset.
 
 ## Documentation
@@ -54,6 +56,7 @@ npm run test:e2e
 - [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
 - [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
 - [Japanese study workspace interaction contract](docs/JAPANESE_STUDY_WORKSPACE.md)
+- [Japanese workspace release gate](docs/JAPANESE_RELEASE_GATE.md)
 - [Governance](docs/GOVERNANCE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
