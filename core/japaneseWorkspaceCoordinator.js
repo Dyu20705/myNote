@@ -82,12 +82,22 @@ function idleReviewSession() {
   };
 }
 
+function viewOf(state) {
+  return {
+    query: typeof state?.query === "string" ? state.query : "",
+    activeId: typeof state?.activeId === "string" ? state.activeId : null,
+  };
+}
+
 export function createJapaneseWorkspaceCoordinator(options) {
   validateDependencies(options);
+  const initialState = options.getState();
   const views = {
     notes: { query: "", activeId: null },
     japanese: { query: "", activeId: null },
   };
+  let renderedWorkspace = workspaceOf(initialState);
+  views[renderedWorkspace] = viewOf(initialState);
   let initialized = false;
   let initializing = false;
   let destroyed = false;
@@ -100,12 +110,8 @@ export function createJapaneseWorkspaceCoordinator(options) {
     rejectReady = reject;
   });
 
-  function rememberView(state = options.getState()) {
-    const workspace = workspaceOf(state);
-    views[workspace] = {
-      query: typeof state.query === "string" ? state.query : "",
-      activeId: typeof state.activeId === "string" ? state.activeId : null,
-    };
+  function rememberView(state = options.getState(), workspace = renderedWorkspace) {
+    views[workspace] = viewOf(state);
   }
 
   function synchronizeSlice(state) {
@@ -141,19 +147,20 @@ export function createJapaneseWorkspaceCoordinator(options) {
     }
   }
 
-  function completeInitialization(state, previousQuery, previousActiveId) {
-    options.setState({ activeId: previousActiveId, query: previousQuery });
-    views.notes = { query: previousQuery, activeId: previousActiveId };
+  function completeInitialization(view) {
+    options.setState({ activeId: view.activeId, query: view.query });
+    renderedWorkspace = workspaceOf(options.getState());
+    views[renderedWorkspace] = { ...view };
     lastNotesReference = options.getState().notes;
     initialized = true;
     resolveReady();
   }
 
-  function installUnavailableState(state) {
-    const previousActiveId = state.activeId ?? null;
-    const previousQuery = typeof state.query === "string" ? state.query : "";
+  function installUnavailableState() {
+    const current = options.getState();
+    const view = viewOf(current);
     options.setState({
-      workspace: workspaceOf(state),
+      workspace: workspaceOf(current),
       studyDataUnavailable: true,
       studyReviews: [],
       japaneseNoteIds: [],
@@ -163,22 +170,22 @@ export function createJapaneseWorkspaceCoordinator(options) {
       studyContext: options.getContext(),
       reviewSession: idleReviewSession(),
     });
-    completeInitialization(state, previousQuery, previousActiveId);
+    completeInitialization(view);
   }
 
   async function initialize(state) {
-    const previousActiveId = state.activeId ?? null;
-    const previousQuery = typeof state.query === "string" ? state.query : "";
     const reviews = await options.loadReviews(state.db);
+    const current = options.getState();
+    const view = viewOf(current);
     const context = options.getContext();
     await options.actions.bootstrap({
-      db: state.db,
-      notes: state.notes,
+      db: current.db,
+      notes: current.notes,
       reviews,
       ...context,
     });
     options.setState({ studyDataUnavailable: false });
-    completeInitialization(state, previousQuery, previousActiveId);
+    completeInitialization(view);
   }
 
   function beginInitialization(state) {
@@ -188,7 +195,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     initializing = true;
     initialize(state).catch((error) => {
       if (error?.code === "INVALID_STUDY_REVIEW") {
-        installUnavailableState(state);
+        installUnavailableState();
         return;
       }
       rejectReady(error);
@@ -214,10 +221,13 @@ export function createJapaneseWorkspaceCoordinator(options) {
       reconcileActive: true,
       synchronizeEditor: intent.synchronizeEditor === true,
     });
-    views[workspace] = {
-      query: result.query,
-      activeId: result.activeId,
-    };
+    if (result.stale !== true) {
+      views[workspace] = {
+        query: result.query,
+        activeId: result.activeId,
+      };
+      renderedWorkspace = workspace;
+    }
     return result;
   }
 
@@ -226,7 +236,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
       throw createCoordinatorError();
     }
     await ready;
-    rememberView();
+    rememberView(options.getState(), renderedWorkspace);
     options.actions.chooseWorkspace(workspace);
     return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: true });
   }
@@ -248,7 +258,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     await ready;
     const state = options.getState();
     const workspace = workspaceOf(state);
-    rememberView(state);
+    rememberView(state, renderedWorkspace);
     await options.actions.deleteNote(noteId, options.getContext());
     return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: true });
   }
@@ -257,7 +267,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     await ready;
     const state = options.getState();
     const workspace = workspaceOf(state);
-    rememberView(state);
+    rememberView(state, renderedWorkspace);
     return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: false });
   }
 
