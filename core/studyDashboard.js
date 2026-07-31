@@ -76,24 +76,28 @@ function readDataProperty(object, key) {
 }
 
 function readNote(candidate) {
-  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)
-    || Object.getPrototypeOf(candidate) !== Object.prototype) {
+  try {
+    if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)
+      || Object.getPrototypeOf(candidate) !== Object.prototype) {
+      return null;
+    }
+
+    const id = readDataProperty(candidate, "id");
+    const title = readDataProperty(candidate, "title");
+    const content = readDataProperty(candidate, "content");
+    const archived = readDataProperty(candidate, "archived");
+
+    if (typeof id !== "string" || id.length === 0
+      || typeof title !== "string"
+      || typeof content !== "string"
+      || typeof archived !== "boolean") {
+      return null;
+    }
+
+    return { id, title, content, archived };
+  } catch {
     return null;
   }
-
-  const id = readDataProperty(candidate, "id");
-  const title = readDataProperty(candidate, "title");
-  const content = readDataProperty(candidate, "content");
-  const archived = readDataProperty(candidate, "archived");
-
-  if (typeof id !== "string" || id.length === 0
-    || typeof title !== "string"
-    || typeof content !== "string"
-    || typeof archived !== "boolean") {
-    return null;
-  }
-
-  return { id, title, content, archived };
 }
 
 function noteSortKey(note) {
