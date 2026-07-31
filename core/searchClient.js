@@ -1,3 +1,9 @@
+let activeSearchClient = null;
+
+export function getActiveSearchClient() {
+  return activeSearchClient;
+}
+
 export function createSearchClient() {
   const worker = new Worker(new URL("./search.worker.js", import.meta.url), { type: "module" });
   let sequence = 0;
@@ -25,7 +31,7 @@ export function createSearchClient() {
     });
   }
 
-  return {
+  activeSearchClient = {
     rebuild(notes) {
       return ask("rebuild", { notes });
     },
@@ -42,4 +48,5 @@ export function createSearchClient() {
       worker.terminate();
     },
   };
+  return activeSearchClient;
 }
