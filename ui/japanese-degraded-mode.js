@@ -1,23 +1,9 @@
 import { getActiveStore } from "../core/state.js";
-import { registerPaletteCommands } from "./palette.js";
 
-const store = getActiveStore();
 const notesButton = document.querySelector("#notesWorkspaceButton");
 const japaneseButton = document.querySelector("#japaneseWorkspaceButton");
 const searchInput = document.querySelector("#searchInput");
 const quickCreateButtons = [...document.querySelectorAll("[data-japanese-template]")];
-
-const disabledCreateCommands = [
-  ["vocabulary", "Create vocabulary note"],
-  ["kanji", "Create kanji note"],
-  ["grammar", "Create grammar note"],
-  ["output", "Create today’s output note"],
-  ["planner", "Create this week’s planner"],
-].map(([type, title]) => ({
-  id: `japanese-create-${type}`,
-  title,
-  run: () => false,
-}));
 
 let studyDataUnavailable = false;
 
@@ -51,6 +37,7 @@ function refreshWorkspaceList() {
 }
 
 function installDegradedState() {
+  const store = getActiveStore();
   if (!store || studyDataUnavailable) {
     return;
   }
@@ -71,8 +58,6 @@ function installDegradedState() {
   });
 }
 
-registerPaletteCommands(() => (studyDataUnavailable ? disabledCreateCommands : []));
-
 window.addEventListener("unhandledrejection", (event) => {
   if (event.reason?.code !== "INVALID_STUDY_REVIEW") {
     return;
@@ -82,6 +67,7 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 notesButton?.addEventListener("click", () => {
+  const store = getActiveStore();
   if (!studyDataUnavailable || !store) {
     return;
   }
@@ -90,6 +76,7 @@ notesButton?.addEventListener("click", () => {
 });
 
 japaneseButton?.addEventListener("click", () => {
+  const store = getActiveStore();
   if (!studyDataUnavailable || !store) {
     return;
   }
