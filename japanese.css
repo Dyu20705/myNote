@@ -50,6 +50,10 @@
   display: none;
 }
 
+.japanese-filters[aria-busy="true"] {
+  cursor: progress;
+}
+
 .japanese-filter-field {
   display: grid;
   gap: 6px;
@@ -69,6 +73,10 @@
   color-scheme: dark;
 }
 
+.japanese-filter-field input[aria-invalid="true"] {
+  border-color: var(--border-strong);
+}
+
 .japanese-filters button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -78,6 +86,10 @@
   grid-column: 1 / -1;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.japanese-filter-status[data-state="error"] {
+  color: var(--text);
 }
 
 .japanese-dashboard {
