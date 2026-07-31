@@ -9,7 +9,7 @@ const recommendedRules = Object.fromEntries(
 
 const browserGlobals = readonlyGlobals([
   "AbortController", "AbortSignal", "addEventListener", "alert", "atob", "Blob", "btoa", "cancelAnimationFrame",
-  "clearInterval", "clearTimeout", "confirm", "console", "crypto", "document", "DOMException", "Event",
+  "clearInterval", "clearTimeout", "confirm", "console", "crypto", "CSS", "document", "DOMException", "Event",
   "EventTarget", "fetch", "File", "FormData", "Headers", "history", "HTMLElement", "Image", "ImageData", "indexedDB",
   "IntersectionObserver", "KeyboardEvent", "localStorage", "location", "matchMedia", "MutationObserver",
   "navigator", "Node", "NodeList", "Notification", "performance", "queueMicrotask", "ReadableStream",
@@ -38,7 +38,7 @@ export default [
     rules: recommendedRules,
   },
   {
-    files: ["app.js", "core/**/*.js", "ui/**/*.js"],
+    files: ["app.js", "japaneseApp.js", "core/**/*.js", "ui/**/*.js"],
     ignores: ["core/search.worker.js"],
     languageOptions: { globals: browserGlobals },
   },
