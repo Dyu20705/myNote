@@ -2,6 +2,7 @@ import { getActiveBacklinkIndex } from "./core/backlinks.js";
 import { getActiveCommandStack } from "./core/commandStack.js";
 import { getActiveHistory } from "./core/history.js";
 import { createJapaneseActions } from "./core/japaneseActions.js";
+import { JapaneseNoteFilter } from "./core/japaneseFilters.js";
 import { advanceReviewSession, createJapaneseAppState } from "./core/japaneseState.js";
 import { getActiveSearchClient } from "./core/searchClient.js";
 import { getActiveStore } from "./core/state.js";
@@ -14,6 +15,7 @@ import {
   putStudyReviewToDb,
   restoreNoteWithReviewToDb,
 } from "./core/storage.js";
+import { createJapaneseFilterController } from "./ui/japanese-filters.js";
 import { registerPaletteCommands } from "./ui/palette.js";
 
 const stylesheet = document.createElement("link");
@@ -34,6 +36,12 @@ if (!store || !commandStack || !history || !searchClient || !backlinkIndex) {
 const elements = {
   notesButton: document.querySelector("#notesWorkspaceButton"),
   japaneseButton: document.querySelector("#japaneseWorkspaceButton"),
+  filtersRoot: document.querySelector("#japaneseFilters"),
+  filterDateFrom: document.querySelector("#japaneseDateFrom"),
+  filterDateTo: document.querySelector("#japaneseDateTo"),
+  filterNotebookType: document.querySelector("#japaneseNoteType"),
+  clearFilters: document.querySelector("#clearJapaneseFilters"),
+  filterStatus: document.querySelector("#japaneseFilterStatus"),
   dashboard: document.querySelector("#japaneseDashboard"),
   dueCount: document.querySelector("#japaneseDueCount"),
   newVocabulary: document.querySelector("#japaneseNewVocabulary"),
@@ -151,16 +159,8 @@ const actions = createJapaneseActions({
   history,
 });
 
-const originalSearchQuery = searchClient.query.bind(searchClient);
-searchClient.query = async (queryText) => {
-  const ids = await originalSearchQuery(queryText);
-  const state = store.getState();
-  if (state.workspace !== "japanese") {
-    return ids;
-  }
-  const allowed = new Set(state.japaneseNoteIds || []);
-  return ids.filter((id) => allowed.has(id));
-};
+const japaneseNoteFilter = new JapaneseNoteFilter({ getState: store.getState });
+searchClient.registerResultPolicy(japaneseNoteFilter);
 
 function templateOptions(type, context) {
   if (type === "output") {
@@ -215,6 +215,23 @@ async function refreshExistingWorkspace(preferredId = null) {
   elements.activeNoteLabel.textContent = state.workspace === "japanese" ? "No Japanese notes" : "No notes";
   elements.backlinksList.replaceChildren();
 }
+
+createJapaneseFilterController({
+  elements: {
+    root: elements.filtersRoot,
+    dateFrom: elements.filterDateFrom,
+    dateTo: elements.filterDateTo,
+    notebookType: elements.filterNotebookType,
+    clear: elements.clearFilters,
+    status: elements.filterStatus,
+  },
+  filter: japaneseNoteFilter,
+  getState: store.getState,
+  subscribe: store.subscribe,
+  requestRefresh() {
+    return refreshExistingWorkspace(store.getState().activeId);
+  },
+});
 
 function repairEntries(state) {
   const entries = new Map();
