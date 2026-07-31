@@ -205,12 +205,14 @@ export function createJapaneseWorkspaceCoordinator(options) {
   const unsubscribe = options.subscribe(handleState);
   beginInitialization(options.getState());
 
-  async function refreshWorkspace(workspace, view = views[workspace]) {
+  async function refreshWorkspace(workspace, view = views[workspace], intent = {}) {
     const state = options.getState();
     const result = await options.noteWorkspace.refresh({
       query: typeof view.query === "string" ? view.query : "",
       preferredId: view.activeId || fallbackId(state, workspace),
       emptyLabel: emptyLabel(workspace),
+      reconcileActive: true,
+      synchronizeEditor: intent.synchronizeEditor === true,
     });
     views[workspace] = {
       query: result.query,
@@ -226,7 +228,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     await ready;
     rememberView();
     options.actions.chooseWorkspace(workspace);
-    return refreshWorkspace(workspace);
+    return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: true });
   }
 
   async function quickCreate(type) {
@@ -238,7 +240,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     const note = await options.actions.createJapaneseNote(type, templateOptions(type, context), context);
     options.actions.chooseWorkspace("japanese");
     views.japanese = { query: "", activeId: note.id };
-    await refreshWorkspace("japanese", views.japanese);
+    await refreshWorkspace("japanese", views.japanese, { synchronizeEditor: true });
     return note;
   }
 
@@ -248,7 +250,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     const workspace = workspaceOf(state);
     rememberView(state);
     await options.actions.deleteNote(noteId, options.getContext());
-    return refreshWorkspace(workspace, views[workspace]);
+    return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: true });
   }
 
   async function refreshCurrent() {
@@ -256,7 +258,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
     const state = options.getState();
     const workspace = workspaceOf(state);
     rememberView(state);
-    return refreshWorkspace(workspace, views[workspace]);
+    return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: false });
   }
 
   return {
