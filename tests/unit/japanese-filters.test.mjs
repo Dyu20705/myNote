@@ -1,11 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterJapaneseNoteIds } from "../../core/japaneseFilters.js";
+import {
+  JAPANESE_FILTER_ERRORS,
+  JapaneseNoteFilter,
+  filterJapaneseNoteIds,
+} from "../../core/japaneseFilters.js";
+
+function localIso(year, month, day) {
+  return new Date(year, month - 1, day, 12).toISOString();
+}
 
 const notes = [
-  { id: "vocab", createdAt: "2026-07-29T04:00:00.000Z" },
-  { id: "kanji", createdAt: "2026-07-30T04:00:00.000Z" },
-  { id: "grammar", createdAt: "2026-07-31T04:00:00.000Z" },
+  { id: "vocab", createdAt: localIso(2026, 7, 29) },
+  { id: "kanji", createdAt: localIso(2026, 7, 30) },
+  { id: "grammar", createdAt: localIso(2026, 7, 31) },
+  { id: "ordinary", createdAt: localIso(2026, 7, 31) },
   { id: "broken", createdAt: "not-a-date" },
 ];
 
@@ -16,43 +25,78 @@ const reviews = [
   { noteId: "ghost", notebookType: "grammar" },
 ];
 
-test("returns search order unchanged when filters are empty", () => {
-  const ids = ["grammar", "vocab", "kanji"];
+const enrolledIds = ["vocab", "kanji", "grammar", "broken", "missing"];
+
+test("returns search order unchanged when no boundary or filters are supplied", () => {
+  const ids = ["grammar", "ordinary", "vocab"];
   assert.deepEqual(filterJapaneseNoteIds({ ids, notes, reviews, filters: {} }), ids);
 });
 
-test("filters by an inclusive created-date range", () => {
+test("enrollment boundary excludes ordinary and missing notes even with empty filters", () => {
+  assert.deepEqual(filterJapaneseNoteIds({
+    ids: ["ordinary", "grammar", "missing", "vocab"],
+    notes,
+    reviews,
+    enrolledIds,
+    filters: {},
+  }), ["grammar", "vocab"]);
+});
+
+test("filters by inclusive local created-date range and notebook type", () => {
   assert.deepEqual(filterJapaneseNoteIds({
     ids: ["grammar", "kanji", "vocab", "broken"],
     notes,
     reviews,
-    filters: { fromDate: "2026-07-30", toDate: "2026-07-31", notebookType: "all" },
+    enrolledIds,
+    filters: { fromDate: "2026-07-30", toDate: "2026-07-31", notebookType: "grammar" },
+  }), ["grammar"]);
+});
+
+test("invalid and inverted dates cannot create inferred matches", () => {
+  assert.deepEqual(filterJapaneseNoteIds({
+    ids: ["grammar", "kanji"],
+    notes,
+    reviews,
+    enrolledIds,
+    filters: { fromDate: "2026-02-30", toDate: "2026-07-31" },
   }), ["grammar", "kanji"]);
-});
-
-test("filters by notebook type", () => {
   assert.deepEqual(filterJapaneseNoteIds({
-    ids: ["grammar", "kanji", "vocab"],
+    ids: ["grammar", "kanji"],
     notes,
     reviews,
-    filters: { notebookType: "kanji" },
-  }), ["kanji"]);
+    enrolledIds,
+    filters: { fromDate: "2026-08-01", toDate: "2026-07-31" },
+  }), []);
 });
 
-test("combines date and notebook type without inventing missing metadata", () => {
+test("conflicting duplicate review metadata is excluded from type matches", () => {
   assert.deepEqual(filterJapaneseNoteIds({
-    ids: ["grammar", "kanji", "vocab", "ghost", "missing"],
+    ids: ["grammar"],
     notes,
-    reviews,
-    filters: { fromDate: "2026-07-30", toDate: "", notebookType: "grammar" },
-  }), ["grammar"]);
-});
-
-test("type-only filtering excludes orphan review IDs", () => {
-  assert.deepEqual(filterJapaneseNoteIds({
-    ids: ["ghost", "grammar"],
-    notes,
-    reviews,
+    reviews: [...reviews, { noteId: "grammar", notebookType: "kanji" }],
+    enrolledIds,
     filters: { notebookType: "grammar" },
-  }), ["grammar"]);
+  }), []);
+});
+
+test("JapaneseNoteFilter composes workspace enrollment and mutable filter state", () => {
+  let state = {
+    workspace: "notes",
+    notes,
+    studyReviews: reviews,
+    japaneseNoteIds: enrolledIds,
+  };
+  const filter = new JapaneseNoteFilter({ getState: () => state });
+  assert.deepEqual(filter.apply(["ordinary", "grammar"]), ["ordinary", "grammar"]);
+
+  state = { ...state, workspace: "japanese" };
+  assert.deepEqual(filter.apply(["ordinary", "grammar", "vocab"]), ["grammar", "vocab"]);
+  filter.update({ notebookType: "grammar" });
+  assert.equal(filter.isActive(), true);
+  assert.deepEqual(filter.apply(["vocab", "grammar"]), ["grammar"]);
+
+  filter.update({ fromDate: "2026-08-01", toDate: "2026-07-31" });
+  assert.equal(filter.getValidationError(), JAPANESE_FILTER_ERRORS.INVALID_DATE_RANGE);
+  assert.deepEqual(filter.apply(["grammar"]), []);
+  assert.deepEqual(filter.reset(), { fromDate: "", toDate: "", notebookType: "all" });
 });
