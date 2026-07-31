@@ -1,0 +1,285 @@
+import { createJapaneseAppState } from "./japaneseState.js";
+
+const WORKSPACES = Object.freeze(["notes", "japanese"]);
+
+function createCoordinatorError() {
+  return new TypeError("Invalid Japanese workspace coordinator dependencies");
+}
+
+function createUnavailableError() {
+  const error = new Error("Japanese study data is unavailable");
+  error.code = "STUDY_DATA_UNAVAILABLE";
+  return error;
+}
+
+function validateDependencies(options) {
+  const actions = options?.actions;
+  const noteWorkspace = options?.noteWorkspace;
+  if (!options
+    || typeof options.getState !== "function"
+    || typeof options.setState !== "function"
+    || typeof options.subscribe !== "function"
+    || !actions
+    || typeof actions.bootstrap !== "function"
+    || typeof actions.chooseWorkspace !== "function"
+    || typeof actions.createJapaneseNote !== "function"
+    || typeof actions.deleteNote !== "function"
+    || !noteWorkspace
+    || typeof noteWorkspace.refresh !== "function"
+    || typeof options.loadReviews !== "function"
+    || typeof options.getContext !== "function") {
+    throw createCoordinatorError();
+  }
+}
+
+function workspaceOf(state) {
+  return state?.workspace === "japanese" ? "japanese" : "notes";
+}
+
+function emptyLabel(workspace) {
+  return workspace === "japanese" ? "No Japanese notes" : "No notes";
+}
+
+function templateOptions(type, context) {
+  if (type === "output") {
+    return { localDate: context.localDate };
+  }
+  if (type === "planner") {
+    return { isoWeek: context.isoWeek };
+  }
+  return {};
+}
+
+function fallbackId(state, workspace) {
+  if (workspace === "japanese") {
+    return Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds[0] ?? null : null;
+  }
+  return Array.isArray(state.notes) ? state.notes[0]?.id ?? null : null;
+}
+
+function degradedDashboard() {
+  return {
+    dueCount: 0,
+    newVocabulary: 0,
+    dueKanji: 0,
+    grammarTotal: 0,
+    outputStreak: 0,
+    plannerProgress: { completed: 0, total: 0 },
+    needsRepair: [],
+    needsRepairOmitted: 0,
+  };
+}
+
+function idleReviewSession() {
+  return {
+    status: "idle",
+    queue: [],
+    index: 0,
+    currentNoteId: null,
+    revealed: false,
+    message: null,
+    pendingRating: null,
+  };
+}
+
+function viewOf(state) {
+  return {
+    query: typeof state?.query === "string" ? state.query : "",
+    activeId: typeof state?.activeId === "string" ? state.activeId : null,
+  };
+}
+
+export function createJapaneseWorkspaceCoordinator(options) {
+  validateDependencies(options);
+  const initialState = options.getState();
+  const views = {
+    notes: { query: "", activeId: null },
+    japanese: { query: "", activeId: null },
+  };
+  let renderedWorkspace = workspaceOf(initialState);
+  views[renderedWorkspace] = viewOf(initialState);
+  let initialized = false;
+  let initializing = false;
+  let destroyed = false;
+  let lastNotesReference = null;
+  let synchronizing = false;
+  let resolveReady;
+  let rejectReady;
+  const ready = new Promise((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+
+  function rememberView(state = options.getState(), workspace = renderedWorkspace) {
+    views[workspace] = viewOf(state);
+  }
+
+  function synchronizeSlice(state) {
+    if (!initialized
+      || state.studyDataUnavailable
+      || synchronizing
+      || state.notes === lastNotesReference) {
+      return;
+    }
+    lastNotesReference = state.notes;
+    synchronizing = true;
+    try {
+      const context = state.studyContext || options.getContext();
+      const slice = createJapaneseAppState({
+        notes: state.notes,
+        reviews: state.studyReviews || [],
+        nowIso: context.nowIso,
+        localDate: context.localDate,
+        isoWeek: context.isoWeek,
+      });
+      options.setState({
+        studyReviews: slice.studyReviews,
+        japaneseNoteIds: slice.japaneseNoteIds,
+        studyDashboard: slice.studyDashboard,
+        studyStatus: slice.studyStatus,
+        studyStatusOmitted: slice.studyStatusOmitted,
+        studyContext: slice.studyContext,
+        workspace: state.workspace,
+        reviewSession: state.reviewSession,
+      });
+    } finally {
+      synchronizing = false;
+    }
+  }
+
+  function completeInitialization(view) {
+    options.setState({ activeId: view.activeId, query: view.query });
+    renderedWorkspace = workspaceOf(options.getState());
+    views[renderedWorkspace] = { ...view };
+    lastNotesReference = options.getState().notes;
+    initialized = true;
+    resolveReady();
+  }
+
+  function installUnavailableState() {
+    const current = options.getState();
+    const view = viewOf(current);
+    options.setState({
+      workspace: workspaceOf(current),
+      studyDataUnavailable: true,
+      studyReviews: [],
+      japaneseNoteIds: [],
+      studyDashboard: degradedDashboard(),
+      studyStatus: [{ code: "study-data-unavailable", count: 1 }],
+      studyStatusOmitted: 0,
+      studyContext: options.getContext(),
+      reviewSession: idleReviewSession(),
+    });
+    completeInitialization(view);
+  }
+
+  async function initialize(state) {
+    const reviews = await options.loadReviews(state.db);
+    const current = options.getState();
+    const view = viewOf(current);
+    const context = options.getContext();
+    await options.actions.bootstrap({
+      db: current.db,
+      notes: current.notes,
+      reviews,
+      ...context,
+    });
+    options.setState({ studyDataUnavailable: false });
+    completeInitialization(view);
+  }
+
+  function beginInitialization(state) {
+    if (destroyed || initialized || initializing || !state?.db || !Array.isArray(state.notes)) {
+      return;
+    }
+    initializing = true;
+    initialize(state).catch((error) => {
+      if (error?.code === "INVALID_STUDY_REVIEW") {
+        installUnavailableState();
+        return;
+      }
+      rejectReady(error);
+    }).finally(() => {
+      initializing = false;
+    });
+  }
+
+  function handleState(state) {
+    beginInitialization(state);
+    synchronizeSlice(state);
+  }
+
+  const unsubscribe = options.subscribe(handleState);
+  beginInitialization(options.getState());
+
+  async function refreshWorkspace(workspace, view = views[workspace], intent = {}) {
+    const state = options.getState();
+    const result = await options.noteWorkspace.refresh({
+      query: typeof view.query === "string" ? view.query : "",
+      preferredId: view.activeId || fallbackId(state, workspace),
+      emptyLabel: emptyLabel(workspace),
+      reconcileActive: true,
+      synchronizeEditor: intent.synchronizeEditor === true,
+    });
+    if (result.stale !== true) {
+      views[workspace] = {
+        query: result.query,
+        activeId: result.activeId,
+      };
+      renderedWorkspace = workspace;
+    }
+    return result;
+  }
+
+  async function switchWorkspace(workspace) {
+    if (!WORKSPACES.includes(workspace)) {
+      throw createCoordinatorError();
+    }
+    await ready;
+    rememberView(options.getState(), renderedWorkspace);
+    options.actions.chooseWorkspace(workspace);
+    return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: true });
+  }
+
+  async function quickCreate(type) {
+    await ready;
+    if (options.getState().studyDataUnavailable) {
+      throw createUnavailableError();
+    }
+    const context = options.getContext();
+    const note = await options.actions.createJapaneseNote(type, templateOptions(type, context), context);
+    options.actions.chooseWorkspace("japanese");
+    views.japanese = { query: "", activeId: note.id };
+    await refreshWorkspace("japanese", views.japanese, { synchronizeEditor: true });
+    return note;
+  }
+
+  async function deleteNote(noteId) {
+    await ready;
+    const state = options.getState();
+    const workspace = workspaceOf(state);
+    rememberView(state, renderedWorkspace);
+    await options.actions.deleteNote(noteId, options.getContext());
+    return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: true });
+  }
+
+  async function refreshCurrent() {
+    await ready;
+    const state = options.getState();
+    const workspace = workspaceOf(state);
+    rememberView(state, renderedWorkspace);
+    return refreshWorkspace(workspace, views[workspace], { synchronizeEditor: false });
+  }
+
+  return {
+    ready,
+    switchWorkspace,
+    quickCreate,
+    deleteNote,
+    refreshCurrent,
+    destroy() {
+      destroyed = true;
+      unsubscribe();
+    },
+  };
+}

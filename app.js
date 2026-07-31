@@ -3,6 +3,7 @@ import { createBacklinkIndex } from "./core/backlinks.js";
 import { createCommandStack } from "./core/commandStack.js";
 import { createHistory } from "./core/history.js";
 import { createNoteLifecycle } from "./core/noteLifecycle.js";
+import { createNoteWorkspaceController } from "./core/noteWorkspaceController.js";
 import {
   createEmptyNote,
   normalizeNote,
@@ -13,6 +14,7 @@ import {
   extractWikiLinks,
   hashText,
 } from "./core/model.js";
+import { applyNotePatch, createNotePatch, invertNotePatch } from "./core/notePatch.js";
 import { createSearchClient } from "./core/searchClient.js";
 import { createStore } from "./core/state.js";
 import {
@@ -23,9 +25,9 @@ import {
   putNoteToDb,
   resetDatabase,
 } from "./core/storage.js";
+import { createJapaneseApp } from "./japaneseApp.js";
 import { createListView } from "./ui/list.js";
 import { createPalette } from "./ui/palette.js";
-import { applyNotePatch, createNotePatch, invertNotePatch } from "./core/notePatch.js";
 
 const AUTOSAVE_DEBOUNCE = 350;
 const DOUBLE_G_TIMEOUT = 450;
@@ -55,6 +57,7 @@ const store = createStore({
   query: "",
   dirty: false,
   saveMessage: "Ready",
+  emptyLabel: "Ready",
   backlinksMap: new Map(),
   saveRevision: 0,
   lastGAt: 0,
@@ -72,6 +75,9 @@ const history = createHistory();
 const commandStack = createCommandStack();
 const searchClient = createSearchClient();
 const backlinkIndex = createBacklinkIndex();
+let noteWorkspace = null;
+let enrolledDeleteHandler = null;
+let workspaceFlushDepth = 0;
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat("en", {
@@ -122,7 +128,7 @@ function renderTopline() {
   const state = store.getState();
   const count = state.notes.length;
   els.noteCount.textContent = `${count} note${count === 1 ? "" : "s"}`;
-  els.activeNoteLabel.textContent = activeNote(state) ? "Editing" : "Ready";
+  els.activeNoteLabel.textContent = activeNote(state) ? "Editing" : state.emptyLabel || "Ready";
   els.saveState.textContent = state.dirty ? "Unsaved changes" : state.saveMessage;
 }
 
@@ -136,7 +142,6 @@ function renderBacklinks() {
   const state = store.getState();
   const current = activeNote(state);
   els.backlinksList.replaceChildren();
-
   if (!current) {
     return;
   }
@@ -167,36 +172,6 @@ function renderBacklinks() {
   }
 }
 
-async function deleteActiveNote() {
-  await autosave.flush();
-  const note = activeNote();
-  if (!note) {
-    return;
-  }
-
-  const state = store.getState();
-  const nextNote = state.notes.find((n) => n.id !== note.id);
-  const preferredActiveId = nextNote?.id ?? null;
-  const revision = bumpSaveRevision();
-
-  await commandStack.execute({
-    do: async () => {
-      await applyRemoveNote(note.id, {
-        preferredActiveId,
-        revision,
-        historyOp: { op: "delete", noteId: note.id, version: note.version },
-      });
-    },
-    undo: async () => {
-      await applyUpsertNote(note, {
-        activeId: note.id,
-        revision: bumpSaveRevision(),
-        historyOp: { op: "undo-delete", noteId: note.id, version: note.version },
-      });
-    },
-  });
-}
-
 const listView = createListView({
   container: els.noteList,
   onSelect(id) {
@@ -222,27 +197,48 @@ function renderList() {
   updateMetrics({ renderMs: performance.now() - startedAt });
 }
 
+function synchronizeSearchInput() {
+  const query = store.getState().query;
+  if (els.searchInput.value !== query) {
+    els.searchInput.value = query;
+  }
+}
+
 function renderAll() {
+  synchronizeSearchInput();
   renderTopline();
   renderEditor();
   renderList();
   renderBacklinks();
 }
 
-let latestSearchToken = 0;
-
-async function refreshSearch() {
-  const token = ++latestSearchToken;
-  const state = store.getState();
-  const startedAt = performance.now();
-  const ids = await searchClient.query(state.query);
-  const elapsed = performance.now() - startedAt;
-  updateMetrics({ searchMs: elapsed, workerMs: elapsed });
-  if (token !== latestSearchToken) {
-    return;
-  }
-  store.setState({ filteredIds: ids });
+function renderWorkspace(_snapshot, context = {}) {
+  synchronizeSearchInput();
+  renderTopline();
   renderList();
+  if (context.activeChanged) {
+    renderEditor();
+    renderBacklinks();
+  }
+}
+
+async function refreshSearch(options = {}) {
+  if (options.source === "derived" && workspaceFlushDepth > 0) {
+    const state = store.getState();
+    return {
+      stale: true,
+      query: state.query,
+      ids: [...state.filteredIds],
+      activeId: state.activeId,
+    };
+  }
+
+  const state = store.getState();
+  return noteWorkspace.refresh({
+    query: Object.hasOwn(options, "query") ? options.query : state.query,
+    preferredId: Object.hasOwn(options, "preferredId") ? options.preferredId : state.activeId,
+    emptyLabel: options.emptyLabel || state.emptyLabel || "Ready",
+  });
 }
 
 function readEditorDraft() {
@@ -255,7 +251,6 @@ function readEditorDraft() {
 function mergeDraftIntoNote(note, draft) {
   const tags = [...new Set([...note.tags, ...extractInlineTags(draft.content)])];
   const links = extractWikiLinks(draft.content);
-
   return normalizeNote({
     ...note,
     ...draft,
@@ -275,7 +270,6 @@ function upsertNoteInMemory(note, activeId = note.id, options = {}) {
   const notes = existing
     ? [note, ...state.notes.filter((item) => item.id !== note.id)].sort(sortByUpdatedAtDesc)
     : [note, ...state.notes].sort(sortByUpdatedAtDesc);
-
   const recentIds = [activeId, ...state.recentIds.filter((item) => item !== activeId)].slice(0, 20);
   store.setState({
     notes,
@@ -296,13 +290,15 @@ function upsertNoteInMemory(note, activeId = note.id, options = {}) {
 function removeNoteInMemory(id, preferredActiveId = null) {
   const state = store.getState();
   const notes = state.notes.filter((note) => note.id !== id).sort(sortByUpdatedAtDesc);
-  const nextActiveId =
-    preferredActiveId && notes.find((note) => note.id === preferredActiveId)
-      ? preferredActiveId
-      : notes[0]?.id ?? null;
-  const recentIds = state.recentIds.filter((item) => item !== id);
-
-  store.setState({ notes, activeId: nextActiveId, recentIds, dirty: false });
+  const nextActiveId = preferredActiveId && notes.some((note) => note.id === preferredActiveId)
+    ? preferredActiveId
+    : notes[0]?.id ?? null;
+  store.setState({
+    notes,
+    activeId: nextActiveId,
+    recentIds: state.recentIds.filter((item) => item !== id),
+    dirty: false,
+  });
   renderAll();
 }
 
@@ -314,8 +310,8 @@ const noteLifecycle = createNoteLifecycle({
     return deleteNoteFromDb(store.getState().db, id);
   },
   commitUpsert(note, context) {
-    const preserveEditorDraft =
-      context.revision !== null && store.getState().saveRevision !== context.revision;
+    const preserveEditorDraft = context.revision !== null
+      && store.getState().saveRevision !== context.revision;
     upsertNoteInMemory(note, context.activeId, { preserveEditorDraft });
   },
   commitRemove(id, context) {
@@ -326,14 +322,14 @@ const noteLifecycle = createNoteLifecycle({
     setBacklinksFromIndex();
     renderBacklinks();
     await searchClient.upsert(note);
-    await refreshSearch();
+    await refreshSearch({ source: "derived" });
   },
   async updateDerivedRemove(id) {
     backlinkIndex.remove(id);
     setBacklinksFromIndex();
     renderBacklinks();
     await searchClient.remove(id);
-    await refreshSearch();
+    await refreshSearch({ source: "derived" });
   },
   onCanonicalFailure() {
     store.setState({ saveMessage: "Storage unavailable" });
@@ -417,7 +413,6 @@ async function saveCurrentNote() {
   const patch = createNotePatch(note, next);
   const inversePatch = invertNotePatch(patch);
   const revision = state.saveRevision;
-
   await commandStack.execute({
     do: async () => {
       const current = store.getState().notes.find((item) => item.id === note.id);
@@ -447,7 +442,9 @@ async function saveCurrentNote() {
 
   if (next.version % 10 === 0) {
     const notes = store.getState().notes;
-    history.snapshot({ notes: notes.map((item) => ({ id: item.id, version: item.version, updatedAt: item.updatedAt })) });
+    history.snapshot({
+      notes: notes.map((item) => ({ id: item.id, version: item.version, updatedAt: item.updatedAt })),
+    });
   }
 }
 
@@ -456,9 +453,30 @@ const autosave = createAutosave({
   onSave: saveCurrentNote,
 });
 
+async function flushWorkspace() {
+  const canonicalChanged = store.getState().dirty;
+  workspaceFlushDepth += 1;
+  try {
+    await autosave.flush();
+    return canonicalChanged;
+  } finally {
+    workspaceFlushDepth -= 1;
+  }
+}
+
+noteWorkspace = createNoteWorkspaceController({
+  getState: store.getState,
+  setState: store.setState,
+  query: searchClient.query,
+  flush: flushWorkspace,
+  onSearchMetrics(elapsed) {
+    updateMetrics({ searchMs: elapsed, workerMs: elapsed });
+  },
+  onRender: renderWorkspace,
+});
+
 async function createNote(seed = {}) {
   await autosave.flush();
-
   const note = createEmptyNote(seed);
   const state = store.getState();
   const previousQuery = state.query;
@@ -468,7 +486,6 @@ async function createNote(seed = {}) {
   await commandStack.execute({
     do: async () => {
       store.setState({ query: "" });
-      els.searchInput.value = "";
       await applyUpsertNote(note, {
         activeId: note.id,
         revision,
@@ -478,7 +495,6 @@ async function createNote(seed = {}) {
     },
     undo: async () => {
       store.setState({ query: previousQuery });
-      els.searchInput.value = previousQuery;
       await applyRemoveNote(note.id, {
         preferredActiveId: previousActiveId,
         revision: bumpSaveRevision(),
@@ -488,38 +504,48 @@ async function createNote(seed = {}) {
   });
 }
 
-async function setActiveNote(id) {
-  const state = store.getState();
-  if (state.activeId === id) {
-    return;
-  }
-
+async function deleteActiveNote() {
   await autosave.flush();
-
-  const recent = [id, ...state.recentIds.filter((item) => item !== id)].slice(0, 20);
-  store.setState({ activeId: id, dirty: false, recentIds: recent });
-  renderAll();
-}
-
-async function moveSelection(step) {
-  const state = store.getState();
-  if (state.filteredIds.length === 0) {
+  const note = activeNote();
+  if (!note) {
+    return;
+  }
+  if (enrolledDeleteHandler && await enrolledDeleteHandler(note.id)) {
     return;
   }
 
-  const current = state.filteredIds.indexOf(state.activeId);
-  const next = current === -1 ? 0 : Math.min(Math.max(current + step, 0), state.filteredIds.length - 1);
-  await setActiveNote(state.filteredIds[next]);
+  const state = store.getState();
+  const nextNote = state.notes.find((candidate) => candidate.id !== note.id);
+  const preferredActiveId = nextNote?.id ?? null;
+  const revision = bumpSaveRevision();
+  await commandStack.execute({
+    do: async () => {
+      await applyRemoveNote(note.id, {
+        preferredActiveId,
+        revision,
+        historyOp: { op: "delete", noteId: note.id, version: note.version },
+      });
+    },
+    undo: async () => {
+      await applyUpsertNote(note, {
+        activeId: note.id,
+        revision: bumpSaveRevision(),
+        historyOp: { op: "undo-delete", noteId: note.id, version: note.version },
+      });
+    },
+  });
 }
 
-async function jumpBoundary(toBottom = false) {
-  const state = store.getState();
-  if (state.filteredIds.length === 0) {
-    return;
-  }
+function setActiveNote(id) {
+  return noteWorkspace.select(id);
+}
 
-  const id = toBottom ? state.filteredIds[state.filteredIds.length - 1] : state.filteredIds[0];
-  await setActiveNote(id);
+function moveSelection(step) {
+  return noteWorkspace.moveSelection(step);
+}
+
+function jumpBoundary(toBottom = false) {
+  return noteWorkspace.jumpBoundary(toBottom);
 }
 
 function insertCodeBlock() {
@@ -527,7 +553,6 @@ function insertCodeBlock() {
   const before = field.value.slice(0, field.selectionStart);
   const after = field.value.slice(field.selectionEnd);
   const snippet = "\n```txt\n\n```\n";
-
   field.value = `${before}${snippet}${after}`;
   field.selectionStart = field.selectionEnd = before.length + 8;
   field.focus();
@@ -544,8 +569,9 @@ function triggerDownload(blob, filename) {
 }
 
 function exportJson() {
-  const state = store.getState();
-  const blob = new Blob([JSON.stringify(state.notes, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(store.getState().notes, null, 2)], {
+    type: "application/json",
+  });
   triggerDownload(blob, "myNote-export.json");
 }
 
@@ -554,7 +580,6 @@ async function resetLocalData() {
   if (!shouldReset) {
     return;
   }
-
   try {
     await resetDatabase();
     window.location.reload();
@@ -565,21 +590,18 @@ async function resetLocalData() {
 }
 
 function exportMarkdown() {
-  const state = store.getState();
-  const output = state.notes
+  const output = store.getState().notes
     .map((note) => {
       const tagLine = note.tags.length ? `\nTags: ${note.tags.map((tag) => `#${tag}`).join(" ")}` : "";
       return `# ${note.title}\n\nUpdated: ${note.updatedAt}${tagLine}\n\n${note.content}`;
     })
     .join("\n\n---\n\n");
-  const blob = new Blob([output], { type: "text/markdown" });
-  triggerDownload(blob, "myNote-export.md");
+  triggerDownload(new Blob([output], { type: "text/markdown" }), "myNote-export.md");
 }
 
 async function openDailyNote() {
   const dateId = new Date().toISOString().slice(0, 10);
-  const state = store.getState();
-  const found = state.notes.find((note) => note.title === dateId);
+  const found = store.getState().notes.find((note) => note.title === dateId);
   if (found) {
     await setActiveNote(found.id);
     return;
@@ -593,12 +615,10 @@ async function mutateActiveNote(mutator, opName) {
   if (!note) {
     return;
   }
-
   const next = normalizeNote({ ...mutator(note), updatedAt: now(), version: note.version + 1 });
   const patch = createNotePatch(note, next);
   const inversePatch = invertNotePatch(patch);
   const revision = bumpSaveRevision();
-
   await commandStack.execute({
     do: async () => {
       const current = store.getState().notes.find((item) => item.id === note.id);
@@ -629,25 +649,22 @@ async function mutateActiveNote(mutator, opName) {
 
 async function switchRecentNote() {
   const state = store.getState();
-  if (state.recentIds.length < 2) {
-    return;
+  if (state.recentIds.length >= 2) {
+    await setActiveNote(state.recentIds[1]);
   }
-  await setActiveNote(state.recentIds[1]);
 }
 
 async function undoLastCommand() {
   await autosave.flush();
-  const didUndo = await commandStack.undo();
-  if (didUndo) {
-    renderAll();
+  if (await commandStack.undo()) {
+    await refreshSearch();
   }
 }
 
 async function redoLastCommand() {
   await autosave.flush();
-  const didRedo = await commandStack.redo();
-  if (didRedo) {
-    renderAll();
+  if (await commandStack.redo()) {
+    await refreshSearch();
   }
 }
 
@@ -680,24 +697,19 @@ function shouldHandleGlobalKey(event) {
   if (palette.isOpen()) {
     return false;
   }
-
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
     return true;
   }
-
   return !target.matches("input, textarea");
 }
 
-els.searchInput.addEventListener("input", async (event) => {
-  store.setState({ query: event.target.value.trim() });
-  await refreshSearch();
+els.searchInput.addEventListener("input", (event) => {
+  runAction(() => refreshSearch({ query: event.target.value.trim() }));
 });
-
 els.newNoteButton.addEventListener("click", () => {
   runAction(() => createNote());
 });
-
 els.saveButton.addEventListener("click", () => {
   runAction(() => autosave.flush());
 });
@@ -709,18 +721,15 @@ for (const field of [els.titleInput, els.contentInput]) {
       runAction(() => autosave.flush());
       return;
     }
-
     if (event.key === "Tab" && event.target === els.contentInput) {
       event.preventDefault();
       const start = els.contentInput.selectionStart;
       const end = els.contentInput.selectionEnd;
-      const next = `${els.contentInput.value.slice(0, start)}  ${els.contentInput.value.slice(end)}`;
-      els.contentInput.value = next;
+      els.contentInput.value = `${els.contentInput.value.slice(0, start)}  ${els.contentInput.value.slice(end)}`;
       els.contentInput.selectionStart = els.contentInput.selectionEnd = start + 2;
       markDirtyAndQueueSave();
     }
   });
-
   field.addEventListener("blur", () => {
     runAction(() => autosave.flush());
   });
@@ -735,13 +744,11 @@ window.addEventListener("keydown", (event) => {
     palette.open(paletteCommands);
     return;
   }
-
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
     event.preventDefault();
     runAction(() => createNote());
     return;
   }
-
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
     if (shouldHandleGlobalKey(event)) {
       event.preventDefault();
@@ -749,58 +756,47 @@ window.addEventListener("keydown", (event) => {
     }
     return;
   }
-
-  if (
-    ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && event.shiftKey) ||
-    ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y")
-  ) {
+  if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && event.shiftKey)
+    || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y")) {
     if (shouldHandleGlobalKey(event)) {
       event.preventDefault();
       runAction(() => redoLastCommand());
     }
     return;
   }
-
   if ((event.ctrlKey || event.metaKey) && event.key === "Tab") {
     event.preventDefault();
     runAction(() => switchRecentNote());
     return;
   }
-
   if (palette.isOpen() && event.key === "Escape") {
     event.preventDefault();
     palette.close();
     return;
   }
-
   if (!shouldHandleGlobalKey(event)) {
     return;
   }
-
   if (event.key === "/") {
     event.preventDefault();
     focusSearch();
     return;
   }
-
   if (event.key === "j") {
     event.preventDefault();
     runAction(() => moveSelection(1));
     return;
   }
-
   if (event.key === "k") {
     event.preventDefault();
     runAction(() => moveSelection(-1));
     return;
   }
-
   if (event.key === "G") {
     event.preventDefault();
     runAction(() => jumpBoundary(true));
     return;
   }
-
   if (event.key === "g") {
     const currentAt = Date.now();
     const state = store.getState();
@@ -812,17 +808,13 @@ window.addEventListener("keydown", (event) => {
     }
     store.setState({ lastGAt: currentAt });
   }
-
   if (event.key === "i") {
     event.preventDefault();
     focusEditor();
   }
-
   if (event.key === "Delete") {
-    if (shouldHandleGlobalKey(event)) {
-      event.preventDefault();
-      runAction(() => deleteActiveNote());
-    }
+    event.preventDefault();
+    runAction(() => deleteActiveNote());
   }
 });
 
@@ -832,7 +824,6 @@ window.addEventListener("beforeunload", (event) => {
     event.returnValue = "";
   }
 });
-
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     runAction(() => autosave.flush());
@@ -842,19 +833,44 @@ document.addEventListener("visibilitychange", () => {
 if (typeof window !== "undefined") {
   window.setInterval(() => {
     const memory = performance.memory;
-    if (!memory) {
-      return;
+    if (memory) {
+      updateMetrics({ memoryMb: memory.usedJSHeapSize / (1024 * 1024) });
     }
-    const mb = memory.usedJSHeapSize / (1024 * 1024);
-    updateMetrics({ memoryMb: mb });
   }, 6000);
 }
+
+function registerEnrolledDelete(handler) {
+  if (typeof handler !== "function" || enrolledDeleteHandler) {
+    throw new TypeError("Invalid enrolled delete handler");
+  }
+  enrolledDeleteHandler = handler;
+  return () => {
+    if (enrolledDeleteHandler === handler) {
+      enrolledDeleteHandler = null;
+    }
+  };
+}
+
+createJapaneseApp({
+  runtime: {
+    store,
+    commandStack,
+    history,
+    searchClient,
+    backlinkIndex,
+    workspace: noteWorkspace,
+    registerEnrolledDelete,
+  },
+  document,
+});
 
 async function bootstrap() {
   const db = await openDatabase();
   await migrateLegacyStorageIfNeeded(db, normalizeNote);
-
-  const loaded = (await listNotesFromDb(db)).map(normalizeNote).filter(Boolean).sort(sortByUpdatedAtDesc);
+  const loaded = (await listNotesFromDb(db))
+    .map(normalizeNote)
+    .filter(Boolean)
+    .sort(sortByUpdatedAtDesc);
   store.setState({
     db,
     notes: loaded,
@@ -863,17 +879,14 @@ async function bootstrap() {
     recentIds: loaded[0]?.id ? [loaded[0].id] : [],
   });
 
-  await searchClient.rebuild(store.getState().notes);
-  backlinkIndex.rebuild(store.getState().notes);
-
+  await searchClient.rebuild(loaded);
+  backlinkIndex.rebuild(loaded);
+  setBacklinksFromIndex();
   if (loaded.length === 0) {
     await createNote({ title: "Untitled", content: "" });
     return;
   }
-
-  setBacklinksFromIndex();
-  await refreshSearch();
-  renderAll();
+  await refreshSearch({ emptyLabel: "No notes" });
   renderMetrics();
 }
 
