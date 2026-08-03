@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+async function createJapaneseNote(page, buttonName, expectedTitle) {
+  await page.getByRole("button", { name: buttonName }).click();
+  const title = page.getByRole("textbox", { name: "Title" });
+  await expect(title).toHaveValue(expectedTitle);
+  await expect(title).toBeFocused();
+}
+
 test("Japanese filters compose with search, validate ranges, and stay workspace-local", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#noteCount")).toHaveText("1 note");
@@ -9,9 +16,9 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   const filters = page.getByRole("region", { name: "Japanese note filters" });
   await expect(filters).toBeVisible();
 
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
-  await page.getByRole("button", { name: "Create kanji note" }).click();
-  await page.getByRole("button", { name: "Create grammar note" }).click();
+  await createJapaneseNote(page, "Create vocabulary note", "New vocabulary");
+  await createJapaneseNote(page, "Create kanji note", "新しい漢字");
+  await createJapaneseNote(page, "Create grammar note", "New grammar pattern");
 
   await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
