@@ -92,10 +92,16 @@ test("search shortcut and ordinary create remain truthful to the active workspac
   await page.goto("/");
 
   const search = page.locator("#searchInput");
+  const editor = page.locator("#contentInput");
   const shortcut = page.locator(".search-box kbd");
   await expect(search).toHaveAccessibleName("Search notes");
   await expect(shortcut).toHaveText("/");
   await expect(shortcut).toHaveAttribute("aria-hidden", "true");
+
+  await editor.focus();
+  await page.keyboard.press("/");
+  await expect(editor).toHaveValue("/");
+  await expect(search).not.toBeFocused();
 
   await page.locator("#notesWorkspaceButton").focus();
   await page.keyboard.press("/");
