@@ -97,6 +97,7 @@ test("search shortcut and ordinary create remain truthful to the active workspac
   await expect(shortcut).toHaveText("/");
   await expect(shortcut).toHaveAttribute("aria-hidden", "true");
 
+  await page.locator("#notesWorkspaceButton").focus();
   await page.keyboard.press("/");
   await expect(search).toBeFocused();
 
