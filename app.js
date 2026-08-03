@@ -78,6 +78,7 @@ const backlinkIndex = createBacklinkIndex();
 let noteWorkspace = null;
 let enrolledDeleteHandler = null;
 let workspaceFlushDepth = 0;
+let reconcileInFlight = false;
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat("en", {
@@ -445,11 +446,27 @@ const autosave = createAutosave({
 });
 
 async function reconcileCurrentView() {
+  if (reconcileInFlight) {
+    return false;
+  }
+
   const restoreFocus = document.activeElement === els.refreshButton;
-  await autosave.flush();
-  await refreshSearch();
-  if (restoreFocus) {
-    els.refreshButton.focus();
+  reconcileInFlight = true;
+  els.refreshButton.disabled = true;
+  els.refreshButton.setAttribute("aria-busy", "true");
+  try {
+    await autosave.flush();
+    await refreshSearch();
+    return true;
+  } finally {
+    reconcileInFlight = false;
+    els.refreshButton.disabled = false;
+    els.refreshButton.removeAttribute("aria-busy");
+    const focusWasLost = document.activeElement === document.body
+      || document.activeElement === null;
+    if (restoreFocus && focusWasLost) {
+      els.refreshButton.focus();
+    }
   }
 }
 
