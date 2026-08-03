@@ -602,3 +602,39 @@ Stage 0 exits when:
 - no runtime or user-data mutation is included.
 
 Merging PR #78 accepts the design contract and unblocks only the direct children whose other dependencies are already merged and green. It does not claim a 9+/10 runtime, begin #66 automatically, or convert design evidence into implementation evidence.
+
+## 22. Issue #66 editor-first shell contract
+
+Issue #66 consumes the Accepted manifest without changing the Stage 0 audit identity. Its runtime shell contract is:
+
+- `applicationHeader` is the only application banner and contains product identity, `workspaceNavigation`, search, one concise `saveState`, subordinate `noteCount`, the valid Ordinary `newNoteButton`, and `refreshButton`;
+- `workspaceNavigation` is the only workspace-navigation owner; `notesWorkspaceButton` and `japaneseWorkspaceButton` remain native buttons with explicit `aria-pressed` state;
+- `noteNavigationRegion` is the bounded navigation landmark and internal scroll owner;
+- `editorRegion` is the single main editor landmark and remains flexible and dominant;
+- `searchInput`, `newNoteButton`, `refreshButton`, `saveButton`, and the two workspace buttons retain stable IDs for #74 adapters;
+- refresh flushes the existing autosave owner and calls the existing `NoteWorkspaceController` refresh path; it does not reload the page, synthesize input, click rendered notes, discover hidden DOM state, or create runtime services;
+- performance measurements remain available in runtime state for tests and explicit diagnostics, but no render/search/worker/autosave/memory telemetry appears in normal product UI;
+- per-workspace query and active-note state remain owned by `JapaneseWorkspaceCoordinator`, while the active draft, dirty revision, store, search client, history, backlinks index, and persistence authorities remain unchanged;
+- Japanese filters, dashboard, repair state, and five current quick-create actions retain their existing behavior and owners, but live inside the bounded navigation region so they cannot push the editor below the document fold;
+- the document does not scroll horizontally at the 1024×768, 1280×720, and 1440×900 desktop reference viewports; secondary navigation and backlinks scroll internally.
+
+### 22.1 Accepted-design reconciliation
+
+The structural hierarchy in Figma `39:2`, `50:2`/`50:92`, `51:351`/`51:466`, and `55:2` is compatible with the repository contract: persistent workspace controls, search and creation hierarchy, bounded note navigation, and a dominant editor.
+
+Repository ownership wins for these deferred details:
+
+- Figma visual tokens, typography, component variants, and broad polish remain #67;
+- the single `New Japanese note` chooser and Japanese Notes/Review disclosure remain #70, so #66 preserves the current five lifecycle-backed quick-create actions and does not invent a generic Japanese template;
+- final list/grid parity, note-card hierarchy, editor action menu, Details, and backlinks disclosure remain #68;
+- command registry semantics, availability reasons, IME precedence, and browser-conflict retirement remain #74;
+- full resize/zoom hardening outside the two #66 reference viewports remains #71;
+- save-failure and recovery presentation remain #72.
+
+These are deferred ownership boundaries, not failed #66 acceptance claims.
+
+### 22.2 Compatibility, migration, and rollback
+
+Issue #66 supports the repository's automated Chromium desktop baseline at 1024×768, 1280×720, and 1440×900. A 200% zoom check is a smoke test only until #71 and #73 complete. Viewports below 1024 CSS pixels at 100% zoom, mobile/tablet/touch navigation, light theme, native wrappers, and untested browser/assistive-technology combinations remain unsupported or unknown.
+
+The shell adds no dependency, schema, migration, persistence, search-ranking, scheduling, recognizer, or user-data change. Rollback is one pull-request revert of the Issue #66 HTML/CSS/composition wiring, focused tests, and this section. Canonical notes, `studyReviews`, current IndexedDB schema, search/history/backlinks ownership, export, migration, and command behavior remain intact.

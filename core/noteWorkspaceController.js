@@ -110,6 +110,9 @@ export function createNoteWorkspaceController(options) {
     const token = ++refreshToken;
     const beforeQuery = options.getState();
     const queryText = normalizedQuery(input.query, beforeQuery.query);
+    if (beforeQuery.query !== queryText) {
+      options.setState({ query: queryText });
+    }
     const reconcileActive = input.reconcileActive === true;
     const requestedEditorSync = input.synchronizeEditor === true;
     const initialHydration = isInitialHydration(beforeQuery);

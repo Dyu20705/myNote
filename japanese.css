@@ -1,7 +1,7 @@
 .workspace-switcher {
   display: inline-flex;
   gap: 4px;
-  margin-bottom: 12px;
+  margin: 0;
   padding: 4px;
   border: 1px solid var(--border);
   background: var(--panel);
@@ -101,6 +101,36 @@
 
 .japanese-dashboard[hidden] {
   display: none;
+}
+
+#noteNavigationRegion .japanese-filters,
+#noteNavigationRegion .japanese-dashboard {
+  margin: 0 10px 10px;
+}
+
+#noteNavigationRegion .japanese-filters {
+  grid-template-columns: 1fr;
+}
+
+#noteNavigationRegion .japanese-filter-status {
+  grid-column: 1;
+}
+
+#noteNavigationRegion .dashboard-header {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+#noteNavigationRegion .dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#noteNavigationRegion .dashboard-card {
+  min-height: 76px;
+}
+
+#noteNavigationRegion .japanese-actions {
+  grid-template-columns: 1fr;
 }
 
 .dashboard-header,

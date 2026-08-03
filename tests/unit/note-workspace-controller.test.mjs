@@ -283,6 +283,29 @@ test("only the latest asynchronous refresh may commit state", async () => {
   assert.deepEqual(store.getState().filteredIds, ["b"]);
 });
 
+test("refresh records query intent synchronously through the controller owner", async () => {
+  const store = createStore(initialState());
+  let resolveQuery;
+  const controller = createNoteWorkspaceController({
+    getState: store.getState,
+    setState: store.setState,
+    query() {
+      return new Promise((resolve) => {
+        resolveQuery = resolve;
+      });
+    },
+    async flush() {},
+    onSearchMetrics() {},
+    onRender() {},
+  });
+
+  const refresh = controller.refresh({ query: "immediate intent" });
+  assert.equal(store.getState().query, "immediate intent");
+
+  resolveQuery(["a"]);
+  await refresh;
+});
+
 test("select flushes before changing the active note and rejects missing notes", async () => {
   const store = createStore(initialState({
     filteredIds: ["a", "b"],
