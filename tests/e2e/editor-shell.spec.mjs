@@ -88,6 +88,26 @@ test("shell exposes one coherent landmark and native-control hierarchy without t
   await expect(page.locator("body")).not.toContainText(/render:\d|search:\d|worker:\d|autosave:\d|mem:\d/i);
 });
 
+test("search shortcut and ordinary create remain truthful to the active workspace", async ({ page }) => {
+  await page.goto("/");
+
+  const search = page.locator("#searchInput");
+  const shortcut = page.locator(".search-box kbd");
+  await expect(search).toHaveAccessibleName("Search notes");
+  await expect(shortcut).toHaveText("/");
+  await expect(shortcut).toHaveAttribute("aria-hidden", "true");
+
+  await page.keyboard.press("/");
+  await expect(search).toBeFocused();
+
+  await page.locator("#japaneseWorkspaceButton").click();
+  await expect(page.locator("#newNoteButton")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Create vocabulary note" })).toBeVisible();
+
+  await page.locator("#notesWorkspaceButton").click();
+  await expect(page.locator("#newNoteButton")).toBeVisible();
+});
+
 test("keyboard traversal can leave the editor and reach the shell in deterministic order", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#contentInput")).toBeFocused();
