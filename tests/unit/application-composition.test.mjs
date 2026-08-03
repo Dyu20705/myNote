@@ -88,3 +88,15 @@ test("shell refresh reuses the existing runtime and introduces no DOM coordinati
   assert.doesNotMatch(japaneseApp, /dispatchEvent\s*\(/);
   assert.doesNotMatch(japaneseApp, /MutationObserver|\.note-item|\.click\s*\(/);
 });
+
+test("shell refresh exposes a bounded in-flight busy state and always cleans it up", async () => {
+  const app = await source("app.js");
+
+  assert.match(app, /let reconcileInFlight = false;/);
+  assert.match(app, /if \(reconcileInFlight\) \{\s*return false;\s*\}/);
+  assert.match(app, /refreshButton\.disabled = true;/);
+  assert.match(app, /refreshButton\.setAttribute\("aria-busy", "true"\);/);
+  assert.match(app, /finally \{/);
+  assert.match(app, /refreshButton\.disabled = false;/);
+  assert.match(app, /refreshButton\.removeAttribute\("aria-busy"\);/);
+});
