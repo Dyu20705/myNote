@@ -7,6 +7,7 @@
     <meta name="description" content="Minimal local note app." />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="command.css" />
+    <link rel="stylesheet" href="editor.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -205,6 +206,8 @@
       <p id="reviewComplete" class="review-complete" hidden>Session complete</p>
     </dialog>
 
+    <button id="saveButton" type="button" hidden aria-hidden="true" tabindex="-1">Save</button>
     <script type="module" src="app.js"></script>
+    <script type="module" src="ui/editorChrome.js"></script>
   </body>
 </html>
