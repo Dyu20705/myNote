@@ -27,13 +27,14 @@ npm run test:e2e
 - **Parser-owned metadata:** tags, links, AST data, checksums, and search material are derived through one canonical pipeline.
 - **Persist before commit:** canonical IndexedDB mutation succeeds before in-memory state and history report success.
 - **Recoverable degradation:** derived indexes may be rebuilt without weakening canonical note durability.
-- **Bounded resources:** history, rendering, worker messages, and indexing paths have explicit limits.
+- **Bounded resources:** history, rendering, worker messages, indexing, and command registration have explicit limits.
+- **Central command ownership:** one internal registry owns command metadata, availability, unavailable reasons, shortcuts, scope, and dispatch.
 
 ## Current capabilities
 
 - Note creation, editing, deletion, pinning, and archiving.
 - Serialized autosave and explicit save handling.
-- Keyboard-first navigation and command palette.
+- Keyboard-first navigation and registry-backed command palette.
 - Worker-based incremental search.
 - Wiki-link and Markdown task parsing with backlinks.
 - Bounded undo/redo and patch history.
@@ -41,7 +42,7 @@ npm run test:e2e
 - Legacy localStorage migration to IndexedDB.
 - Notes and 日本語 workspace switching through one shared application runtime.
 - Six-card Japanese study dashboard with bounded repair diagnostics.
-- Five Japanese template actions in both the dashboard and command palette.
+- Five Japanese template actions discoverable in both the dashboard and command palette.
 - Reveal-first, keyboard-operable review sessions with durable ratings, close/resume, deterministic skips, and explicit retry state.
 - Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
 - Additive schema-v2 compatibility that preserves existing schema-v1 note records and never enrolls them automatically.
@@ -53,6 +54,7 @@ npm run test:e2e
 - [Architecture](docs/ARCHITECTURE.md)
 - [Engineering rules](docs/ENGINEERING_RULES.md)
 - [Technical invariants](docs/INVARIANTS.md)
+- [Command ownership contract](docs/COMMAND_OWNERSHIP.md)
 - [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
 - [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
 - [Japanese study workspace interaction contract](docs/JAPANESE_STUDY_WORKSPACE.md)
@@ -63,23 +65,37 @@ npm run test:e2e
 - [User-flow and beta-test guide](docs/USER_FLOW_BETA_TEST.md)
 - [Security policy](SECURITY.md)
 
-## Keyboard shortcuts
+## Keyboard shortcuts and discovery
 
-- `Ctrl/Cmd+K`: open the command palette.
-- `Ctrl/Cmd+N`: create an ordinary note.
-- `Ctrl/Cmd+Z`: undo.
-- `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y`: redo.
-- `j` / `k`: select the next or previous note.
-- `gg` / `G`: select the first or last note.
-- Review dialog `1` / `2` / `3` / `4`: Again / Hard / Good / Easy after reveal.
-- Review dialog `Escape`: close without discarding queue position.
+Open the command palette with `Ctrl/Cmd+K` to inspect the current command inventory. The palette shows platform-appropriate shortcut labels and keeps unavailable commands visible with an actionable reason. This is the compact keyboard-help surface; it does not add permanent interface clutter.
+
+| Shortcut | Scope | Action |
+| --- | --- | --- |
+| `Ctrl/Cmd+K` | Global, including focused text fields | Open command palette |
+| `Escape` | Command palette | Close palette and restore focus |
+| `Ctrl/Cmd+N` | Shell, Notes workspace only | Create an ordinary note |
+| `/` | Shell | Focus Search |
+| `Ctrl/Cmd+Enter` | Editor | Flush the active note |
+| `Ctrl/Cmd+Z` | Shell | Undo |
+| `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` | Shell | Redo |
+| `Ctrl/Cmd+Tab` | Shell | Switch to the previous active note |
+| `j` / `k` | Shell | Select next / previous visible note |
+| `gg` / `G` | Shell | Select first / last visible note |
+| `i` | Shell | Focus editor |
+| `Delete` | Shell | Delete the active note through the shared lifecycle |
+| `1` / `2` / `3` / `4` | Review dialog after reveal | Again / Hard / Good / Easy |
+| `Escape` | Review dialog | Close without discarding queue position |
+
+Text editing and IME composition suppress navigation, sequence, create, delete, undo, and redo commands. The command palette shortcut is the only global command intentionally available from a focused text field. An open modal isolates all background commands.
 
 ## Repository structure
 
-- `app.js`: ordinary Notes bootstrap, orchestration, and action wiring.
+- `app.js`: ordinary Notes bootstrap, orchestration, registry composition, and action wiring.
 - `japaneseApp.js`: thin Japanese workspace UI bridge into the shared runtime and lifecycle actions.
 - `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study state/action derivation.
-- `ui/`: rendering and shared interaction modules.
+- `ui/commandRegistry.js`: bounded command metadata, availability, scope, dispatch, sequence, and cleanup owner.
+- `ui/palette.js`: command rendering, filtering, invocation-by-ID, and focus-return adapter.
+- `ui/`: remaining shared rendering and interaction modules.
 - `scripts/`: local verification and static-server utilities.
 - `tests/`: deterministic unit, integration, contract, and browser tests.
 - `docs/`: architecture, governance, safety, and operating constraints.
