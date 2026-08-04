@@ -96,7 +96,6 @@ function validateCommand(candidate) {
     || !isNonEmptyString(candidate.title)
     || !isNonEmptyString(candidate.description)
     || !Array.isArray(candidate.shortcuts)
-    || candidate.shortcuts.length === 0
     || typeof candidate.isAvailable !== "function"
     || typeof candidate.unavailableReason !== "function"
     || typeof candidate.run !== "function"
