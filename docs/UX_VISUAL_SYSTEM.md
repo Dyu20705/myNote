@@ -99,11 +99,13 @@ The Search composite additionally uses `:focus-within`, an accent border, and an
 
 The automated contract validates focus geometry and color for workspace controls, Search, create, refresh, title, editor body, and save.
 
-## 5. State contract
+## 5. Control and state contract
+
+The explicit reusable control classes are `.primary-button`, `.secondary-button`, `.quiet-button`, and `.destructive-button`. Existing `.shell-button` remains the current shell-level secondary adapter.
 
 State must not depend on color alone.
 
-| State | Geometry or textual indicator |
+| State or hierarchy | Geometry or textual indicator |
 | --- | --- |
 | Selected workspace or note | Inset `3px` rail, stronger border, and increased font weight |
 | Disabled | Dashed border, `not-allowed` cursor, and reduced opacity |
@@ -112,6 +114,7 @@ State must not depend on color alone.
 | Destructive | Explicit accessible label, danger border, danger text, and strong weight |
 | Primary | Solid accent surface and strong text |
 | Secondary | Raised surface and default border |
+| Quiet | Transparent base and border; hover gains a bounded surface and subtle border |
 | Hover/pressed | Surface and border hierarchy without required movement |
 | Reduced motion | Animation and transition durations resolve to zero |
 
@@ -137,9 +140,10 @@ The cases require no document-level horizontal overflow, editor width no greater
 
 | File | Responsibility |
 | --- | --- |
-| `styles.css` | Semantic aliases, typography, surfaces, action hierarchy, state geometry, focus, readable measure, reduced motion |
+| `styles.css` | Semantic aliases, typography, surfaces, explicit action hierarchy, state geometry, focus, readable measure, reduced motion |
 | `japanese.css` | Japanese typography, line height, Japanese controls and nested surfaces using shared aliases |
 | `ui/list.js` | Existing delete control receives the explicit `Delete note` accessible name |
+| `tests/e2e/control-variants.spec.mjs` | Primary, secondary, quiet, and destructive class contract |
 | `tests/e2e/visual-system.spec.mjs` | Token, font, focus, non-color state, long-content, viewport, and reduced-motion contract |
 | `tests/e2e/editor-shell.spec.mjs` | Existing shell regression updated for accepted focus color and deterministic async create setup |
 
@@ -164,7 +168,7 @@ Workflow run 201 (`30874354322`) on implementation head `ac9c655f620b265451b03ae
 
 Environment: Ubuntu 24.04.4, Node.js 22.20.0, npm 11.7.0, Playwright Chromium 151.0.7922.34.
 
-The final documentation commit requires its own fresh workflow result before the pull request can leave draft state.
+A fresh workflow on the final documentation and explicit-variant head is required before the pull request can leave draft state.
 
 ## 9. Known limits and risks
 
