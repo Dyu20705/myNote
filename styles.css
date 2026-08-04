@@ -225,6 +225,33 @@ strong {
   font-weight: 500;
 }
 
+.status-message {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding-inline: var(--mn-space-2);
+  border-radius: var(--mn-radius-sm);
+}
+
+.status-message[data-state="success"],
+.status-message[data-state="warning"],
+.status-message[data-state="error"] {
+  box-shadow: inset 3px 0 0 currentColor;
+  font-weight: 600;
+}
+
+.status-message[data-state="success"] {
+  color: var(--mn-success-text);
+}
+
+.status-message[data-state="warning"] {
+  color: var(--mn-warning-text);
+}
+
+.status-message[data-state="error"] {
+  color: var(--mn-danger-text);
+}
+
 .search-box {
   flex: 0 1 320px;
   display: flex;
