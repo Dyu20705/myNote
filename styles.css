@@ -271,7 +271,10 @@ strong {
 }
 
 .primary-button,
-.shell-button {
+.shell-button,
+.secondary-button,
+.quiet-button,
+.destructive-button {
   min-height: var(--mn-control-md);
   border-radius: var(--mn-radius-md);
   padding: 9px var(--mn-space-4);
@@ -296,17 +299,45 @@ strong {
   background: var(--mn-action-primary-hover);
 }
 
-.shell-button {
+.shell-button,
+.secondary-button {
   border: 1px solid var(--mn-border-default);
   color: var(--mn-text-secondary);
   background: var(--mn-surface-raised);
 }
 
 .shell-button:hover,
-.shell-button:active {
+.shell-button:active,
+.secondary-button:hover,
+.secondary-button:active {
   border-color: var(--mn-border-strong);
   color: var(--mn-text-primary);
   background: var(--mn-surface-hover);
+}
+
+.quiet-button {
+  border: 1px solid transparent;
+  color: var(--mn-text-secondary);
+  background: transparent;
+}
+
+.quiet-button:hover,
+.quiet-button:active {
+  border-color: var(--mn-border-subtle);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
+
+.destructive-button {
+  border: 1px solid var(--mn-danger-border);
+  color: var(--mn-danger-text);
+  background: transparent;
+  font-weight: 600;
+}
+
+.destructive-button:hover,
+.destructive-button:active {
+  background: rgb(244 63 94 / 12%);
 }
 
 .workspace {
