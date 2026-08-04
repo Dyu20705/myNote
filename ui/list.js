@@ -34,6 +34,7 @@ function createNode(note, isActive, onSelect, formatDate, onDelete) {
   deleteBtn.className = "note-item-delete";
   deleteBtn.textContent = "×";
   deleteBtn.title = "Delete note";
+  deleteBtn.setAttribute("aria-label", "Delete note");
   deleteBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     if (onDelete) {

@@ -141,7 +141,7 @@ test("keyboard traversal can leave the editor and reach the shell in determinist
   await expect(page.locator("#searchInput")).toBeFocused();
   await expect.poll(() => page.locator(".search-box").evaluate((element) => (
     globalThis.getComputedStyle(element).borderTopColor
-  ))).toBe("rgb(221, 221, 221)");
+  ))).toBe("rgb(56, 189, 248)");
   await page.keyboard.press("Tab");
   await expect(page.locator("#newNoteButton")).toBeFocused();
   await page.keyboard.press("Tab");
@@ -152,6 +152,7 @@ test("shell controls remain functional through refresh, save, selection, search,
   await page.goto("/");
 
   await page.locator("#newNoteButton").click();
+  await expect(page.locator("#contentInput")).toBeFocused();
   await page.locator("#titleInput").fill("Synthetic shell note");
   await page.locator("#contentInput").fill("Repository-safe editor shell evidence.");
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
@@ -177,6 +178,7 @@ test("shell controls remain functional through refresh, save, selection, search,
 test("rapid workspace switching preserves per-workspace query, selection, and the newest draft", async ({ page }) => {
   await page.goto("/");
   await page.locator("#newNoteButton").click();
+  await expect(page.locator("#contentInput")).toBeFocused();
   await page.locator("#titleInput").fill("Newest synthetic draft");
   await page.locator("#contentInput").fill("This pending draft must survive rapid workspace transitions.");
   await page.locator("#searchInput").fill("Newest synthetic");
