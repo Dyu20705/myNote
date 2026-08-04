@@ -176,6 +176,42 @@ test("selected, disabled, busy, invalid, and destructive states are not color-on
   expect(destructive.fontWeight).toBeGreaterThanOrEqual(600);
 });
 
+test("success, warning, and error status utilities include non-color indicators", async ({ page }) => {
+  await page.goto("/");
+
+  const states = [
+    { name: "success", color: "rgb(74, 222, 128)" },
+    { name: "warning", color: "rgb(251, 191, 36)" },
+    { name: "error", color: "rgb(251, 113, 133)" },
+  ];
+  await page.evaluate((items) => {
+    for (const item of items) {
+      const status = globalThis.document.createElement("span");
+      status.className = "status-message";
+      status.dataset.state = item.name;
+      status.dataset.testStatus = item.name;
+      status.textContent = `${item.name} status`;
+      globalThis.document.body.append(status);
+    }
+  }, states);
+
+  for (const state of states) {
+    const statusStyle = await page.locator(`[data-test-status="${state.name}"]`).evaluate((element) => {
+      const style = globalThis.getComputedStyle(element);
+      return {
+        color: style.color,
+        boxShadow: style.boxShadow,
+        fontWeight: Number.parseInt(style.fontWeight, 10),
+        paddingInlineStart: style.paddingInlineStart,
+      };
+    });
+    expect(statusStyle.color).toBe(state.color);
+    expect(statusStyle.boxShadow).toContain("inset");
+    expect(statusStyle.fontWeight).toBeGreaterThanOrEqual(600);
+    expect(numericPixels(statusStyle.paddingInlineStart)).toBeGreaterThanOrEqual(8);
+  }
+});
+
 for (const viewport of VIEWPORTS) {
   test(`readable editor and long mixed content remain bounded at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
