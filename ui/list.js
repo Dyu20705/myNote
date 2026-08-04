@@ -1,4 +1,53 @@
-function createNode(note, isActive, onSelect, formatDate, onDelete) {
+import { createNoteCardPresentation } from "./notePresentation.js";
+
+function appendText(parent, className, text, tagName = "span") {
+  const node = document.createElement(tagName);
+  node.className = className;
+  node.textContent = text;
+  parent.append(node);
+  return node;
+}
+
+function renderButton(button, note, isActive, formatDate) {
+  const presentation = createNoteCardPresentation(note, { formatDate });
+  button.classList.toggle("active", isActive);
+  if (isActive) {
+    button.setAttribute("aria-current", "true");
+  } else {
+    button.removeAttribute("aria-current");
+  }
+  button.replaceChildren();
+
+  const heading = document.createElement("span");
+  heading.className = "note-item-heading";
+  appendText(heading, "note-item-title", presentation.title, "strong");
+
+  const metadata = document.createElement("span");
+  metadata.className = "note-item-metadata";
+  appendText(metadata, "note-item-date", presentation.date);
+  if (presentation.pinned) {
+    appendText(metadata, "note-item-state", "Pinned");
+  }
+  if (presentation.archived) {
+    appendText(metadata, "note-item-state", "Archived");
+  }
+  heading.append(metadata);
+  button.append(heading);
+
+  if (presentation.preview) {
+    appendText(button, "note-item-preview", presentation.preview, "p");
+  }
+
+  if (presentation.tags.length > 0) {
+    appendText(
+      button,
+      "note-item-tags",
+      presentation.tags.map((tag) => `#${tag}`).join(" "),
+    );
+  }
+}
+
+function createNode(note, isActive, onSelect, formatDate) {
   const container = document.createElement("div");
   container.className = "note-item-container";
 
@@ -6,64 +55,21 @@ function createNode(note, isActive, onSelect, formatDate, onDelete) {
   button.type = "button";
   button.className = "note-item";
   button.dataset.id = note.id;
-  if (isActive) {
-    button.classList.add("active");
-  }
-
-  const title = document.createElement("strong");
-  title.className = "note-item-title";
-  title.textContent = note.pinned ? `* ${note.title}` : note.title;
-
-  const date = document.createElement("span");
-  date.className = "note-item-date";
-  date.textContent = formatDate(note.updatedAt);
-
-  const preview = document.createElement("p");
-  preview.className = "note-item-preview";
-  preview.textContent = note.content.trim().replace(/\s+/g, " ").slice(0, 120) || "Empty note";
-
-  const tags = document.createElement("span");
-  tags.className = "note-item-tags";
-  tags.textContent = note.tags.slice(0, 4).map((tag) => `#${tag}`).join(" ");
-
-  button.append(title, date, preview, tags);
   button.addEventListener("click", () => onSelect(note.id));
+  renderButton(button, note, isActive, formatDate);
 
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "note-item-delete";
-  deleteBtn.textContent = "×";
-  deleteBtn.title = "Delete note";
-  deleteBtn.setAttribute("aria-label", "Delete note");
-  deleteBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (onDelete) {
-      onDelete(note.id);
-    }
-  });
-
-  container.append(button, deleteBtn);
+  container.append(button);
   return container;
 }
 
 function patchNode(node, note, isActive, formatDate) {
   const button = node.querySelector(".note-item");
-  button.classList.toggle("active", isActive);
-
-  const title = node.querySelector(".note-item-title");
-  const date = node.querySelector(".note-item-date");
-  const preview = node.querySelector(".note-item-preview");
-  const tags = node.querySelector(".note-item-tags");
-
-  title.textContent = note.pinned ? `* ${note.title}` : note.title;
-  date.textContent = formatDate(note.updatedAt);
-  preview.textContent = note.content.trim().replace(/\s+/g, " ").slice(0, 120) || "Empty note";
-  tags.textContent = note.tags.slice(0, 4).map((tag) => `#${tag}`).join(" ");
+  renderButton(button, note, isActive, formatDate);
 }
 
-export function createListView({ container, onSelect, formatDate, onDelete }) {
+export function createListView({ container, onSelect, formatDate }) {
   const nodeCache = new Map();
-  const ROW_HEIGHT = 112;
+  const ROW_HEIGHT = 120;
   const OVERSCAN = 8;
   let currentPayload = {
     notesById: new Map(),
@@ -100,7 +106,7 @@ export function createListView({ container, onSelect, formatDate, onDelete }) {
 
       let node = nodeCache.get(id);
       if (!node) {
-        node = createNode(note, id === activeId, onSelect, formatDate, onDelete);
+        node = createNode(note, id === activeId, onSelect, formatDate);
         nodeCache.set(id, node);
       } else {
         patchNode(node, note, id === activeId, formatDate);

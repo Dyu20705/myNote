@@ -29,7 +29,8 @@ test("generic Notes create, edit, search, navigation, pin, archive, export, and 
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(content);
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
-  await page.locator("#saveButton").click();
+  await page.locator("#contentInput").focus();
+  await page.keyboard.press("Control+Enter");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
   await expect(page.locator("#noteCount")).toHaveText("2 notes");
 

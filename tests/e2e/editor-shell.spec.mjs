@@ -51,7 +51,7 @@ for (const viewport of VIEWPORTS) {
   });
 }
 
-test("shell exposes one coherent landmark and native-control hierarchy without telemetry", async ({ page }) => {
+test("shell exposes coherent application and editor-context landmarks without telemetry", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -59,6 +59,7 @@ test("shell exposes one coherent landmark and native-control hierarchy without t
   await expect(page.getByRole("navigation", { name: "Workspace" })).toHaveCount(1);
   await expect(page.getByRole("complementary", { name: "Note navigation" })).toHaveCount(1);
   await expect(page.getByRole("main", { name: "Editor" })).toHaveCount(1);
+  await expect(page.locator("#editorContextHeader")).toBeVisible();
 
   const notes = page.locator("#notesWorkspaceButton");
   const japanese = page.locator("#japaneseWorkspaceButton");
@@ -115,15 +116,19 @@ test("search shortcut and ordinary create remain truthful to the active workspac
   await expect(page.locator("#newNoteButton")).toBeVisible();
 });
 
-test("keyboard traversal can leave the editor and reach the shell in deterministic order", async ({ page }) => {
+test("keyboard traversal includes editor context actions and reaches the shell deterministically", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#contentInput")).toBeFocused();
 
   await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#noteActionsButton")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#detailsButton")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
   await expect(page.locator("#titleInput")).toBeFocused();
 
   const reverseOrder = [];
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 16; index += 1) {
     await page.keyboard.press("Shift+Tab");
     const activeId = await page.evaluate(() => globalThis.document.activeElement?.id ?? "");
     if (activeId) {
@@ -156,7 +161,8 @@ test("shell controls remain functional through refresh, save, selection, search,
   await page.locator("#titleInput").fill("Synthetic shell note");
   await page.locator("#contentInput").fill("Repository-safe editor shell evidence.");
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
-  await page.locator("#saveButton").click();
+  await page.locator("#contentInput").focus();
+  await page.keyboard.press("Control+Enter");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
 
   await page.locator("#searchInput").fill("Synthetic shell");

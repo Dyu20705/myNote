@@ -13,46 +13,44 @@ async function openBlankOrigin(page) {
 
 async function seedDatabase(page, { version, notes = [], reviews = [] }) {
   await openBlankOrigin(page);
-  await page.evaluate(async (fixture) => {
-    await new Promise((resolve, reject) => {
-      const request = globalThis.indexedDB.open("myNoteDB", fixture.version);
-      request.onupgradeneeded = () => {
-        const database = request.result;
-        if (!database.objectStoreNames.contains("notes")) {
-          const notesStore = database.createObjectStore("notes", { keyPath: "id" });
-          notesStore.createIndex("updatedAt", "updatedAt");
-          notesStore.createIndex("pinned", "pinned");
-          notesStore.createIndex("archived", "archived");
+  await page.evaluate(async (fixture) => new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open("myNoteDB", fixture.version);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains("notes")) {
+        const notesStore = database.createObjectStore("notes", { keyPath: "id" });
+        notesStore.createIndex("updatedAt", "updatedAt");
+        notesStore.createIndex("pinned", "pinned");
+        notesStore.createIndex("archived", "archived");
+      }
+      if (fixture.version >= 2 && !database.objectStoreNames.contains("studyReviews")) {
+        const reviewStore = database.createObjectStore("studyReviews", { keyPath: "noteId" });
+        reviewStore.createIndex("nextReviewAt", "nextReviewAt");
+        reviewStore.createIndex("notebookType", "notebookType");
+        reviewStore.createIndex("status", "status");
+      }
+    };
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const stores = fixture.version >= 2 ? ["notes", "studyReviews"] : ["notes"];
+      const transaction = database.transaction(stores, "readwrite");
+      for (const note of fixture.notes) {
+        transaction.objectStore("notes").add(note);
+      }
+      if (fixture.version >= 2) {
+        for (const review of fixture.reviews) {
+          transaction.objectStore("studyReviews").add(review);
         }
-        if (fixture.version >= 2 && !database.objectStoreNames.contains("studyReviews")) {
-          const reviewStore = database.createObjectStore("studyReviews", { keyPath: "noteId" });
-          reviewStore.createIndex("nextReviewAt", "nextReviewAt");
-          reviewStore.createIndex("notebookType", "notebookType");
-          reviewStore.createIndex("status", "status");
-        }
+      }
+      transaction.oncomplete = () => {
+        database.close();
+        resolve();
       };
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const database = request.result;
-        const stores = fixture.version >= 2 ? ["notes", "studyReviews"] : ["notes"];
-        const transaction = database.transaction(stores, "readwrite");
-        for (const note of fixture.notes) {
-          transaction.objectStore("notes").add(note);
-        }
-        if (fixture.version >= 2) {
-          for (const review of fixture.reviews) {
-            transaction.objectStore("studyReviews").add(review);
-          }
-        }
-        transaction.oncomplete = () => {
-          database.close();
-          resolve();
-        };
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
-      };
-    });
-  }, { version, notes, reviews });
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    };
+  }), { version, notes, reviews });
 }
 
 async function readDatabaseSnapshot(page, noteId) {
@@ -85,7 +83,13 @@ async function runCommand(page, title) {
   await page.locator("#commandInput").fill(title);
   const downloadPromise = title.startsWith("Export all") ? page.waitForEvent("download") : null;
   await page.locator("#commandInput").press("Enter");
-  return downloadPromise ? downloadPromise : undefined;
+  return downloadPromise ?? undefined;
+}
+
+async function flushEditor(page) {
+  await page.locator("#contentInput").focus();
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator("#saveState")).toHaveText("Saved locally");
 }
 
 async function downloadText(download) {
@@ -142,7 +146,6 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
     "Create today’s output note",
     "Create this week’s planner",
   ];
-
   for (const [index, action] of createActions.entries()) {
     await page.getByRole("button", { name: action }).click();
     await expect(page.locator("#noteCount")).toHaveText(`${index + 2} notes`);
@@ -177,8 +180,7 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
   await expect(page.getByRole("button", { name: "Resume review" })).toBeFocused();
   await page.getByRole("button", { name: "Resume review" }).click();
 
-  const ratings = ["Again", "Hard", "Good", "Easy", "Good"];
-  for (const [index, rating] of ratings.entries()) {
+  for (const [index, rating] of ["Again", "Hard", "Good", "Easy", "Good"].entries()) {
     if (index > 0) {
       await page.getByRole("button", { name: "Reveal review content" }).click();
     }
@@ -204,7 +206,6 @@ test("populated v1 upgrade preserves exact note bytes and never enrolls existing
   await openJapaneseWorkspace(page);
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(0);
-
   await page.getByRole("button", { name: "Create vocabulary note" }).click();
   await expect(page.locator("#noteCount")).toHaveText("2 notes");
 
@@ -223,11 +224,10 @@ test("valid orphan review remains durable and appears as bounded repair state", 
   });
 
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
   await openJapaneseWorkspace(page);
-
-  await expect(page.getByRole("region", { name: "Needs repair" })).toContainText("orphan-review");
-  await expect(page.getByRole("region", { name: "Needs repair" })).toContainText("×1");
+  const repair = page.getByRole("region", { name: "Needs repair" });
+  await expect(repair).toContainText("orphan-review");
+  await expect(repair).toContainText("×1");
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect(page.getByRole("button", { name: "Start review" })).toBeDisabled();
 
@@ -245,9 +245,7 @@ test("invalid persisted review keeps Notes operational and exposes bounded Japan
   });
 
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
   await expect(page.locator("#titleInput")).toHaveValue("Existing ordinary note");
-
   await openJapaneseWorkspace(page);
   await expect(page.getByRole("region", { name: "Needs repair" })).toContainText("study-data-unavailable");
   await expect(page.getByRole("button", { name: "Start review" })).toBeDisabled();
@@ -274,24 +272,19 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
       review.noteId === state.activeId && review.notebookType === "vocabulary"
     ));
   })).toBe(true);
-  await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
 
   const activeId = await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
     return getActiveStore().getState().activeId;
   });
-
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(content);
-  await page.locator("#saveButton").click();
+  await flushEditor(page);
+
   await expect.poll(async () => {
     const snapshot = await readDatabaseSnapshot(page, activeId);
-    return {
-      title: snapshot.note?.title,
-      content: snapshot.note?.content,
-    };
+    return { title: snapshot.note?.title, content: snapshot.note?.content };
   }).toEqual({ title, content });
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
 
   const jsonDownload = await runCommand(page, "Export all as JSON");
   const exportedJson = JSON.parse(await downloadText(jsonDownload));

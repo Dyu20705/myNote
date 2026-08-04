@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 async function createJapaneseNote(page, buttonName, expectedTitle) {
   await page.getByRole("button", { name: buttonName }).click();
-  const title = page.getByRole("textbox", { name: "Title" });
+  const title = page.getByRole("textbox", { name: "Note title", exact: true });
   await expect(title).toHaveValue(expectedTitle);
   await expect(title).toBeFocused();
 }
@@ -12,7 +12,7 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   await expect(page.locator("#noteCount")).toHaveText("1 note");
   await expect(page.getByRole("region", { name: "Japanese note filters" })).toBeHidden();
 
-  await page.getByRole("button", { name: "日本語" }).click();
+  await page.getByRole("button", { name: "日本語", exact: true }).click();
   const filters = page.getByRole("region", { name: "Japanese note filters" });
   await expect(filters).toBeVisible();
 
@@ -47,11 +47,11 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   await expect(page.locator("#noteList .note-item-title")).toHaveText("New grammar pattern");
   await expect(page.locator("#japaneseFilterStatus")).toHaveText("Showing 1 of 3 Japanese notes");
 
-  await page.getByRole("button", { name: "Notes" }).click();
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
   await expect(filters).toBeHidden();
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(4);
 
-  await page.getByRole("button", { name: "日本語" }).click();
+  await page.getByRole("button", { name: "日本語", exact: true }).click();
   await expect(page.locator("#japaneseNoteType")).toHaveValue("grammar");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(1);
 

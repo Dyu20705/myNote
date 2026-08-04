@@ -29,11 +29,15 @@ npm run test:e2e
 - **Recoverable degradation:** derived indexes may be rebuilt without weakening canonical note durability.
 - **Bounded resources:** history, rendering, worker messages, indexing, and command registration have explicit limits.
 - **Central command ownership:** one internal registry owns command metadata, availability, unavailable reasons, shortcuts, scope, and dispatch.
+- **Progressive disclosure:** ordinary editing stays dominant while metadata and destructive actions remain explicit, labelled, and recoverable.
 
 ## Current capabilities
 
 - Note creation, editing, deletion, pinning, and archiving.
 - Serialized autosave and explicit save handling.
+- Scan-friendly note cards with bounded plain-text previews and semantic selected state.
+- Editor context header with one save-status owner, Details inspector, and registry-backed More actions.
+- Labelled deletion with bounded Undo recovery through the existing command stack.
 - Keyboard-first navigation and registry-backed command palette.
 - Worker-based incremental search.
 - Wiki-link and Markdown task parsing with backlinks.
@@ -56,6 +60,7 @@ npm run test:e2e
 - [Technical invariants](docs/INVARIANTS.md)
 - [Command ownership audit](docs/COMMAND_OWNERSHIP.md)
 - [Command registry runtime contract](docs/COMMAND_REGISTRY.md)
+- [Editor and note-list interaction contract](docs/EDITOR_LIST_CONTRACT.md)
 - [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
 - [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
 - [Japanese study workspace interaction contract](docs/JAPANESE_STUDY_WORKSPACE.md)
@@ -73,11 +78,11 @@ Open the command palette with `Ctrl/Cmd+K` to inspect the current command invent
 | Shortcut | Scope | Action |
 | --- | --- | --- |
 | `Ctrl/Cmd+K` | Global, including focused text fields | Open command palette |
-| `Escape` | Command palette | Close palette and restore focus |
+| `Escape` | Command palette, Details, or More actions | Close the active disclosure and restore focus |
 | `Ctrl/Cmd+N` | Shell, Notes workspace only | Create an ordinary note |
 | `/` | Shell | Focus Search |
 | `Ctrl/Cmd+Enter` | Editor | Flush the active note |
-| `Ctrl/Cmd+Z` | Shell | Undo |
+| `Ctrl/Cmd+Z` | Shell | Undo, including recoverable deletion |
 | `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` | Shell | Redo |
 | `Ctrl/Cmd+Tab` | Shell | Switch to the previous active note |
 | `j` / `k` | Shell | Select next / previous visible note |
@@ -96,7 +101,9 @@ Text editing and IME composition suppress navigation, sequence, create, delete, 
 - `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study state/action derivation.
 - `ui/commandRegistry.js`: bounded command metadata, availability, scope, dispatch, sequence, and cleanup owner.
 - `ui/palette.js`: command rendering, filtering, invocation-by-ID, and focus-return adapter.
-- `ui/`: remaining shared rendering and interaction modules.
+- `ui/notePresentation.js`: bounded presentation-only note-card projection.
+- `ui/noteActionRegistry.js`: command-ID-only note-action extension descriptors.
+- `ui/editorChrome.js`: Details, More actions, focus return, and deletion-recovery presentation adapter.
 - `scripts/`: local verification and static-server utilities.
 - `tests/`: deterministic unit, integration, contract, and browser tests.
 - `docs/`: architecture, governance, safety, and operating constraints.
