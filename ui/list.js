@@ -11,7 +11,11 @@ function appendText(parent, className, text, tagName = "span") {
 function renderButton(button, note, isActive, formatDate) {
   const presentation = createNoteCardPresentation(note, { formatDate });
   button.classList.toggle("active", isActive);
-  button.toggleAttribute("aria-current", isActive);
+  if (isActive) {
+    button.setAttribute("aria-current", "true");
+  } else {
+    button.removeAttribute("aria-current");
+  }
   button.replaceChildren();
 
   const heading = document.createElement("span");
