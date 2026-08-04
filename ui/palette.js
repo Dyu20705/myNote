@@ -1,3 +1,50 @@
+let activeRegistry = null;
+const legacyRegistrations = new Set();
+
+function legacyCommandId(id) {
+  return `legacy.${String(id).replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}`;
+}
+
+export function registerPaletteCommands(provider) {
+  if (typeof provider !== "function") {
+    throw new TypeError("Palette command provider must be a function");
+  }
+  if (!activeRegistry) {
+    throw new TypeError("Command registry is not composed");
+  }
+
+  const initial = provider();
+  if (!Array.isArray(initial)) {
+    throw new TypeError("Palette command provider must return an array");
+  }
+
+  const unregister = initial.map((legacy) => activeRegistry.register({
+    id: legacyCommandId(legacy.id),
+    title: legacy.title,
+    description: legacy.description || legacy.title,
+    shortcuts: [],
+    scope: "shell",
+    isAvailable: () => {
+      const current = provider();
+      return Array.isArray(current) && current.some((candidate) => candidate.id === legacy.id);
+    },
+    unavailableReason: () => "Japanese study data is unavailable",
+    run: () => legacy.run(),
+  }));
+
+  const cleanup = () => {
+    if (!legacyRegistrations.delete(cleanup)) {
+      return false;
+    }
+    for (const remove of unregister) {
+      remove();
+    }
+    return true;
+  };
+  legacyRegistrations.add(cleanup);
+  return cleanup;
+}
+
 function shortcutLabel(shortcut, platform) {
   if (!shortcut) {
     return "";
@@ -35,6 +82,10 @@ export function createPalette({ root, input, list, registry, getContext }) {
   if (typeof getContext !== "function") {
     throw new TypeError("Invalid command context provider");
   }
+  if (activeRegistry && activeRegistry !== registry) {
+    throw new TypeError("A different command registry is already composed");
+  }
+  activeRegistry = registry;
 
   let query = "";
   let commands = [];
@@ -164,42 +215,47 @@ export function createPalette({ root, input, list, registry, getContext }) {
   }
 
   function onInputKeydown(event) {
+    if (!["Escape", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
     if (event.key === "Escape") {
-      event.preventDefault();
       close();
       return;
     }
     if (event.key === "ArrowDown") {
-      event.preventDefault();
       selectedIndex = Math.min(selectedIndex + 1, Math.max(0, filtered().length - 1));
       render();
       focusSelected();
       return;
     }
     if (event.key === "ArrowUp") {
-      event.preventDefault();
       selectedIndex = Math.max(0, selectedIndex - 1);
       render();
       focusSelected();
       return;
     }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const selected = filtered()[selectedIndex] ?? filtered()[0];
-      if (selected) {
-        runCommand(selected);
-      }
+
+    const selected = filtered()[selectedIndex] ?? filtered()[0];
+    if (selected) {
+      runCommand(selected);
     }
   }
 
   function onListKeydown(event) {
+    if (!["Escape", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
     if (event.key === "Escape") {
-      event.preventDefault();
       close();
       return;
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
       const delta = event.key === "ArrowDown" ? 1 : -1;
       const count = filtered().length;
       selectedIndex = count === 0 ? 0 : (selectedIndex + delta + count) % count;
@@ -207,12 +263,10 @@ export function createPalette({ root, input, list, registry, getContext }) {
       focusSelected();
       return;
     }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const selected = filtered()[selectedIndex];
-      if (selected) {
-        runCommand(selected);
-      }
+
+    const selected = filtered()[selectedIndex];
+    if (selected) {
+      runCommand(selected);
     }
   }
 
@@ -242,6 +296,12 @@ export function createPalette({ root, input, list, registry, getContext }) {
       list.removeEventListener("keydown", onListKeydown);
       root.removeEventListener("click", onRootClick);
       close({ restoreFocus: false });
+      for (const cleanup of [...legacyRegistrations]) {
+        cleanup();
+      }
+      if (activeRegistry === registry) {
+        activeRegistry = null;
+      }
     },
   });
 }
