@@ -329,6 +329,8 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await page.getByRole("button", { name: "Create vocabulary note" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("#japaneseDueCount")).toHaveText("1");
+  await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
+  await expect(page.locator("#titleInput")).toBeFocused();
 
   const startButton = page.getByRole("button", { name: "Start review" });
   await startButton.focus();

@@ -1,0 +1,105 @@
+.command-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: min(720px, calc(100dvh - 96px));
+}
+
+.command-input {
+  min-height: var(--mn-control-lg);
+  font-size: 1rem;
+}
+
+.command-list {
+  min-height: 0;
+  max-height: min(560px, calc(100dvh - 180px));
+  padding-block: var(--mn-space-1);
+}
+
+.command-item {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mn-space-4);
+  padding: 10px var(--mn-space-4);
+}
+
+.command-item-content {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.command-item-title,
+.command-item-description,
+.command-item-reason {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.command-item-title {
+  color: var(--mn-text-primary);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.command-item-description {
+  color: var(--mn-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.command-item-reason {
+  color: var(--mn-warning-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.command-item-shortcut {
+  justify-self: end;
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-sm);
+  padding: 3px 6px;
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-raised);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.command-item:focus-visible,
+.command-item:hover {
+  background: var(--mn-surface-selected);
+  box-shadow: inset 3px 0 0 var(--mn-focus-ring);
+}
+
+.command-item[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.command-item[aria-disabled="true"]:focus-visible,
+.command-item[aria-disabled="true"]:hover {
+  background: var(--mn-surface-raised);
+  box-shadow: inset 3px 0 0 var(--mn-warning-text);
+}
+
+@media (max-width: 720px) {
+  .command-palette {
+    padding-top: var(--mn-space-3);
+  }
+
+  .command-panel {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .command-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mn-space-2);
+  }
+
+  .command-item-shortcut {
+    justify-self: start;
+  }
+}

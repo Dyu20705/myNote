@@ -1,108 +1,307 @@
-const commandProviders = new Set();
+let activeRegistry = null;
+const legacyRegistrations = new Set();
+
+function legacyCommandId(id) {
+  return `legacy.${String(id).replace(/[^a-z0-9-]+/gi, "-").toLowerCase()}`;
+}
 
 export function registerPaletteCommands(provider) {
   if (typeof provider !== "function") {
     throw new TypeError("Palette command provider must be a function");
   }
-  commandProviders.add(provider);
-  return () => commandProviders.delete(provider);
-}
+  if (!activeRegistry) {
+    throw new TypeError("Command registry is not composed");
+  }
 
-function providedCommands() {
-  const commands = [];
-  for (const provider of commandProviders) {
-    const next = provider();
-    if (Array.isArray(next)) {
-      commands.push(...next);
+  const initial = provider();
+  if (!Array.isArray(initial)) {
+    throw new TypeError("Palette command provider must return an array");
+  }
+
+  const unregister = initial.map((legacy) => activeRegistry.register({
+    id: legacyCommandId(legacy.id),
+    title: legacy.title,
+    description: legacy.description || legacy.title,
+    shortcuts: [],
+    scope: "shell",
+    isAvailable: () => {
+      const current = provider();
+      return Array.isArray(current) && current.some((candidate) => candidate.id === legacy.id);
+    },
+    unavailableReason: () => "Japanese study data is unavailable",
+    run: () => legacy.run(),
+  }));
+
+  const cleanup = () => {
+    if (!legacyRegistrations.delete(cleanup)) {
+      return false;
     }
-  }
-  return commands;
+    for (const remove of unregister) {
+      remove();
+    }
+    return true;
+  };
+  legacyRegistrations.add(cleanup);
+  return cleanup;
 }
 
-function mergeCommands(baseCommands) {
-  const merged = new Map();
-  for (const command of baseCommands) {
-    merged.set(command.id, command);
+function shortcutLabel(shortcut, platform) {
+  if (!shortcut) {
+    return "";
   }
-  for (const command of providedCommands()) {
-    merged.set(command.id, command);
+  if (Array.isArray(shortcut.sequence)) {
+    return shortcut.sequence.join(" ");
   }
-  return [...merged.values()];
+
+  const parts = [];
+  if (shortcut.primaryModifier) {
+    parts.push(platform === "darwin" ? "Cmd" : "Ctrl");
+  }
+  if (shortcut.shiftKey) {
+    parts.push("Shift");
+  }
+  if (shortcut.altKey) {
+    parts.push(platform === "darwin" ? "Option" : "Alt");
+  }
+  parts.push(shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key);
+  return parts.join("+");
 }
 
-export function createPalette({ root, input, list, onRun }) {
-  let commands = [];
+function appendText(parent, className, text, tagName = "span") {
+  const node = document.createElement(tagName);
+  node.className = className;
+  node.textContent = text;
+  parent.append(node);
+  return node;
+}
+
+export function createPalette({ root, input, list, registry, getContext }) {
+  if (!registry || typeof registry.snapshot !== "function" || typeof registry.execute !== "function") {
+    throw new TypeError("Invalid command registry");
+  }
+  if (typeof getContext !== "function") {
+    throw new TypeError("Invalid command context provider");
+  }
+  if (activeRegistry && activeRegistry !== registry) {
+    throw new TypeError("A different command registry is already composed");
+  }
+  activeRegistry = registry;
+
   let query = "";
+  let commands = [];
+  let selectedIndex = 0;
+  let opener = null;
+  let destroyed = false;
+
+  function currentContext(overrides = {}) {
+    return {
+      ...getContext(),
+      source: "palette",
+      activeScope: "palette",
+      paletteOpen: true,
+      focusToken: "palette",
+      ...overrides,
+    };
+  }
 
   function filtered() {
-    const q = query.trim().toLowerCase();
-    if (!q) {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
       return commands;
     }
-    return commands.filter((item) => item.title.toLowerCase().includes(q));
+    return commands.filter((command) => (
+      command.title.toLowerCase().includes(normalized)
+      || command.description.toLowerCase().includes(normalized)
+      || command.unavailableReason.toLowerCase().includes(normalized)
+    ));
+  }
+
+  function focusSelected() {
+    const buttons = [...list.querySelectorAll("[data-command-id]")];
+    if (buttons.length === 0) {
+      return;
+    }
+    selectedIndex = Math.max(0, Math.min(selectedIndex, buttons.length - 1));
+    buttons[selectedIndex].focus();
+  }
+
+  function close({ restoreFocus = true } = {}) {
+    if (root.hidden) {
+      return;
+    }
+    root.hidden = true;
+    registry.resetSequences();
+    if (restoreFocus && opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) {
+      opener.focus();
+    }
+  }
+
+  function runCommand(command) {
+    if (!command.available) {
+      return;
+    }
+    const context = currentContext();
+    close({ restoreFocus: false });
+    Promise.resolve(registry.execute(command.id, context))
+      .finally(() => {
+        if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) {
+          opener.focus();
+        }
+      })
+      .catch(() => undefined);
   }
 
   function render() {
     const current = filtered();
+    selectedIndex = Math.max(0, Math.min(selectedIndex, Math.max(0, current.length - 1)));
     list.replaceChildren();
 
-    for (const command of current) {
+    current.forEach((command, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "command-item";
-      button.textContent = command.title;
-      button.addEventListener("click", () => {
-        close();
-        onRun(command);
+      button.dataset.commandId = command.id;
+      button.setAttribute("aria-disabled", String(!command.available));
+      button.tabIndex = index === selectedIndex ? 0 : -1;
+
+      const content = document.createElement("span");
+      content.className = "command-item-content";
+      appendText(content, "command-item-title", command.title, "strong");
+      appendText(content, "command-item-description", command.description);
+      if (!command.available) {
+        appendText(content, "command-item-reason", `Unavailable — ${command.unavailableReason}`);
+      }
+      button.append(content);
+
+      const label = shortcutLabel(command.shortcuts[0], currentContext().platform);
+      if (label) {
+        appendText(button, "command-item-shortcut", label, "kbd");
+      }
+
+      button.addEventListener("click", () => runCommand(command));
+      button.addEventListener("focus", () => {
+        selectedIndex = index;
       });
       list.append(button);
-    }
+    });
   }
 
-  function open(nextCommands) {
-    commands = mergeCommands(nextCommands);
+  function refresh() {
+    commands = registry.snapshot(currentContext());
+    render();
+  }
+
+  function open(nextOpener = document.activeElement) {
+    if (destroyed) {
+      return;
+    }
+    opener = nextOpener instanceof HTMLElement ? nextOpener : document.activeElement;
     query = "";
+    selectedIndex = 0;
     root.hidden = false;
     input.value = "";
-    render();
+    refresh();
     input.focus();
-  }
-
-  function close() {
-    root.hidden = true;
   }
 
   function isOpen() {
     return !root.hidden;
   }
 
-  input.addEventListener("input", (event) => {
+  function onInput(event) {
     query = event.target.value;
+    selectedIndex = 0;
     render();
-  });
+  }
 
-  input.addEventListener("keydown", (event) => {
+  function onInputKeydown(event) {
+    if (!["Escape", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
     if (event.key === "Escape") {
-      event.preventDefault();
       close();
       return;
     }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const first = filtered()[0];
-      if (first) {
-        close();
-        onRun(first);
-      }
+    if (event.key === "ArrowDown") {
+      selectedIndex = Math.min(selectedIndex + 1, Math.max(0, filtered().length - 1));
+      render();
+      focusSelected();
+      return;
     }
-  });
+    if (event.key === "ArrowUp") {
+      selectedIndex = Math.max(0, selectedIndex - 1);
+      render();
+      focusSelected();
+      return;
+    }
 
-  root.addEventListener("click", (event) => {
+    const selected = filtered()[selectedIndex] ?? filtered()[0];
+    if (selected) {
+      runCommand(selected);
+    }
+  }
+
+  function onListKeydown(event) {
+    if (!["Escape", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.key === "Escape") {
+      close();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      const count = filtered().length;
+      selectedIndex = count === 0 ? 0 : (selectedIndex + delta + count) % count;
+      render();
+      focusSelected();
+      return;
+    }
+
+    const selected = filtered()[selectedIndex];
+    if (selected) {
+      runCommand(selected);
+    }
+  }
+
+  function onRootClick(event) {
     if (event.target === root) {
       close();
     }
-  });
+  }
 
-  return { open, close, isOpen };
+  input.addEventListener("input", onInput);
+  input.addEventListener("keydown", onInputKeydown);
+  list.addEventListener("keydown", onListKeydown);
+  root.addEventListener("click", onRootClick);
+
+  return Object.freeze({
+    open,
+    close,
+    isOpen,
+    refresh,
+    destroy() {
+      if (destroyed) {
+        return;
+      }
+      destroyed = true;
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("keydown", onInputKeydown);
+      list.removeEventListener("keydown", onListKeydown);
+      root.removeEventListener("click", onRootClick);
+      close({ restoreFocus: false });
+      for (const cleanup of [...legacyRegistrations]) {
+        cleanup();
+      }
+      if (activeRegistry === registry) {
+        activeRegistry = null;
+      }
+    },
+  });
 }
