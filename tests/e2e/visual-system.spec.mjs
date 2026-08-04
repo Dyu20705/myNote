@@ -211,8 +211,8 @@ for (const viewport of VIEWPORTS) {
     expect(["anywhere", "break-word"]).toContain(geometry.contentOverflowWrap);
 
     await page.locator("#japaneseWorkspaceButton").click();
-    await expect(page.locator("#titleInput")).toHaveValue(title);
-    await expect(page.locator("#contentInput")).toHaveValue(content);
+    await expect(page.locator("#japaneseWorkspaceButton")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#editorRegion")).toBeVisible();
     await page.locator("#notesWorkspaceButton").click();
     await expect(page.locator("#titleInput")).toHaveValue(title);
     await expect(page.locator("#contentInput")).toHaveValue(content);
