@@ -13,6 +13,8 @@ const repositoryRoot = path.resolve(
 const canonicalRepositoryRoot = await realpath(repositoryRoot);
 const rootAssets = new Set([
   "/app.js",
+  "/command.css",
+  "/editor.css",
   "/index.html",
   "/japanese.css",
   "/japaneseApp.js",
