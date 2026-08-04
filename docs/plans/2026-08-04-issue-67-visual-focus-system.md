@@ -1,6 +1,6 @@
 # Issue #67 Visual and Focus System Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Track every step with the checkboxes below. Each production change starts from a focused failing browser assertion and remains independently reviewable.
 
 **Goal:** Build a small dark-first CSS visual system that gives myNote readable English/Japanese typography, bounded editor measure, clear action hierarchy, and keyboard-visible non-color-only states without changing application behavior.
 
@@ -33,7 +33,7 @@
 - Modify `ui/list.js` only if the current delete control needs a semantic destructive class or selected-state attribute; do not change lifecycle behavior.
 - Modify `docs/UX_QUALITY_BASELINE.md`: record #67 token/state/readability contract, evidence boundary, unsupported environments, and rollback.
 
-### Task 1: Establish the RED visual-system browser contract
+## Task 1: Establish the RED visual-system browser contract
 
 **Files:**
 - Create: `tests/e2e/visual-system.spec.mjs`
@@ -42,72 +42,69 @@
 - Consumes: existing rendered shell IDs/classes and browser-computed CSS.
 - Produces: executable acceptance contract for token aliases, font separation, focus, composite focus, selected/disabled/busy/invalid/destructive states, editor measure, long content, reduced motion, and desktop overflow.
 
-- [ ] **Step 1: Add token and typography assertions**
+- [x] **Step 1: Add token and typography assertions**
 
-Assert after `page.goto("/")` that:
+The test reads exact CSS aliases from `:root` and expects:
 
 ```js
-const tokens = await page.locator(":root").evaluate((element) => {
-  const style = getComputedStyle(element);
-  return {
-    canvas: style.getPropertyValue("--mn-bg-canvas").trim(),
-    surfaceBase: style.getPropertyValue("--mn-surface-base").trim(),
-    surfaceRaised: style.getPropertyValue("--mn-surface-raised").trim(),
-    focus: style.getPropertyValue("--mn-focus-ring").trim(),
-    readable: style.getPropertyValue("--mn-content-readable").trim(),
-  };
-});
 expect(tokens).toEqual({
   canvas: "#000000",
   surfaceBase: "#0a0b0d",
   surfaceRaised: "#111318",
+  surfaceSelected: "#20242c",
+  textPrimary: "#f4f6f8",
+  textSecondary: "#b8c0cc",
+  borderDefault: "#313743",
   focus: "#38bdf8",
+  primary: "#0ea5e9",
   readable: "760px",
+  uiFont: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+  japaneseFont: "\"Hiragino Kaku Gothic ProN\", \"Yu Gothic UI\", \"Yu Gothic\", Meiryo, \"Noto Sans JP\", sans-serif",
+  monoFont: "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace",
 });
 ```
 
-Also assert the body font is not monospace, `[lang="ja"]` resolves through a documented Japanese-capable stack, and `kbd` resolves through the monospace token.
+It also proves the body is not monospace, `[lang="ja"]` resolves through the Japanese-capable stack, and `kbd` uses the monospace stack.
 
-- [ ] **Step 2: Add focus and state assertions**
+- [x] **Step 2: Add focus and state assertions**
 
-Assert:
+The test requires:
 
-- `button`, `input`, `textarea`, and `select` receive a solid focus outline at least `2px` wide;
-- `.search-box` exposes focus via `box-shadow` or outline when `#searchInput` is focused;
-- `[aria-pressed="true"]` has a non-color indicator such as an inset rail plus stronger font weight;
-- disabled controls use `cursor: not-allowed` and reduced opacity;
-- `[aria-busy="true"]` exposes a visible pseudo-element indicator and progress cursor without animation dependency;
-- `[aria-invalid="true"]` uses a non-color shape/border-style distinction;
-- `.note-item-delete` exposes destructive text/border semantics and a native accessible name.
+- `button`, `input`, and `textarea` focus outlines to be solid, at least `2px`, accent-colored, and offset at least `2px`;
+- `.search-box` to expose focus through both border and box-shadow;
+- `[aria-pressed="true"]` to use an inset rail and stronger font weight;
+- disabled controls to use `not-allowed`, reduced opacity, and a dashed border;
+- `[aria-busy="true"]` to use a progress cursor and visible pseudo-element indicator;
+- `[aria-invalid="true"]` to use danger color, double border, and a focus-like shadow;
+- `.note-item-delete` to retain the `Delete note` accessible name and use destructive text/border/weight.
 
-- [ ] **Step 3: Add readable-measure and long-content assertions**
+- [x] **Step 3: Add readable-measure and long-content assertions**
 
-Fill the title/editor with long English, Japanese, mixed-language, and unbroken Markdown text. At each supported viewport assert:
+At `1440×900`, `1280×720`, and `1024×768`, fill the editor with long English, Japanese, mixed-language, and unbroken Markdown content, then assert:
 
 ```js
-expect(editor.width).toBeLessThanOrEqual(760);
-expect(documentWidth).toBeLessThanOrEqual(viewportWidth);
-expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth);
+expect(geometry.titleWidth).toBeLessThanOrEqual(760);
+expect(geometry.contentWidth).toBeLessThanOrEqual(760);
+expect(geometry.contentVisibleHeight).toBeGreaterThanOrEqual(160);
+expect(geometry.contentScrollWidth).toBeLessThanOrEqual(geometry.contentClientWidth);
+expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
 ```
 
-The test must preserve active note, query, and draft while switching Notes/日本語.
+Switch Notes → 日本語 → Notes and verify the exact title/content remain present.
 
-- [ ] **Step 4: Add reduced-motion assertion**
+- [x] **Step 4: Add reduced-motion assertion**
 
-Run a context with `reducedMotion: "reduce"` and assert transitions/animations on representative interactive controls resolve to `0s` or `none`.
+Use Playwright `reducedMotion: "reduce"` and require representative controls to resolve with no animation and no transition duration.
 
-- [ ] **Step 5: Commit test-only RED state**
+- [x] **Step 5: Commit the test-only head**
 
-```bash
-git add tests/e2e/visual-system.spec.mjs
-git commit -m "test: define issue 67 visual system contract"
-```
+Commit `bac68b27550218ccb11f6648d8667dd27bb09a56` added only the plan and browser contract.
 
-- [ ] **Step 6: Open a draft PR and verify RED**
+- [ ] **Step 6: Verify an intentional RED workflow**
 
-Run the PR workflow against the test-only head. Expected failure must be caused by missing `--mn-*` aliases and/or absent focus/state contracts, not syntax, fixture, or infrastructure errors. Record run ID and exact failing assertions in the PR and issue.
+The first workflow attempt stopped at repository-content validation because the plan contained a prohibited provenance phrase. Correct this document, rerun the workflow, and accept RED only when content/lint/unit/integration pass and Playwright fails on missing #67 CSS behavior.
 
-### Task 2: Introduce the bounded semantic token and typography layer
+## Task 2: Introduce the bounded semantic token and typography layer
 
 **Files:**
 - Modify: `styles.css`
@@ -179,22 +176,22 @@ Retain temporary legacy aliases only where needed to keep the diff reviewable; a
 - `kbd`, `code`, `pre`, and technical hints use `--mn-font-mono`.
 - Use explicit heading weights/sizes rather than `font: inherit` resets.
 
-- [ ] **Step 3: Run the focused test**
+- [ ] **Step 3: Run the token/typography slice**
 
 ```bash
-npx playwright test tests/e2e/visual-system.spec.mjs --grep "tokens|typography"
+npx playwright test tests/e2e/visual-system.spec.mjs --grep "aliases|font"
 ```
 
 Expected: token and font assertions pass; focus/state assertions may remain red.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Commit the token layer**
 
 ```bash
 git add styles.css japanese.css
 git commit -m "style: add bounded visual tokens and typography"
 ```
 
-### Task 3: Implement action hierarchy and non-color-only state contracts
+## Task 3: Implement action hierarchy and non-color-only state contracts
 
 **Files:**
 - Modify: `styles.css`
@@ -218,29 +215,42 @@ git commit -m "style: add bounded visual tokens and typography"
 - selected navigation and note items use an inset accent rail plus font-weight/border changes;
 - disabled controls use opacity, cursor, and stable text contrast;
 - busy controls use progress cursor and `::after` textual/shape indicator without mandatory animation;
-- invalid fields use danger color plus `double` border or another non-color geometry change;
-- pressed controls use transform-free tonal/border change to avoid motion dependence.
+- invalid fields use danger color plus `double` border;
+- pressed controls use transform-free tonal/border changes.
 
-- [ ] **Step 3: Reduce border competition**
+- [ ] **Step 3: Restore global visible focus**
 
-Keep borders only for shell/region separation, controls, selected/invalid/destructive states, and overlays. Use surface contrast, spacing, and headings for nested dashboard/backlink/list grouping. Do not remove boundaries needed to understand regions.
+Remove the global `outline: none` rule. Apply one shared focus rule to native interactive controls and note/backlink/command controls:
 
-- [ ] **Step 4: Run focused state tests**
+```css
+:where(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
+```
+
+Search additionally uses `:focus-within` to expose a composite ring.
+
+- [ ] **Step 4: Reduce border competition**
+
+Keep borders for shell/region separation, controls, selected/invalid/destructive states, and overlays. Use surface contrast, spacing, and headings for nested dashboard/backlink/list grouping. Do not remove boundaries needed to understand regions.
+
+- [ ] **Step 5: Run focused state tests**
 
 ```bash
-npx playwright test tests/e2e/visual-system.spec.mjs --grep "focus|state|action"
+npx playwright test tests/e2e/visual-system.spec.mjs --grep "focus|states"
 ```
 
 Expected: all focused assertions pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit the state hierarchy**
 
 ```bash
 git add styles.css japanese.css index.html ui/list.js
 git commit -m "style: implement accessible control and state hierarchy"
 ```
 
-### Task 4: Enforce readable editor and long-content resilience
+## Task 4: Enforce readable editor and long-content resilience
 
 **Files:**
 - Modify: `styles.css`
@@ -248,28 +258,32 @@ git commit -m "style: implement accessible control and state hierarchy"
 
 **Interfaces:**
 - Consumes: `--mn-content-readable` and font stacks.
-- Produces: centered/bounded editor measure, safe wrapping, Japanese line-height, and unchanged shell behavior.
+- Produces: bounded editor measure, safe wrapping, Japanese line-height, and unchanged shell behavior.
 
-- [ ] **Step 1: Bound editor fields without hiding wide application space**
+- [ ] **Step 1: Bound editor fields without hiding application space**
 
 Set title and content fields to `width: min(100%, var(--mn-content-readable))`, with the editor panel retaining flexible remaining space. Keep focus order and active draft unchanged.
 
 - [ ] **Step 2: Add wrapping contracts**
 
-Use `overflow-wrap: anywhere`, `word-break: break-word` where appropriate, `min-width: 0`, and Japanese `line-height` around `1.75`. Do not truncate canonical editor content.
+Use `overflow-wrap: anywhere`, `word-break: break-word` where appropriate, and `min-width: 0`. Japanese reading surfaces use approximately `1.75` line-height. Do not truncate canonical editor content.
 
-- [ ] **Step 3: Verify supported viewports and 200% zoom proxy**
+- [ ] **Step 3: Verify supported viewports**
 
-Run all visual-system viewport cases and the existing editor-shell spec. Assert no horizontal document overflow and at least the existing meaningful editor body visibility.
+Run all visual-system viewport cases and the existing editor-shell spec. Require no horizontal document overflow and at least the existing meaningful editor-body visibility.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Update the existing focus-color assertion**
+
+`tests/e2e/editor-shell.spec.mjs` currently expects the old `rgb(221, 221, 221)` border. Change the assertion to the accepted focus token `rgb(56, 189, 248)` after the new token exists.
+
+- [ ] **Step 5: Commit the readable-measure package**
 
 ```bash
-git add styles.css japanese.css
+git add styles.css japanese.css tests/e2e/editor-shell.spec.mjs
 git commit -m "style: bound editor measure and long content"
 ```
 
-### Task 5: Document the implemented visual contract and run the complete gate
+## Task 5: Document and verify the implemented contract
 
 **Files:**
 - Modify: `docs/UX_QUALITY_BASELINE.md`
@@ -281,17 +295,7 @@ git commit -m "style: bound editor measure and long content"
 
 - [ ] **Step 1: Add the #67 implementation contract**
 
-Document:
-
-- exact base/head revisions and Figma nodes;
-- token names/values and temporary compatibility aliases;
-- UI, Japanese, and monospace stacks;
-- focus geometry and composite focus behavior;
-- non-color selected/disabled/busy/invalid/destructive indicators;
-- readable measure and wrapping;
-- dark-only and unsupported browser/assistive-technology boundaries;
-- no persistence/schema/runtime dependency change;
-- one-PR rollback.
+Document exact base/head revisions and Figma nodes, token names/values, UI/Japanese/monospace stacks, focus geometry, composite focus, non-color state indicators, readable measure, dark-only boundary, unsupported browser/assistive-technology evidence, no persisted-data impact, and one-PR rollback.
 
 - [ ] **Step 2: Run focused regression**
 
@@ -301,7 +305,7 @@ npx playwright test tests/e2e/visual-system.spec.mjs tests/e2e/editor-shell.spec
 
 Expected: all tests pass with zero failures.
 
-- [ ] **Step 3: Run the full repository gate**
+- [ ] **Step 3: Run the complete repository gate**
 
 ```bash
 npm ci
@@ -322,4 +326,4 @@ Reject the branch if it introduces behavior ownership in CSS/JS, duplicate theme
 
 - [ ] **Step 5: Mark the PR ready only after fresh green evidence**
 
-Record exact head SHA, workflow run/job, test counts, changed files, remaining manual/forced-colors/Windows unknowns, and rollback. Do not merge #67 until external review finds no blocker.
+Record exact head SHA, workflow run/job, test counts, changed files, remaining manual/forced-colors/Windows unknowns, and rollback. Do not merge #67 until review finds no blocker.
