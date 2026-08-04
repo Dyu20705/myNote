@@ -65,7 +65,7 @@ test("invalid study data retains Japanese commands with an actionable reason", a
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
   await page.locator("#commandInput").fill("Create vocabulary note");
-  const command = page.getByRole("button", { name: /Create vocabulary note/ });
+  const command = page.locator("#commandList [data-command-id='legacy.japanese-create-vocabulary']");
   await expect(command).toBeVisible();
   await expect(command).toHaveAttribute("aria-disabled", "true");
   await expect(command).toContainText("Japanese study data is unavailable");
