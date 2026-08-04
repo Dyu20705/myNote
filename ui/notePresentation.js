@@ -1,0 +1,85 @@
+const DEFAULT_MAX_LENGTH = 160;
+const DEFAULT_MAX_SCAN_LENGTH = 8192;
+const MAX_OUTPUT_LENGTH = 1000;
+const MAX_SCAN_LENGTH = 65536;
+
+function presentationError() {
+  const error = new Error("NOTE_PRESENTATION_OPTIONS_INVALID");
+  error.code = "NOTE_PRESENTATION_OPTIONS_INVALID";
+  return error;
+}
+
+function validateOptions(options) {
+  const maxLength = options.maxLength ?? DEFAULT_MAX_LENGTH;
+  const maxScanLength = options.maxScanLength ?? DEFAULT_MAX_SCAN_LENGTH;
+  if (
+    !Number.isInteger(maxLength)
+    || maxLength < 1
+    || maxLength > MAX_OUTPUT_LENGTH
+    || !Number.isInteger(maxScanLength)
+    || maxScanLength < 32
+    || maxScanLength > MAX_SCAN_LENGTH
+  ) {
+    throw presentationError();
+  }
+  return { maxLength, maxScanLength };
+}
+
+function removeCommonHtmlTags(value) {
+  return value.replace(
+    /<\/?(?:a|abbr|article|aside|b|blockquote|br|button|code|details|div|em|footer|form|h[1-6]|header|hr|i|img|input|label|li|main|mark|nav|ol|p|pre|script|section|small|span|strong|style|summary|table|tbody|td|textarea|th|thead|tr|u|ul)(?:\s[^>]*)?>/giu,
+    " ",
+  );
+}
+
+function plainTextProjection(content, maxScanLength) {
+  const scanned = content.slice(0, maxScanLength).replace(/\r\n?|\u2028|\u2029/gu, "\n");
+  return removeCommonHtmlTags(scanned)
+    .replace(/<!--[\s\S]*?-->/gu, " ")
+    .replace(/^\s*```[^\n]*$/gmu, " ")
+    .replace(/^\s{0,3}#{1,6}\s+/gmu, "")
+    .replace(/^\s*>+\s?/gmu, "")
+    .replace(/^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?/gmu, "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
+    .replace(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/gu, (_match, target, alias) => alias || target)
+    .replace(/(?:\*\*|__)(.*?)\1/gu, "$1")
+    .replace(/~~(.*?)~~/gu, "$1")
+    .replace(/[`*_~]/gu, "")
+    .replace(/[<>]/gu, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+export function deriveNotePreview(content, options = {}) {
+  const { maxLength, maxScanLength } = validateOptions(options);
+  if (typeof content !== "string" || content.trim().length === 0) {
+    return "";
+  }
+
+  const projected = plainTextProjection(content, maxScanLength);
+  if (projected.length <= maxLength) {
+    return projected;
+  }
+  if (maxLength === 1) {
+    return "…";
+  }
+  return `${projected.slice(0, maxLength - 1).trimEnd()}…`.padEnd(maxLength, "…");
+}
+
+export function createNoteCardPresentation(note, { formatDate } = {}) {
+  if (!note || typeof note !== "object" || typeof formatDate !== "function") {
+    throw presentationError();
+  }
+  return {
+    title: typeof note.title === "string" && note.title.trim() ? note.title : "Untitled",
+    preview: deriveNotePreview(note.content),
+    date: formatDate(note.updatedAt),
+    tags: Array.isArray(note.tags)
+      ? note.tags.filter((tag) => typeof tag === "string").slice(0, 4)
+      : [],
+    pinned: note.pinned === true,
+    archived: note.archived === true,
+  };
+}
