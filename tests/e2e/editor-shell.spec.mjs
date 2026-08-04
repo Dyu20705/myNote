@@ -178,6 +178,7 @@ test("shell controls remain functional through refresh, save, selection, search,
 test("rapid workspace switching preserves per-workspace query, selection, and the newest draft", async ({ page }) => {
   await page.goto("/");
   await page.locator("#newNoteButton").click();
+  await expect(page.locator("#contentInput")).toBeFocused();
   await page.locator("#titleInput").fill("Newest synthetic draft");
   await page.locator("#contentInput").fill("This pending draft must survive rapid workspace transitions.");
   await page.locator("#searchInput").fill("Newest synthetic");
