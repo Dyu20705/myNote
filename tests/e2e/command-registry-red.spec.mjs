@@ -11,7 +11,8 @@ async function createOrdinaryNote(page, title) {
   await expect(page.locator("#contentInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(`${title} body`);
-  await page.locator("#saveButton").click();
+  await page.locator("#contentInput").focus();
+  await page.keyboard.press("Control+Enter");
   await expect(page.locator("#saveState")).toHaveText("Saved locally");
   await expect(page.locator("#noteList .note-item-title")).toContainText([title]);
 }
