@@ -32,9 +32,20 @@ function removeCommonHtmlTags(value) {
   );
 }
 
+function replaceControlCharacters(value) {
+  let result = "";
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    const isForbidden = codePoint === 127
+      || (codePoint < 32 && codePoint !== 9 && codePoint !== 10 && codePoint !== 13);
+    result += isForbidden ? " " : character;
+  }
+  return result;
+}
+
 function plainTextProjection(content, maxScanLength) {
   const scanned = content.slice(0, maxScanLength).replace(/\r\n?|\u2028|\u2029/gu, "\n");
-  return removeCommonHtmlTags(scanned)
+  const projected = removeCommonHtmlTags(scanned)
     .replace(/<!--[\s\S]*?-->/gu, " ")
     .replace(/^\s*```[^\n]*$/gmu, " ")
     .replace(/^\s{0,3}#{1,6}\s+/gmu, "")
@@ -43,11 +54,13 @@ function plainTextProjection(content, maxScanLength) {
     .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
     .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
     .replace(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/gu, (_match, target, alias) => alias || target)
-    .replace(/(?:\*\*|__)(.*?)\1/gu, "$1")
+    .replace(/\*\*(.*?)\*\*/gu, "$1")
+    .replace(/__(.*?)__/gu, "$1")
     .replace(/~~(.*?)~~/gu, "$1")
     .replace(/[`*_~]/gu, "")
-    .replace(/[<>]/gu, "")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, " ")
+    .replace(/[<>]/gu, "");
+
+  return replaceControlCharacters(projected)
     .replace(/\s+/gu, " ")
     .trim();
 }
