@@ -330,3 +330,14 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
     grid-template-columns: 1fr;
   }
 }
+
+.japanese-filters button:disabled {
+  border-style: dashed;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.japanese-filter-field :is(input, select)[aria-invalid="true"] {
+  border: 3px double var(--mn-danger-border);
+  box-shadow: 0 0 0 2px rgb(244 63 94 / 25%);
+}
