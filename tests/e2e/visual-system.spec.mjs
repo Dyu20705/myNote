@@ -66,7 +66,16 @@ test("accepted Figma aliases and intentional font stacks are exposed by CSS", as
 test("core controls expose visible focus and composite search focus", async ({ page }) => {
   await page.goto("/");
 
-  const focusTargets = ["#notesWorkspaceButton", "#searchInput", "#newNoteButton", "#refreshButton", "#titleInput", "#contentInput", "#saveButton"];
+  const focusTargets = [
+    "#notesWorkspaceButton",
+    "#searchInput",
+    "#newNoteButton",
+    "#refreshButton",
+    "#titleInput",
+    "#detailsButton",
+    "#noteActionsButton",
+    "#contentInput",
+  ];
   for (const selector of focusTargets) {
     const target = page.locator(selector);
     await target.focus();
@@ -161,18 +170,20 @@ test("selected, disabled, busy, invalid, and destructive states are not color-on
   expect(busyStyle.afterContent).not.toBe("normal");
   expect(busyStyle.afterDisplay).not.toBe("none");
 
-  const deleteButton = page.locator(".note-item-delete").first();
-  await expect(deleteButton).toHaveAccessibleName("Delete note");
+  await page.getByRole("button", { name: "More actions" }).click();
+  const deleteButton = page.locator("#noteActionsList [data-command-id='notes.delete']");
+  await expect(deleteButton).toHaveAccessibleName(/Delete active note/);
   const destructive = await deleteButton.evaluate((element) => {
     const style = globalThis.getComputedStyle(element);
+    const labelStyle = globalThis.getComputedStyle(element.querySelector("strong"));
     return {
-      color: style.color,
+      color: labelStyle.color,
       borderColor: style.borderTopColor,
-      fontWeight: Number.parseInt(style.fontWeight, 10),
+      fontWeight: Number.parseInt(labelStyle.fontWeight, 10),
     };
   });
   expect(destructive.color).toBe("rgb(251, 113, 133)");
-  expect(destructive.borderColor).toBe("rgb(244, 63, 94)");
+  expect(destructive.borderColor).toBe("rgba(244, 63, 94, 0.32)");
   expect(destructive.fontWeight).toBeGreaterThanOrEqual(600);
 });
 
