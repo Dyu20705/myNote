@@ -37,6 +37,7 @@ const els = {
   saveState: document.getElementById("saveState"),
   searchInput: document.getElementById("searchInput"),
   newNoteButton: document.getElementById("newNoteButton"),
+  refreshButton: document.getElementById("refreshButton"),
   saveButton: document.getElementById("saveButton"),
   noteList: document.getElementById("noteList"),
   titleInput: document.getElementById("titleInput"),
@@ -46,7 +47,6 @@ const els = {
   commandPalette: document.getElementById("commandPalette"),
   commandInput: document.getElementById("commandInput"),
   commandList: document.getElementById("commandList"),
-  metricsState: document.getElementById("metricsState"),
 };
 
 const store = createStore({
@@ -78,6 +78,7 @@ const backlinkIndex = createBacklinkIndex();
 let noteWorkspace = null;
 let enrolledDeleteHandler = null;
 let workspaceFlushDepth = 0;
+let reconcileInFlight = false;
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat("en", {
@@ -98,18 +99,9 @@ function setBacklinksFromIndex() {
   store.setState({ backlinksMap: backlinkIndex.toMap() });
 }
 
-function renderMetrics() {
-  const metrics = store.getState().metrics;
-  if (!els.metricsState) {
-    return;
-  }
-  els.metricsState.textContent = `render:${metrics.renderMs.toFixed(1)}ms search:${metrics.searchMs.toFixed(1)}ms worker:${metrics.workerMs.toFixed(1)}ms autosave:${metrics.autosaveMs.toFixed(1)}ms mem:${metrics.memoryMb.toFixed(1)}MB`;
-}
-
 function updateMetrics(patch) {
   const current = store.getState().metrics;
   store.setState({ metrics: { ...current, ...patch } });
-  renderMetrics();
 }
 
 function bumpSaveRevision() {
@@ -453,6 +445,31 @@ const autosave = createAutosave({
   onSave: saveCurrentNote,
 });
 
+async function reconcileCurrentView() {
+  if (reconcileInFlight) {
+    return false;
+  }
+
+  const restoreFocus = document.activeElement === els.refreshButton;
+  reconcileInFlight = true;
+  els.refreshButton.disabled = true;
+  els.refreshButton.setAttribute("aria-busy", "true");
+  try {
+    await autosave.flush();
+    await refreshSearch();
+    return true;
+  } finally {
+    reconcileInFlight = false;
+    els.refreshButton.disabled = false;
+    els.refreshButton.removeAttribute("aria-busy");
+    const focusWasLost = document.activeElement === document.body
+      || document.activeElement === null;
+    if (restoreFocus && focusWasLost) {
+      els.refreshButton.focus();
+    }
+  }
+}
+
 async function flushWorkspace() {
   const canonicalChanged = store.getState().dirty;
   workspaceFlushDepth += 1;
@@ -705,10 +722,14 @@ function shouldHandleGlobalKey(event) {
 }
 
 els.searchInput.addEventListener("input", (event) => {
-  runAction(() => refreshSearch({ query: event.target.value.trim() }));
+  const query = event.target.value.trim();
+  runAction(() => refreshSearch({ query }));
 });
 els.newNoteButton.addEventListener("click", () => {
   runAction(() => createNote());
+});
+els.refreshButton.addEventListener("click", () => {
+  runAction(() => reconcileCurrentView());
 });
 els.saveButton.addEventListener("click", () => {
   runAction(() => autosave.flush());
@@ -721,7 +742,7 @@ for (const field of [els.titleInput, els.contentInput]) {
       runAction(() => autosave.flush());
       return;
     }
-    if (event.key === "Tab" && event.target === els.contentInput) {
+    if (event.key === "Tab" && !event.shiftKey && event.target === els.contentInput) {
       event.preventDefault();
       const start = els.contentInput.selectionStart;
       const end = els.contentInput.selectionEnd;
@@ -887,7 +908,6 @@ async function bootstrap() {
     return;
   }
   await refreshSearch({ emptyLabel: "No notes" });
-  renderMetrics();
 }
 
 bootstrap().catch(() => {

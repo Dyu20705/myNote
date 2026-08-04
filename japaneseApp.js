@@ -60,6 +60,9 @@ function collectElements(document) {
   return {
     notesButton: document.querySelector("#notesWorkspaceButton"),
     japaneseButton: document.querySelector("#japaneseWorkspaceButton"),
+    noteNavigationTitle: document.querySelector("#noteNavigationTitle"),
+    searchInput: document.querySelector("#searchInput"),
+    newNoteButton: document.querySelector("#newNoteButton"),
     filtersRoot: document.querySelector("#japaneseFilters"),
     filterDateFrom: document.querySelector("#japaneseDateFrom"),
     filterDateTo: document.querySelector("#japaneseDateTo"),
@@ -210,6 +213,9 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     document.body.dataset.workspace = japanese ? "japanese" : "notes";
     elements.notesButton.setAttribute("aria-pressed", String(!japanese));
     elements.japaneseButton.setAttribute("aria-pressed", String(japanese));
+    elements.noteNavigationTitle.textContent = japanese ? "Japanese Notes" : "Notes";
+    elements.searchInput.placeholder = japanese ? "Search Japanese notes" : "Search notes";
+    elements.newNoteButton.hidden = japanese;
     elements.dashboard.hidden = !japanese;
     for (const button of elements.quickCreateButtons) {
       button.disabled = unavailable;

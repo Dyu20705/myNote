@@ -8,119 +8,118 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <div>
+    <div class="app-shell">
+      <header id="applicationHeader" class="topbar">
+        <div class="identity-navigation">
           <h1>myNote</h1>
-          <p class="lede">Local notes. Keyboard first. No noise.</p>
+          <nav id="workspaceNavigation" class="workspace-switcher" aria-label="Workspace">
+            <button id="notesWorkspaceButton" type="button" aria-pressed="true">Notes</button>
+            <button id="japaneseWorkspaceButton" type="button" aria-pressed="false" lang="ja">日本語</button>
+          </nav>
         </div>
-        <div class="status-line">
-          <span id="noteCount">0 notes</span>
-          <span id="saveState">Saved locally</span>
-          <span id="metricsState" class="metrics-state">render:0.0ms search:0.0ms worker:0.0ms autosave:0.0ms mem:0.0MB</span>
+
+        <div class="header-actions">
+          <label class="search-box" for="searchInput">
+            <span class="visually-hidden">Search notes</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Search notes" />
+            <kbd aria-hidden="true">/</kbd>
+          </label>
+          <div class="status-line" aria-label="Note and save status">
+            <span id="saveState" role="status" aria-live="polite">Saved locally</span>
+            <span id="noteCount">0 notes</span>
+          </div>
+          <button id="newNoteButton" class="primary-button" type="button">New note</button>
+          <button id="refreshButton" class="shell-button" type="button">Refresh</button>
         </div>
       </header>
 
-      <nav class="workspace-switcher" aria-label="Workspace">
-        <button id="notesWorkspaceButton" type="button" aria-pressed="true">Notes</button>
-        <button id="japaneseWorkspaceButton" type="button" aria-pressed="false" lang="ja">日本語</button>
-      </nav>
-
-      <section class="command-bar">
-        <label class="search-box" for="searchInput">
-          <span>Search</span>
-          <input id="searchInput" type="search" autocomplete="off" placeholder="Filter notes" />
-        </label>
-        <button id="newNoteButton" class="primary-button" type="button">New note</button>
-      </section>
-
-      <section id="japaneseFilters" class="japanese-filters" aria-label="Japanese note filters" hidden>
-        <label class="japanese-filter-field" for="japaneseDateFrom">
-          <span>Created from</span>
-          <input id="japaneseDateFrom" type="date" />
-        </label>
-        <label class="japanese-filter-field" for="japaneseDateTo">
-          <span>Created to</span>
-          <input id="japaneseDateTo" type="date" />
-        </label>
-        <label class="japanese-filter-field" for="japaneseNoteType">
-          <span>Note type</span>
-          <select id="japaneseNoteType">
-            <option value="all">All types</option>
-            <option value="vocabulary">Vocabulary</option>
-            <option value="kanji">Kanji</option>
-            <option value="grammar">Grammar</option>
-            <option value="output">Output</option>
-            <option value="planner">Planner</option>
-          </select>
-        </label>
-        <button id="clearJapaneseFilters" type="button" aria-label="Clear Japanese filters" disabled>Clear filters</button>
-        <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
-      </section>
-
-      <section id="japaneseDashboard" class="japanese-dashboard" aria-label="Japanese learning dashboard" hidden>
-        <div class="dashboard-header">
-          <div>
-            <p class="eyebrow" lang="ja">日本語 workspace</p>
-            <h2>Study dashboard</h2>
-          </div>
-          <button id="startReviewButton" class="primary-button" type="button">Start review</button>
-        </div>
-
-        <div class="dashboard-grid">
-          <article class="dashboard-card" data-dashboard-card>
-            <span>Due reviews</span>
-            <strong id="japaneseDueCount">0</strong>
-          </article>
-          <article class="dashboard-card" data-dashboard-card>
-            <span>New vocabulary</span>
-            <strong id="japaneseNewVocabulary">0</strong>
-          </article>
-          <article class="dashboard-card" data-dashboard-card>
-            <span>Due kanji</span>
-            <strong id="japaneseDueKanji">0</strong>
-          </article>
-          <article class="dashboard-card" data-dashboard-card>
-            <span>Grammar notes</span>
-            <strong id="japaneseGrammarTotal">0</strong>
-          </article>
-          <article class="dashboard-card" data-dashboard-card>
-            <span>Output streak</span>
-            <strong id="japaneseOutputStreak">0 days</strong>
-          </article>
-          <article class="dashboard-card" data-dashboard-card>
-            <span>Planner progress</span>
-            <strong id="japanesePlannerProgress">0 / 0</strong>
-          </article>
-        </div>
-
-        <div class="japanese-actions" role="group" aria-label="Japanese quick create">
-          <button type="button" data-japanese-template="vocabulary">Create vocabulary note</button>
-          <button type="button" data-japanese-template="kanji">Create kanji note</button>
-          <button type="button" data-japanese-template="grammar">Create grammar note</button>
-          <button type="button" data-japanese-template="output">Create today’s output note</button>
-          <button type="button" data-japanese-template="planner">Create this week’s planner</button>
-        </div>
-
-        <section class="repair-region" role="region" aria-label="Needs repair">
-          <div class="repair-header">
-            <h3>Needs repair</h3>
-            <span id="japaneseRepairCount">0</span>
-          </div>
-          <ul id="japaneseRepairList" class="repair-list"></ul>
-        </section>
-      </section>
-
-      <section class="workspace">
-        <aside class="panel notes-panel">
+      <section class="workspace" aria-label="Note workspace">
+        <aside id="noteNavigationRegion" class="panel notes-panel" aria-label="Note navigation">
           <div class="panel-header">
-            <h2>Notes</h2>
+            <h2 id="noteNavigationTitle">Notes</h2>
             <span id="activeNoteLabel">Ready</span>
           </div>
           <div id="noteList" class="note-list" aria-live="polite"></div>
+
+          <section id="japaneseFilters" class="japanese-filters" aria-label="Japanese note filters" hidden>
+            <label class="japanese-filter-field" for="japaneseDateFrom">
+              <span>Created from</span>
+              <input id="japaneseDateFrom" type="date" />
+            </label>
+            <label class="japanese-filter-field" for="japaneseDateTo">
+              <span>Created to</span>
+              <input id="japaneseDateTo" type="date" />
+            </label>
+            <label class="japanese-filter-field" for="japaneseNoteType">
+              <span>Note type</span>
+              <select id="japaneseNoteType">
+                <option value="all">All types</option>
+                <option value="vocabulary">Vocabulary</option>
+                <option value="kanji">Kanji</option>
+                <option value="grammar">Grammar</option>
+                <option value="output">Output</option>
+                <option value="planner">Planner</option>
+              </select>
+            </label>
+            <button id="clearJapaneseFilters" type="button" aria-label="Clear Japanese filters" disabled>Clear filters</button>
+            <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+          </section>
+
+          <section id="japaneseDashboard" class="japanese-dashboard" aria-label="Japanese learning dashboard" hidden>
+            <div class="dashboard-header">
+              <div>
+                <p class="eyebrow" lang="ja">日本語 workspace</p>
+                <h2>Study dashboard</h2>
+              </div>
+              <button id="startReviewButton" class="primary-button" type="button">Start review</button>
+            </div>
+
+            <div class="dashboard-grid">
+              <article class="dashboard-card" data-dashboard-card>
+                <span>Due reviews</span>
+                <strong id="japaneseDueCount">0</strong>
+              </article>
+              <article class="dashboard-card" data-dashboard-card>
+                <span>New vocabulary</span>
+                <strong id="japaneseNewVocabulary">0</strong>
+              </article>
+              <article class="dashboard-card" data-dashboard-card>
+                <span>Due kanji</span>
+                <strong id="japaneseDueKanji">0</strong>
+              </article>
+              <article class="dashboard-card" data-dashboard-card>
+                <span>Grammar notes</span>
+                <strong id="japaneseGrammarTotal">0</strong>
+              </article>
+              <article class="dashboard-card" data-dashboard-card>
+                <span>Output streak</span>
+                <strong id="japaneseOutputStreak">0 days</strong>
+              </article>
+              <article class="dashboard-card" data-dashboard-card>
+                <span>Planner progress</span>
+                <strong id="japanesePlannerProgress">0 / 0</strong>
+              </article>
+            </div>
+
+            <div class="japanese-actions" role="group" aria-label="Japanese quick create">
+              <button type="button" data-japanese-template="vocabulary">Create vocabulary note</button>
+              <button type="button" data-japanese-template="kanji">Create kanji note</button>
+              <button type="button" data-japanese-template="grammar">Create grammar note</button>
+              <button type="button" data-japanese-template="output">Create today’s output note</button>
+              <button type="button" data-japanese-template="planner">Create this week’s planner</button>
+            </div>
+
+            <section class="repair-region" role="region" aria-label="Needs repair">
+              <div class="repair-header">
+                <h3>Needs repair</h3>
+                <span id="japaneseRepairCount">0</span>
+              </div>
+              <ul id="japaneseRepairList" class="repair-list"></ul>
+            </section>
+          </section>
         </aside>
 
-        <section class="panel editor-panel">
+        <main id="editorRegion" class="panel editor-panel" aria-label="Editor">
           <div class="panel-header">
             <h2>Editor</h2>
             <span>Markdown native</span>
@@ -135,7 +134,7 @@
             <span class="hint">Ctrl/⌘+K command palette</span>
             <button id="saveButton" class="primary-button" type="button">Save</button>
           </div>
-        </section>
+        </main>
       </section>
 
       <section id="commandPalette" class="command-palette" hidden>
@@ -144,7 +143,7 @@
           <div id="commandList" class="command-list"></div>
         </div>
       </section>
-    </main>
+    </div>
 
     <dialog id="reviewDialog" class="review-dialog" aria-labelledby="reviewDialogTitle">
       <div class="review-dialog-header">
