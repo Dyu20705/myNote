@@ -165,6 +165,16 @@ function pendingSequenceResult() {
   };
 }
 
+function executedResult(commandId, value) {
+  return {
+    handled: true,
+    executed: true,
+    commandId,
+    reason: "",
+    value,
+  };
+}
+
 function contextToken(context) {
   return JSON.stringify([
     context.workspace ?? "",
@@ -216,6 +226,10 @@ function shortcutMatchesEvent(shortcut, event, context) {
 
   const secondaryModifier = context.platform === "darwin" ? event.ctrlKey : event.metaKey;
   return !secondaryModifier;
+}
+
+function isPromiseLike(value) {
+  return value && typeof value.then === "function";
 }
 
 export function createCommandRegistry(options = {}) {
@@ -294,7 +308,7 @@ export function createCommandRegistry(options = {}) {
     return [...commands.values()].map(({ command }) => snapshotCommand(command, context));
   }
 
-  async function execute(id, context = {}) {
+  function execute(id, context = {}) {
     assertActive();
     const entry = commands.get(id);
     if (!entry) {
@@ -311,14 +325,10 @@ export function createCommandRegistry(options = {}) {
       };
     }
 
-    const value = await entry.command.run(context);
-    return {
-      handled: true,
-      executed: true,
-      commandId: entry.command.id,
-      reason: "",
-      value,
-    };
+    const value = entry.command.run(context);
+    return isPromiseLike(value)
+      ? value.then((resolved) => executedResult(entry.command.id, resolved))
+      : executedResult(entry.command.id, value);
   }
 
   function matchingSingleCommand(event, context) {
@@ -348,7 +358,7 @@ export function createCommandRegistry(options = {}) {
     return candidates;
   }
 
-  async function dispatch(event, context = {}) {
+  function dispatch(event, context = {}) {
     assertActive();
 
     if (event?.type === "compositionstart") {
