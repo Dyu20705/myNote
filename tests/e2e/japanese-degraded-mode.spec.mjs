@@ -54,7 +54,7 @@ async function seedInvalidReview(page) {
   }));
 }
 
-test("invalid study data removes Japanese create commands from the palette", async ({ page }) => {
+test("invalid study data retains Japanese commands with an actionable reason", async ({ page }) => {
   await seedInvalidReview(page);
   await page.goto("/");
 
@@ -65,5 +65,8 @@ test("invalid study data removes Japanese create commands from the palette", asy
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
   await page.locator("#commandInput").fill("Create vocabulary note");
-  await expect(page.locator("#commandList .command-item")).toHaveCount(0);
+  const command = page.getByRole("button", { name: /Create vocabulary note/ });
+  await expect(command).toBeVisible();
+  await expect(command).toHaveAttribute("aria-disabled", "true");
+  await expect(command).toContainText("Japanese study data is unavailable");
 });
