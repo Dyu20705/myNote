@@ -38,12 +38,6 @@ let detailsOpener = null;
 let actionsOpener = null;
 let destroyed = false;
 
-function setText(element, value) {
-  if (element.textContent !== value) {
-    element.textContent = value;
-  }
-}
-
 function activeCard() {
   return elements.noteList.querySelector(".note-item[aria-current='true']");
 }
