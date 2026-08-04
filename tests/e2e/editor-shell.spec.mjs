@@ -152,6 +152,7 @@ test("shell controls remain functional through refresh, save, selection, search,
   await page.goto("/");
 
   await page.locator("#newNoteButton").click();
+  await expect(page.locator("#contentInput")).toBeFocused();
   await page.locator("#titleInput").fill("Synthetic shell note");
   await page.locator("#contentInput").fill("Repository-safe editor shell evidence.");
   await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
