@@ -1,6 +1,6 @@
 # Issue #68 Editor and List Rationalization Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Execute each checked task in order. Every production change begins from a focused failing assertion and remains independently reviewable.
 
 **Goal:** Make ordinary notes fast to scan, calm to edit, progressively disclosed, and safely recoverable without changing canonical note, search, persistence, or Japanese lifecycle ownership.
 
