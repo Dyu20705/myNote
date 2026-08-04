@@ -184,20 +184,21 @@ function contextToken(context) {
   ]);
 }
 
-function scopeAllows(commandScope, context) {
+function scopeAllows(command, context) {
   if (context.modalScope) {
-    return commandScope === context.modalScope;
+    return command.scope === context.modalScope;
   }
   if (context.paletteOpen || context.activeScope === "palette") {
-    return commandScope === "palette";
+    return command.scope === "palette";
   }
   if (TEXT_TARGETS.has(context.targetKind)) {
-    return commandScope === "editor" && context.activeScope === "editor";
+    return command.id === "palette.open"
+      || (command.scope === "editor" && context.activeScope === "editor");
   }
-  if (commandScope === "global") {
+  if (command.scope === "global") {
     return true;
   }
-  return commandScope === context.activeScope;
+  return command.scope === context.activeScope;
 }
 
 function primaryModifierPressed(event, platform) {
@@ -332,7 +333,7 @@ export function createCommandRegistry(options = {}) {
 
   function matchingSingleCommand(event, context) {
     for (const { command } of commands.values()) {
-      if (!scopeAllows(command.scope, context)) {
+      if (!scopeAllows(command, context)) {
         continue;
       }
       if (command.shortcuts.some((shortcut) => shortcutMatchesEvent(shortcut, event, context))) {
@@ -345,7 +346,7 @@ export function createCommandRegistry(options = {}) {
   function matchingSequenceCandidates(key, context) {
     const candidates = [];
     for (const { command } of commands.values()) {
-      if (!scopeAllows(command.scope, context)) {
+      if (!scopeAllows(command, context)) {
         continue;
       }
       for (const shortcut of command.shortcuts) {
