@@ -141,7 +141,7 @@ test("keyboard traversal can leave the editor and reach the shell in determinist
   await expect(page.locator("#searchInput")).toBeFocused();
   await expect.poll(() => page.locator(".search-box").evaluate((element) => (
     globalThis.getComputedStyle(element).borderTopColor
-  ))).toBe("rgb(221, 221, 221)");
+  ))).toBe("rgb(56, 189, 248)");
   await page.keyboard.press("Tab");
   await expect(page.locator("#newNoteButton")).toBeFocused();
   await page.keyboard.press("Tab");
