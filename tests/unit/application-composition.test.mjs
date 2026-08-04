@@ -9,16 +9,20 @@ async function source(path) {
 }
 
 test("app is the single browser composition root for both workspaces", async () => {
-  const [index, app, japaneseApp] = await Promise.all([
+  const [index, app, japaneseApp, editorChrome] = await Promise.all([
     source("index.html"),
     source("app.js"),
     source("japaneseApp.js"),
+    source("ui/editorChrome.js"),
   ]);
 
   assert.match(index, /<script[^>]+src="app\.js"/);
+  assert.match(index, /<script[^>]+src="ui\/editorChrome\.js"/);
   assert.doesNotMatch(index, /<script[^>]+src="japaneseApp\.js"/);
   assert.match(app, /createJapaneseApp\s*\(/);
   assert.match(japaneseApp, /export function createJapaneseApp/);
+  assert.doesNotMatch(editorChrome, /createStore|createSearchClient|createHistory|createBacklinkIndex|openDatabase/);
+  assert.match(editorChrome, /import \{ commandRuntime \} from "\.\.\/app\.js"/);
 });
 
 test("Japanese workspace refresh uses the injected workspace API instead of the DOM list bridge", async () => {
@@ -32,14 +36,16 @@ test("Japanese workspace refresh uses the injected workspace API instead of the 
   assert.match(japaneseApp, /runtime\.workspace/);
 });
 
-test("editor-first shell has one semantic hierarchy with stable command-ready controls", async () => {
+test("editor-first shell has one application header and one editor context header", async () => {
   const index = await source("index.html");
 
-  assert.equal(index.match(/<header\b/g)?.length, 1);
+  assert.equal(index.match(/<header\b/g)?.length, 2);
   assert.match(index, /<header[^>]+id="applicationHeader"/);
+  assert.match(index, /<header[^>]+id="editorContextHeader"/);
   assert.equal(index.match(/<nav\b/g)?.length, 1);
   assert.match(index, /<nav[^>]+id="workspaceNavigation"[^>]+aria-label="Workspace"/);
   assert.match(index, /<aside[^>]+id="noteNavigationRegion"[^>]+aria-label="Note navigation"/);
+  assert.match(index, /<aside[^>]+id="noteInspector"[^>]+aria-label="Note details"/);
   assert.equal(index.match(/<main\b/g)?.length, 1);
   assert.match(index, /<main[^>]+id="editorRegion"[^>]+aria-label="Editor"/);
 
@@ -50,18 +56,23 @@ test("editor-first shell has one semantic hierarchy with stable command-ready co
     "newNoteButton",
     "refreshButton",
     "saveState",
+    "detailsButton",
+    "noteActionsButton",
+    "undoNotice",
   ]) {
     assert.match(index, new RegExp(`id="${id}"`));
   }
 
+  assert.equal(index.match(/id="saveState"/g)?.length, 1);
   assert.doesNotMatch(index, /id="metricsState"/);
   assert.doesNotMatch(index, /render:\d|worker:\d|autosave:\d|mem:\d/i);
 });
 
-test("shell refresh reuses the existing runtime and introduces no DOM coordination", async () => {
-  const [app, japaneseApp] = await Promise.all([
+test("shell refresh reuses the existing runtime and introduces no duplicate core ownership", async () => {
+  const [app, japaneseApp, editorChrome] = await Promise.all([
     source("app.js"),
     source("japaneseApp.js"),
+    source("ui/editorChrome.js"),
   ]);
 
   for (const factory of [
@@ -73,6 +84,7 @@ test("shell refresh reuses the existing runtime and introduces no DOM coordinati
   ]) {
     assert.equal(app.match(new RegExp(`${factory}\\s*\\(`, "g"))?.length, 1, `${factory} must have one owner`);
     assert.doesNotMatch(japaneseApp, new RegExp(`${factory}\\s*\\(`));
+    assert.doesNotMatch(editorChrome, new RegExp(`${factory}\\s*\\(`));
   }
   assert.equal(japaneseApp.match(/createJapaneseWorkspaceCoordinator\s*\(/g)?.length, 1);
 
@@ -87,6 +99,7 @@ test("shell refresh reuses the existing runtime and introduces no DOM coordinati
   assert.doesNotMatch(app, /dispatchEvent\s*\(new (?:InputEvent|Event)/);
   assert.doesNotMatch(japaneseApp, /dispatchEvent\s*\(/);
   assert.doesNotMatch(japaneseApp, /MutationObserver|\.note-item|\.click\s*\(/);
+  assert.doesNotMatch(editorChrome, /putNoteToDb|deleteNoteFromDb|resetDatabase|indexedDB/i);
 });
 
 test("shell refresh exposes a bounded in-flight busy state and always cleans it up", async () => {
