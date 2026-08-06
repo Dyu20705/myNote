@@ -6,6 +6,7 @@ await import("fake-indexeddb/auto");
 const {
   addKanjiInkEntryToDb,
   deleteKanjiInkEntryFromDb,
+  deleteNoteFromDb,
   deleteNoteWithDependentsFromDb,
   getKanjiInkEntryFromDb,
   listKanjiInkEntriesFromDb,
@@ -243,5 +244,27 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
       entries: [first, second],
       invalidCount: 0,
     });
+  });
+
+  test("generic note lifecycle cascades ink and restores it during command undo", async () => {
+    const database = await openTestDatabase();
+    const note = makeNote();
+    const entry = makeEntry();
+    await putNoteToDb(database, note);
+    await addKanjiInkEntryToDb(database, entry);
+
+    await deleteNoteFromDb(database, note.id);
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);
+
+    await putNoteToDb(database, note);
+    assert.deepEqual(await listNotesFromDb(database), [note]);
+    assert.deepEqual(await listKanjiInkEntriesFromDb(database, note.id), {
+      entries: [entry],
+      invalidCount: 0,
+    });
+
+    await deleteNoteFromDb(database, note.id);
+    assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);
   });
 });
