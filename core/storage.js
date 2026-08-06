@@ -1,10 +1,12 @@
+import { validateKanjiInkEntry } from "./kanjiInkEntry.js";
 import { validateStudyReview } from "./studyReview.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NOTES = "notes";
 const STORE_STUDY_REVIEWS = "studyReviews";
+const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
 
 function createMigrationOutcome(status, count, errorCode) {
   return errorCode === undefined ? { status, count } : { status, count, errorCode };
@@ -38,6 +40,18 @@ function createStudyReviewNotFoundError() {
   return error;
 }
 
+function createKanjiNoteNotFoundError() {
+  const error = new Error("KANJI_NOTE_NOT_FOUND");
+  error.code = "KANJI_NOTE_NOT_FOUND";
+  return error;
+}
+
+function createKanjiInkEntryNotFoundError() {
+  const error = new Error("KANJI_INK_ENTRY_NOT_FOUND");
+  error.code = "KANJI_INK_ENTRY_NOT_FOUND";
+  return error;
+}
+
 function isPlainObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -54,6 +68,19 @@ function validatePairedNote(note, review) {
     const clonedNote = structuredClone(note);
     const noteId = clonedNote.id;
     if (typeof noteId !== "string" || noteId.length === 0 || noteId !== review.noteId) {
+      throw createInvalidNoteError();
+    }
+    return clonedNote;
+  } catch {
+    throw createInvalidNoteError();
+  }
+}
+
+function validateStandaloneNote(note) {
+  try {
+    if (!isPlainObject(note)) throw createInvalidNoteError();
+    const clonedNote = structuredClone(note);
+    if (typeof clonedNote.id !== "string" || clonedNote.id.length === 0) {
       throw createInvalidNoteError();
     }
     return clonedNote;
@@ -105,6 +132,11 @@ export function openDatabase() {
         store.createIndex("nextReviewAt", "nextReviewAt");
         store.createIndex("notebookType", "notebookType");
         store.createIndex("status", "status");
+      }
+      if (event.oldVersion < 3 && !db.objectStoreNames.contains(STORE_KANJI_INK_ENTRIES)) {
+        const store = db.createObjectStore(STORE_KANJI_INK_ENTRIES, { keyPath: "id" });
+        store.createIndex("noteId", "noteId");
+        store.createIndex("updatedAt", "updatedAt");
       }
     };
 
@@ -258,6 +290,155 @@ export async function deleteNoteFromDb(db, id) {
   const tx = db.transaction(STORE_NOTES, "readwrite");
   tx.objectStore(STORE_NOTES).delete(id);
   await transactionDone(tx);
+}
+
+export async function getKanjiInkEntryFromDb(db, id) {
+  const tx = db.transaction(STORE_KANJI_INK_ENTRIES, "readonly");
+  const entry = await requestResult(tx.objectStore(STORE_KANJI_INK_ENTRIES).get(id));
+  return entry === undefined ? undefined : validateKanjiInkEntry(entry);
+}
+
+export async function listKanjiInkEntriesFromDb(db, noteId) {
+  if (typeof noteId !== "string" || noteId.length === 0) {
+    throw createKanjiNoteNotFoundError();
+  }
+  const tx = db.transaction(STORE_KANJI_INK_ENTRIES, "readonly");
+  const store = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+  const records = await requestResult(store.index("noteId").getAll(noteId));
+  const entries = [];
+  let invalidCount = 0;
+  for (const record of records || []) {
+    try {
+      entries.push(validateKanjiInkEntry(record));
+    } catch {
+      invalidCount += 1;
+    }
+  }
+  entries.sort((left, right) => (
+    left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id)
+  ));
+  return { entries, invalidCount };
+}
+
+export async function addKanjiInkEntryToDb(db, entry) {
+  const validatedEntry = validateKanjiInkEntry(entry);
+  const tx = db.transaction([STORE_NOTES, STORE_KANJI_INK_ENTRIES], "readwrite");
+  const done = transactionDone(tx);
+  try {
+    const note = await requestResult(tx.objectStore(STORE_NOTES).get(validatedEntry.noteId));
+    if (note === undefined) throw createKanjiNoteNotFoundError();
+    tx.objectStore(STORE_KANJI_INK_ENTRIES).add(validatedEntry);
+    await done;
+    return structuredClone(validatedEntry);
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function putKanjiInkEntryToDb(db, entry) {
+  const validatedEntry = validateKanjiInkEntry(entry);
+  const tx = db.transaction([STORE_NOTES, STORE_KANJI_INK_ENTRIES], "readwrite");
+  const done = transactionDone(tx);
+  try {
+    const noteStore = tx.objectStore(STORE_NOTES);
+    const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+    const [note, existingEntry] = await Promise.all([
+      requestResult(noteStore.get(validatedEntry.noteId)),
+      requestResult(inkStore.get(validatedEntry.id)),
+    ]);
+    if (note === undefined) throw createKanjiNoteNotFoundError();
+    if (existingEntry === undefined) throw createKanjiInkEntryNotFoundError();
+    inkStore.put(validatedEntry);
+    await done;
+    return structuredClone(validatedEntry);
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function deleteKanjiInkEntryFromDb(db, id) {
+  const tx = db.transaction(STORE_KANJI_INK_ENTRIES, "readwrite");
+  const done = transactionDone(tx);
+  try {
+    const store = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+    const entry = await requestResult(store.get(id));
+    if (entry === undefined) {
+      await done;
+      return undefined;
+    }
+    const validatedEntry = validateKanjiInkEntry(entry);
+    store.delete(id);
+    await done;
+    return validatedEntry;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function deleteNoteWithDependentsFromDb(db, noteId) {
+  if (typeof noteId !== "string" || noteId.length === 0) throw createInvalidNoteError();
+  const storeNames = [STORE_NOTES, STORE_STUDY_REVIEWS, STORE_KANJI_INK_ENTRIES];
+  const tx = db.transaction(storeNames, "readwrite");
+  const done = transactionDone(tx);
+  try {
+    const noteStore = tx.objectStore(STORE_NOTES);
+    const reviewStore = tx.objectStore(STORE_STUDY_REVIEWS);
+    const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+    const [note, review, rawEntries] = await Promise.all([
+      requestResult(noteStore.get(noteId)),
+      requestResult(reviewStore.get(noteId)),
+      requestResult(inkStore.index("noteId").getAll(noteId)),
+    ]);
+    if (note === undefined) {
+      await done;
+      return undefined;
+    }
+    const capturedNote = validateStandaloneNote(note);
+    const capturedReview = review === undefined ? undefined : validateStudyReview(review);
+    const kanjiInkEntries = (rawEntries || []).map(validateKanjiInkEntry)
+      .sort((left, right) => left.id.localeCompare(right.id));
+    noteStore.delete(noteId);
+    if (capturedReview !== undefined) reviewStore.delete(noteId);
+    for (const entry of kanjiInkEntries) inkStore.delete(entry.id);
+    await done;
+    return {
+      note: capturedNote,
+      review: capturedReview,
+      kanjiInkEntries,
+    };
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
+}
+
+export async function restoreNoteWithDependentsToDb(db, capture) {
+  if (!isPlainObject(capture)) throw createInvalidNoteError();
+  const note = validateStandaloneNote(capture.note);
+  const review = capture.review === undefined ? undefined : validateStudyReview(capture.review);
+  if (review !== undefined && review.noteId !== note.id) throw createInvalidNoteError();
+  if (!Array.isArray(capture.kanjiInkEntries)) throw createInvalidNoteError();
+  const entries = capture.kanjiInkEntries.map(validateKanjiInkEntry);
+  if (entries.some((entry) => entry.noteId !== note.id)) throw createInvalidNoteError();
+
+  const tx = db.transaction(
+    [STORE_NOTES, STORE_STUDY_REVIEWS, STORE_KANJI_INK_ENTRIES],
+    "readwrite",
+  );
+  const done = transactionDone(tx);
+  try {
+    tx.objectStore(STORE_NOTES).add(note);
+    if (review !== undefined) tx.objectStore(STORE_STUDY_REVIEWS).add(review);
+    const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+    for (const entry of entries) inkStore.add(entry);
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
 }
 
 async function runLegacyMigrationTransaction(db, raw, normalizeNote) {
