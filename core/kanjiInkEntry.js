@@ -16,10 +16,14 @@ const ENTRY_KEYS = Object.freeze([
   "createdAt",
   "updatedAt",
 ]);
-const RECOGNIZER_KEYS = Object.freeze([
+const LEGACY_RECOGNIZER_KEYS = Object.freeze([
   "engineId",
   "engineVersion",
   "datasetVersion",
+]);
+const RECOGNIZER_KEYS = Object.freeze([
+  ...LEGACY_RECOGNIZER_KEYS,
+  "selectedRank",
 ]);
 const POINT_KEYS = Object.freeze(["x", "y"]);
 const HAN_CHARACTER = /^\p{Script=Han}$/u;
@@ -57,14 +61,23 @@ function cloneTimestamp(value) {
 }
 
 function cloneRecognizer(value) {
-  if (!isPlainObject(value) || !hasExactOwnKeys(value, RECOGNIZER_KEYS)) {
+  const isLegacy = isPlainObject(value) && hasExactOwnKeys(value, LEGACY_RECOGNIZER_KEYS);
+  const hasProvenance = isPlainObject(value) && hasExactOwnKeys(value, RECOGNIZER_KEYS);
+  if (!isLegacy && !hasProvenance) {
     throw codedError("KANJI_INK_ENTRY_INVALID");
   }
-  return {
+  const recognizer = {
     engineId: cloneRequiredString(value.engineId, 128),
     engineVersion: cloneRequiredString(value.engineVersion, 64),
     datasetVersion: cloneRequiredString(value.datasetVersion, 128),
   };
+  if (hasProvenance) {
+    if (!Number.isInteger(value.selectedRank) || value.selectedRank < 0 || value.selectedRank > 7) {
+      throw codedError("KANJI_INK_ENTRY_INVALID");
+    }
+    recognizer.selectedRank = value.selectedRank;
+  }
+  return recognizer;
 }
 
 export function validateKanjiStrokes(strokes) {
