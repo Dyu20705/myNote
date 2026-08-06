@@ -44,7 +44,11 @@ test("drawing, undo, and clear mutate only the current bounded draft", async () 
 
 test("an edit draft starts from a defensive copy of persisted strokes", async () => {
   const { createKanjiInkController } = await loadModule();
-  const initialStrokes = [[pointA, pointB]];
+  const expectedStrokes = [[
+    { x: 0.2, y: 0.2 },
+    { x: 0.8, y: 0.8 },
+  ]];
+  const initialStrokes = structuredClone(expectedStrokes);
   const controller = createKanjiInkController({
     recognize: () => [],
     initialStrokes,
@@ -54,10 +58,10 @@ test("an edit draft starts from a defensive copy of persisted strokes", async ()
   const snapshot = controller.snapshot();
   assert.equal(snapshot.status, "drawing");
   assert.equal(snapshot.dirty, true);
-  assert.deepEqual(snapshot.strokes, [[pointA, pointB]]);
+  assert.deepEqual(snapshot.strokes, expectedStrokes);
 
   snapshot.strokes[0][0].x = 1;
-  assert.deepEqual(controller.snapshot().strokes, [[pointA, pointB]]);
+  assert.deepEqual(controller.snapshot().strokes, expectedStrokes);
 });
 
 test("recognition resolves candidates but never auto-selects one", async () => {
