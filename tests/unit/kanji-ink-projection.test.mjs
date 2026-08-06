@@ -7,6 +7,7 @@ import {
   createKanjiHumanReadableExport,
   projectNoteForKanjiSearch,
   renderKanjiEntrySvg,
+  validateKanjiExportBundle,
 } from "../../core/kanjiInkProjection.js";
 
 function makeEntry(overrides = {}) {
@@ -94,6 +95,33 @@ test("export rejects duplicate IDs and orphan entries before output", () => {
     () => createKanjiExportBundle([note], [makeEntry({ noteId: "missing" })]),
     { code: "KANJI_EXPORT_INVALID" },
   );
+});
+
+test("import validation accepts only an exact lossless v3 export bundle", () => {
+  const source = createKanjiExportBundle([note], [makeEntry()], {
+    exportedAt: "2026-08-04T02:00:00.000Z",
+  });
+  const validated = validateKanjiExportBundle(source);
+  assert.deepEqual(validated, source);
+  validated.notes[0].title = "mutated";
+  validated.kanjiInkEntries[0].strokes[0][0].x = 0;
+  assert.equal(source.notes[0].title, "Ordinary note");
+  assert.equal(source.kanjiInkEntries[0].strokes[0][0].x, 0.5);
+
+  for (const invalid of [
+    null,
+    { ...source, schemaVersion: 2 },
+    { ...source, extra: true },
+    { ...source, exportedAt: "not-a-date" },
+    { ...source, notes: [note, note] },
+    { ...source, kanjiInkEntries: [makeEntry({ noteId: "missing" })] },
+    { ...source, recognizerAttribution: { ...source.recognizerAttribution, source: "" } },
+  ]) {
+    assert.throws(() => validateKanjiExportBundle(invalid), {
+      code: "KANJI_IMPORT_INVALID",
+      message: "KANJI_IMPORT_INVALID",
+    });
+  }
 });
 
 test("SVG export derives bounded paths without embedding executable markup", () => {
