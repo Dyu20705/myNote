@@ -72,10 +72,17 @@ export function createKanjiInkApplication(dependencies) {
       recognize,
       initialStrokes: existingEntry?.strokes ?? [],
       createId: existingEntry ? () => existingEntry.id : undefined,
-      persist: async (entry) => withDatabase((database) => {
-        if (!existingEntry) return addEntry(database, entry);
-        return updateEntry(database, {
+      persist: async (entry, metadata = {}) => withDatabase((database) => {
+        const entryWithProvenance = {
           ...entry,
+          recognizer: {
+            ...entry.recognizer,
+            selectedRank: metadata.selectedRank,
+          },
+        };
+        if (!existingEntry) return addEntry(database, entryWithProvenance);
+        return updateEntry(database, {
+          ...entryWithProvenance,
           id: existingEntry.id,
           revision: existingEntry.revision + 1,
           createdAt: existingEntry.createdAt,
