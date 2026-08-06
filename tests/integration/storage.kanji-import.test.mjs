@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 
 await import("fake-indexeddb/auto");
 
+const { restoreKanjiExportBundleToDb } = await import("../../core/kanjiInkImport.js");
 const { createKanjiExportBundle } = await import("../../core/kanjiInkProjection.js");
 const {
   listKanjiInkEntriesFromDb,
   listNotesFromDb,
   openDatabase,
   putNoteToDb,
-  restoreKanjiExportBundleToDb,
 } = await import("../../core/storage.js");
 
 const DATABASE_NAME = "myNoteDB";
