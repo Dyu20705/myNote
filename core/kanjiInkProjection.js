@@ -3,6 +3,19 @@ import { validateKanjiInkEntry } from "./kanjiInkEntry.js";
 const MAX_PROJECTED_ENTRIES = 128;
 const MAX_EXPORT_NOTES = 50_000;
 const MAX_EXPORT_ENTRIES = 50_000;
+const BUNDLE_KEYS = Object.freeze([
+  "schemaVersion",
+  "exportedAt",
+  "notes",
+  "kanjiInkEntries",
+  "recognizerAttribution",
+]);
+const ATTRIBUTION_KEYS = Object.freeze([
+  "engineId",
+  "engineVersion",
+  "datasetVersion",
+  "source",
+]);
 const ATTRIBUTION = Object.freeze({
   engineId: "mynote-geometric-template",
   engineVersion: "1.0.0",
@@ -22,11 +35,21 @@ function isPlainObject(value) {
   return prototype === Object.prototype || prototype === null;
 }
 
-function validateNoteForExport(note) {
+function hasExactOwnKeys(value, expectedKeys) {
+  const keys = Object.keys(value);
+  return keys.length === expectedKeys.length
+    && expectedKeys.every((key) => Object.hasOwn(value, key));
+}
+
+function validateNote(note, errorCode) {
   if (!isPlainObject(note) || typeof note.id !== "string" || note.id.length === 0) {
-    throw codedError("KANJI_EXPORT_INVALID");
+    throw codedError(errorCode);
   }
-  return structuredClone(note);
+  try {
+    return structuredClone(note);
+  } catch {
+    throw codedError(errorCode);
+  }
 }
 
 function validatedEntries(entries, errorCode = "KANJI_EXPORT_INVALID") {
@@ -72,33 +95,37 @@ export function projectNoteForKanjiSearch(note, entries) {
   };
 }
 
-function normalizedTimestamp(value) {
+function normalizedTimestamp(value, errorCode = "KANJI_EXPORT_INVALID") {
   const timestamp = value ?? new Date().toISOString();
   if (typeof timestamp !== "string" || Number.isNaN(Date.parse(timestamp))) {
-    throw codedError("KANJI_EXPORT_INVALID");
+    throw codedError(errorCode);
   }
   return timestamp;
+}
+
+function validatedRelations(notes, entries, errorCode) {
+  const noteIds = new Set();
+  for (const note of notes) {
+    if (noteIds.has(note.id)) throw codedError(errorCode);
+    noteIds.add(note.id);
+  }
+
+  const entryIds = new Set();
+  for (const entry of entries) {
+    if (entryIds.has(entry.id) || !noteIds.has(entry.noteId)) {
+      throw codedError(errorCode);
+    }
+    entryIds.add(entry.id);
+  }
 }
 
 export function createKanjiExportBundle(notes, entries, options = {}) {
   if (!Array.isArray(notes) || notes.length > MAX_EXPORT_NOTES) {
     throw codedError("KANJI_EXPORT_INVALID");
   }
-  const clonedNotes = notes.map(validateNoteForExport);
-  const noteIds = new Set();
-  for (const note of clonedNotes) {
-    if (noteIds.has(note.id)) throw codedError("KANJI_EXPORT_INVALID");
-    noteIds.add(note.id);
-  }
-
+  const clonedNotes = notes.map((note) => validateNote(note, "KANJI_EXPORT_INVALID"));
   const safeEntries = validatedEntries(entries);
-  const entryIds = new Set();
-  for (const entry of safeEntries) {
-    if (entryIds.has(entry.id) || !noteIds.has(entry.noteId)) {
-      throw codedError("KANJI_EXPORT_INVALID");
-    }
-    entryIds.add(entry.id);
-  }
+  validatedRelations(clonedNotes, safeEntries, "KANJI_EXPORT_INVALID");
 
   return {
     schemaVersion: 3,
@@ -107,6 +134,36 @@ export function createKanjiExportBundle(notes, entries, options = {}) {
     kanjiInkEntries: structuredClone(safeEntries),
     recognizerAttribution: { ...ATTRIBUTION },
   };
+}
+
+export function validateKanjiExportBundle(input) {
+  try {
+    if (
+      !isPlainObject(input)
+      || !hasExactOwnKeys(input, BUNDLE_KEYS)
+      || input.schemaVersion !== 3
+      || !Array.isArray(input.notes)
+      || input.notes.length > MAX_EXPORT_NOTES
+      || !isPlainObject(input.recognizerAttribution)
+      || !hasExactOwnKeys(input.recognizerAttribution, ATTRIBUTION_KEYS)
+      || ATTRIBUTION_KEYS.some((key) => input.recognizerAttribution[key] !== ATTRIBUTION[key])
+    ) {
+      throw codedError("KANJI_IMPORT_INVALID");
+    }
+
+    const notes = input.notes.map((note) => validateNote(note, "KANJI_IMPORT_INVALID"));
+    const entries = validatedEntries(input.kanjiInkEntries, "KANJI_IMPORT_INVALID");
+    validatedRelations(notes, entries, "KANJI_IMPORT_INVALID");
+    return {
+      schemaVersion: 3,
+      exportedAt: normalizedTimestamp(input.exportedAt, "KANJI_IMPORT_INVALID"),
+      notes,
+      kanjiInkEntries: structuredClone(entries),
+      recognizerAttribution: { ...ATTRIBUTION },
+    };
+  } catch {
+    throw codedError("KANJI_IMPORT_INVALID");
+  }
 }
 
 function coordinate(value, size) {
