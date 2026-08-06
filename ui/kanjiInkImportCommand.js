@@ -1,6 +1,5 @@
 import { commandRuntime } from "../app.js";
-import { restoreKanjiExportBundleToDb } from "../core/kanjiInkImport.js";
-import { openDatabase } from "../core/storage.js";
+import { kanjiInkApplication } from "../core/kanjiInkApplication.js";
 
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 
@@ -41,12 +40,7 @@ async function restoreFile(file) {
     throw error;
   }
 
-  const database = await openDatabase();
-  try {
-    return await restoreKanjiExportBundleToDb(database, parsed);
-  } finally {
-    database.close();
-  }
+  return kanjiInkApplication.restoreBundle(parsed);
 }
 
 input.addEventListener("change", async () => {
