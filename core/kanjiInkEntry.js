@@ -111,7 +111,15 @@ export function validateKanjiStrokes(strokes) {
 }
 
 function byteLength(value) {
-  return new TextEncoder().encode(value).byteLength;
+  let bytes = 0;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint <= 0x7f) bytes += 1;
+    else if (codePoint <= 0x7ff) bytes += 2;
+    else if (codePoint <= 0xffff) bytes += 3;
+    else bytes += 4;
+  }
+  return bytes;
 }
 
 export function validateKanjiInkEntry(input) {
