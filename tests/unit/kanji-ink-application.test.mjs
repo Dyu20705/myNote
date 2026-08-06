@@ -116,13 +116,17 @@ test("controller persistence is selected-rank aware and hides storage from UI", 
   assert.deepEqual(createOptions.initialStrokes, []);
   assert.deepEqual(createOptions.recognize([]), [{ character: "人", score: 1 }]);
   const created = makeEntry({ id: "created" });
-  assert.deepEqual(await createOptions.persist(created), created);
+  assert.deepEqual(await createOptions.persist(created, { selectedRank: 0 }), created);
 
   assert.deepEqual(editOptions.initialStrokes, fixture.entries[0].strokes);
-  const edited = makeEntry({ revision: 1, character: "木" });
-  const persisted = await editOptions.persist(edited);
+  const edited = makeEntry({ revision: 1, character: "木", recognizer: {
+    ...makeEntry().recognizer,
+    selectedRank: 3,
+  } });
+  const persisted = await editOptions.persist(edited, { selectedRank: 3 });
   assert.equal(persisted.id, "ink-1");
   assert.equal(persisted.revision, 2);
+  assert.equal(persisted.recognizer.selectedRank, 3);
   assert.equal(persisted.createdAt, fixture.entries[0].createdAt);
   assert.deepEqual(fixture.calls, ["open", "add", "close", "open", "update", "close"]);
 });
