@@ -20,6 +20,7 @@ function validEntry(overrides = {}) {
       engineId: "mynote-geometric-template",
       engineVersion: "1.0.0",
       datasetVersion: "mynote-kanji-mvp-1",
+      selectedRank: 0,
     },
     createdAt: "2026-08-04T00:00:00.000Z",
     updatedAt: "2026-08-04T00:00:00.000Z",
@@ -40,7 +41,7 @@ test("valid entry is defensively cloned with exact versioned shape", async () =>
   assert.equal(validated.strokes[0][0].x, 0.55);
 });
 
-test("entry requires one Han character and normalized finite vector points", async () => {
+test("entry requires one Han character, normalized points, and bounded selected-rank provenance", async () => {
   const { validateKanjiInkEntry } = await loadModule();
   for (const entry of [
     validEntry({ character: "" }),
@@ -51,12 +52,22 @@ test("entry requires one Han character and normalized finite vector points", asy
     validEntry({ strokes: [[{ x: -0.1, y: 0 }, { x: 0.5, y: 0.5 }]] }),
     validEntry({ strokes: [[{ x: Number.NaN, y: 0 }, { x: 0.5, y: 0.5 }]] }),
     validEntry({ strokes: [[{ x: 0.5, y: 1.1 }, { x: 0.5, y: 0.5 }]] }),
+    validEntry({ recognizer: { ...validEntry().recognizer, selectedRank: -1 } }),
+    validEntry({ recognizer: { ...validEntry().recognizer, selectedRank: 8 } }),
+    validEntry({ recognizer: { ...validEntry().recognizer, selectedRank: 0.5 } }),
   ]) {
     assert.throws(() => validateKanjiInkEntry(entry), {
       code: "KANJI_INK_ENTRY_INVALID",
       message: "KANJI_INK_ENTRY_INVALID",
     });
   }
+});
+
+test("legacy schema-v1 records without selectedRank remain readable", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const legacy = validEntry();
+  delete legacy.recognizer.selectedRank;
+  assert.deepEqual(validateKanjiInkEntry(legacy), legacy);
 });
 
 test("literal stroke and point bounds reject oversized records", async () => {
@@ -129,6 +140,7 @@ test("create and serialize preserve exact normalized vectors without base64", as
 
   assert.equal(entry.schemaVersion, 1);
   assert.equal(entry.revision, 1);
+  assert.equal(entry.recognizer.selectedRank, 0);
   assert.equal(entry.createdAt, "2026-08-04T01:02:03.000Z");
   assert.deepEqual(parsed, entry);
   assert.doesNotMatch(serialized, /data:image|base64/i);
