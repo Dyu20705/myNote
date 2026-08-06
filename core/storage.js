@@ -7,6 +7,7 @@ const DB_VERSION = 3;
 const STORE_NOTES = "notes";
 const STORE_STUDY_REVIEWS = "studyReviews";
 const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
+const pendingDependentRestores = new WeakMap();
 
 function createMigrationOutcome(status, count, errorCode) {
   return errorCode === undefined ? { status, count } : { status, count, errorCode };
@@ -280,16 +281,53 @@ export async function restoreNoteWithReviewToDb(db, note, review) {
   }
 }
 
+function pendingRestoresFor(db) {
+  let pending = pendingDependentRestores.get(db);
+  if (!pending) {
+    pending = new Map();
+    pendingDependentRestores.set(db, pending);
+  }
+  return pending;
+}
+
 export async function putNoteToDb(db, note) {
-  const tx = db.transaction(STORE_NOTES, "readwrite");
-  tx.objectStore(STORE_NOTES).put(note);
-  await transactionDone(tx);
+  const pending = pendingDependentRestores.get(db)?.get(note?.id);
+  if (!pending) {
+    const tx = db.transaction(STORE_NOTES, "readwrite");
+    tx.objectStore(STORE_NOTES).put(note);
+    await transactionDone(tx);
+    return;
+  }
+
+  const validatedNote = validateStandaloneNote(note);
+  const tx = db.transaction(
+    [STORE_NOTES, STORE_STUDY_REVIEWS, STORE_KANJI_INK_ENTRIES],
+    "readwrite",
+  );
+  const done = transactionDone(tx);
+  try {
+    tx.objectStore(STORE_NOTES).put(validatedNote);
+    if (pending.review !== undefined) {
+      tx.objectStore(STORE_STUDY_REVIEWS).add(pending.review);
+    }
+    const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+    for (const entry of pending.kanjiInkEntries) {
+      inkStore.add(entry);
+    }
+    await done;
+    pendingDependentRestores.get(db)?.delete(validatedNote.id);
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
 }
 
 export async function deleteNoteFromDb(db, id) {
-  const tx = db.transaction(STORE_NOTES, "readwrite");
-  tx.objectStore(STORE_NOTES).delete(id);
-  await transactionDone(tx);
+  const capture = await deleteNoteWithDependentsFromDb(db, id);
+  if (capture !== undefined) {
+    pendingRestoresFor(db).set(id, capture);
+  }
+  return capture;
 }
 
 export async function getKanjiInkEntryFromDb(db, id) {
