@@ -1,4 +1,7 @@
-import { createKanjiInkEntry } from "./kanjiInkEntry.js";
+import {
+  createKanjiInkEntry,
+  validateKanjiStrokes,
+} from "./kanjiInkEntry.js";
 import { KANJI_RECOGNIZER_INFO } from "./kanjiRecognizer.js";
 
 function codedError(code) {
@@ -61,23 +64,34 @@ function defaultId() {
   return `ink-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function hydrateInitialStrokes(value) {
+  if (value === undefined || (Array.isArray(value) && value.length === 0)) return [];
+  try {
+    return validateKanjiStrokes(value);
+  } catch {
+    throw codedError("KANJI_CONTROLLER_OPTIONS_INVALID");
+  }
+}
+
 export function createKanjiInkController({
   recognize,
   persist = async (entry) => entry,
   createId = defaultId,
   now = () => new Date().toISOString(),
+  initialStrokes = [],
 } = {}) {
   if (typeof recognize !== "function" || typeof persist !== "function") {
     throw codedError("KANJI_CONTROLLER_OPTIONS_INVALID");
   }
 
+  const hydratedStrokes = hydrateInitialStrokes(initialStrokes);
   let recognitionToken = 0;
   let activeStroke = null;
   let lastSaveInput = null;
   let state = {
-    status: "idle",
-    dirty: false,
-    strokes: [],
+    status: hydratedStrokes.length > 0 ? "drawing" : "idle",
+    dirty: hydratedStrokes.length > 0,
+    strokes: hydratedStrokes,
     candidates: [],
     selectedCharacter: null,
     errorCode: null,
