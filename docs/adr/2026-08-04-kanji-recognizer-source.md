@@ -32,7 +32,7 @@ Why this set:
 - it allows deterministic fixtures and bounded performance measurement;
 - all templates are authored directly in this repository as normalized vector paths.
 
-The adapter returns at most eight unique candidate characters and never persists or auto-selects the highest-ranked result. The user must select one candidate explicitly.
+The adapter returns at most eight unique candidate characters and never persists or auto-selects the highest-ranked result. The user must select one candidate explicitly. The persisted record stores only the selected candidate rank (`selectedRank`, zero-based) alongside recognizer identity; the full transient candidate list is not stored.
 
 The recognizer identifies itself as:
 
@@ -57,14 +57,15 @@ This ADR does not claim that external candidates are unsafe or incorrectly licen
 ## Algorithm boundary
 
 1. Validate and defensively clone normalized strokes.
-2. Normalize the drawing to its own bounding box.
-3. Resample each stroke to a fixed number of points.
-4. Derive per-stroke geometry: path points, centroid, start/end direction, and relative length.
-5. Compare against every local template with stroke-count, centroid, direction, and path-distance penalties.
-6. Sort by ascending distance, then stable character order.
-7. Return at most eight plain `{ character, score }` records.
+2. Normalize the complete drawing to its own bounding box.
+3. Resample every stroke to 12 evenly spaced path points.
+4. Compare corresponding resampled points in stroke order with Euclidean path distance.
+5. Add explicit penalties for unmatched stroke count.
+6. Convert distance to a bounded score, sort by descending score, then stable Japanese character order.
+7. Reject a drawing when the top score is below the disclosed confidence floor.
+8. Return at most eight plain `{ character, score }` records.
 
-Recognition runs asynchronously through the controller so stale results can be rejected by request token even though the current implementation is CPU-local.
+The implementation does **not** claim learned OCR, stroke-order grading, centroid features, or a universal handwriting model. Recognition runs asynchronously through the controller so stale results can be rejected by request token even though the current implementation is CPU-local.
 
 ## Coverage statement
 
@@ -91,7 +92,7 @@ Negative:
 
 ## Verification
 
-The repository must include tests for:
+The repository includes automated checks for:
 
 - every supported template returning itself in top-1 for its canonical fixture;
 - stable top-8 ordering for identical input;
@@ -99,8 +100,11 @@ The repository must include tests for:
 - malformed and oversized stroke rejection;
 - no-result behavior;
 - request-token stale suppression;
-- zero network activity during recognition;
-- initialization, recognition latency, and template payload size.
+- zero network activity during browser recognition;
+- recognition latency and template payload bounds;
+- explicit candidate selection and persisted selected-rank provenance.
+
+Physical Windows 11 mouse validation is intentionally not represented as automated evidence and remains a manual review item before merge.
 
 ## Rollback
 
