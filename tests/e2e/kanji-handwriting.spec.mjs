@@ -15,6 +15,13 @@ async function openKanjiDialog(page) {
   await expect(page.getByRole("dialog", { name: "Add Kanji handwriting" })).toBeVisible();
 }
 
+async function openDetails(page) {
+  if (await page.locator("#noteInspector").isHidden()) {
+    await page.locator("#detailsButton").click();
+  }
+  await expect(page.locator("#noteInspector")).toBeVisible();
+}
+
 async function drawStrokes(page, strokes) {
   const canvas = page.locator("#kanjiInkCanvas");
   const box = await canvas.boundingBox();
@@ -88,6 +95,7 @@ test("Kanji handwriting dual representation is local, durable, searchable, edita
   await expect(page.locator("#saveKanjiButton")).toBeEnabled();
   await page.locator("#saveKanjiButton").click();
   await expect(page.locator("#kanjiInkDialog")).not.toBeVisible();
+  await openDetails(page);
   await expect(page.locator("#kanjiInkEntries [data-kanji-character]"))
     .toHaveText("人");
 
@@ -102,6 +110,7 @@ test("Kanji handwriting dual representation is local, durable, searchable, edita
   await page.locator("#searchInput").fill("");
 
   await page.reload();
+  await openDetails(page);
   await expect(page.locator("#kanjiInkEntries [data-kanji-character]"))
     .toHaveText("人");
   await page.getByRole("button", { name: "Edit handwriting 人" }).click();
@@ -141,6 +150,7 @@ test("Kanji handwriting dual representation is local, durable, searchable, edita
   await page.getByRole("menuitem", { name: /Delete active note/ }).click();
   await expect(page.locator("#undoNotice")).toBeVisible();
   await page.locator("#undoDeleteButton").click();
+  await openDetails(page);
   await expect(page.locator("#kanjiInkEntries [data-kanji-character]"))
     .toHaveText("木");
 });
