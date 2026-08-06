@@ -52,7 +52,7 @@ const TREE = [
 
 async function storedEntries(page) {
   return page.evaluate(async () => {
-    const request = indexedDB.open("myNoteDB", 3);
+    const request = globalThis.indexedDB.open("myNoteDB", 3);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -159,7 +159,7 @@ test("Kanji dialog remains keyboard-operable at desktop 200% zoom", async ({ pag
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.evaluate(() => {
-    document.documentElement.style.zoom = "200%";
+    globalThis.document.documentElement.style.zoom = "200%";
   });
   await openKanjiDialog(page);
   await expect(page.locator("#closeKanjiDialogButton")).toBeVisible();
