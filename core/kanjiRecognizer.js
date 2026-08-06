@@ -207,9 +207,21 @@ export function recognizeKanji(input) {
   return candidates.slice(0, 8);
 }
 
+function byteLength(value) {
+  let bytes = 0;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint <= 0x7f) bytes += 1;
+    else if (codePoint <= 0x7ff) bytes += 2;
+    else if (codePoint <= 0xffff) bytes += 3;
+    else bytes += 4;
+  }
+  return bytes;
+}
+
 export function getKanjiRecognizerMetrics() {
   return {
-    templateBytes: new TextEncoder().encode(JSON.stringify(TEMPLATE_DEFINITIONS)).byteLength,
+    templateBytes: byteLength(JSON.stringify(TEMPLATE_DEFINITIONS)),
     templateCount: TEMPLATES.length,
     networkRequests: 0,
   };
