@@ -425,10 +425,12 @@ export async function deleteNoteWithDependentsFromDb(db, noteId) {
     const noteStore = tx.objectStore(STORE_NOTES);
     const reviewStore = tx.objectStore(STORE_STUDY_REVIEWS);
     const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
-    const [note, review, rawEntries] = await Promise.all([
+    const inkEntriesByNoteId = inkStore.index("noteId");
+    const [note, review, rawEntries, rawEntryKeys] = await Promise.all([
       requestResult(noteStore.get(noteId)),
       requestResult(reviewStore.get(noteId)),
-      requestResult(inkStore.index("noteId").getAll(noteId)),
+      requestResult(inkEntriesByNoteId.getAll(noteId)),
+      requestResult(inkEntriesByNoteId.getAllKeys(noteId)),
     ]);
     if (note === undefined) {
       await done;
@@ -436,11 +438,18 @@ export async function deleteNoteWithDependentsFromDb(db, noteId) {
     }
     const capturedNote = validateStandaloneNote(note);
     const capturedReview = review === undefined ? undefined : validateStudyReview(review);
-    const kanjiInkEntries = (rawEntries || []).map(validateKanjiInkEntry)
-      .sort((left, right) => left.id.localeCompare(right.id));
+    const kanjiInkEntries = [];
+    for (const rawEntry of rawEntries || []) {
+      try {
+        kanjiInkEntries.push(validateKanjiInkEntry(rawEntry));
+      } catch {
+        // Corrupt dependents are removed with their owner but cannot be restored by undo.
+      }
+    }
+    kanjiInkEntries.sort((left, right) => left.id.localeCompare(right.id));
     noteStore.delete(noteId);
     if (capturedReview !== undefined) reviewStore.delete(noteId);
-    for (const entry of kanjiInkEntries) inkStore.delete(entry.id);
+    for (const key of rawEntryKeys || []) inkStore.delete(key);
     await done;
     return {
       note: capturedNote,

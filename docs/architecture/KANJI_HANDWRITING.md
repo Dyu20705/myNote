@@ -20,6 +20,14 @@ The first-release recognizer supports only:
 
 This is a bounded geometric recognizer, not universal Japanese OCR or stroke-order grading.
 
+## Recognition scale and packaging boundary
+
+The eight embedded geometric templates are the experimental Issue #69 sample pack, not broad recognition coverage. Do not indefinitely append large datasets to the current flat embedded list.
+
+Any recognition expansion requires a separate issue or ADR that defines the character inventory, template provenance and licensing, versioned manifests, lazy worker loading, an evaluation corpus and quality thresholds, performance and bundle budgets, and migration and rollback behavior.
+
+The MVP keeps its flat-file packaging boundary. A future approved package may group templates by version and load groups lazily through a worker, while retaining explicit manifests and a rollback path; that direction is not implemented by this release.
+
 ## Module boundaries
 
 ```text

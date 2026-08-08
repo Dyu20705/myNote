@@ -88,6 +88,7 @@ export function createKanjiInkController({
   let recognitionToken = 0;
   let activeStroke = null;
   let lastSaveInput = null;
+  let saveInFlight = null;
   let state = {
     status: hydratedStrokes.length > 0 ? "drawing" : "idle",
     dirty: hydratedStrokes.length > 0,
@@ -97,6 +98,12 @@ export function createKanjiInkController({
     errorCode: null,
     savedEntry: null,
   };
+
+  function assertDraftMutable() {
+    if (saveInFlight) {
+      throw codedError("KANJI_SAVE_IN_PROGRESS");
+    }
+  }
 
   function invalidateRecognition() {
     recognitionToken += 1;
@@ -118,6 +125,7 @@ export function createKanjiInkController({
   }
 
   function beginStroke(point) {
+    assertDraftMutable();
     const cloned = clonePoint(point);
     invalidateRecognition();
     activeStroke = [cloned];
@@ -129,11 +137,13 @@ export function createKanjiInkController({
   }
 
   function appendPoint(point) {
+    assertDraftMutable();
     if (!activeStroke) throw codedError("KANJI_STROKE_NOT_ACTIVE");
     activeStroke.push(clonePoint(point));
   }
 
   function endStroke() {
+    assertDraftMutable();
     if (!activeStroke) return false;
     if (activeStroke.length < 2) {
       activeStroke = null;
@@ -150,6 +160,7 @@ export function createKanjiInkController({
   }
 
   function undoLastStroke() {
+    assertDraftMutable();
     if (activeStroke) activeStroke = null;
     if (state.strokes.length === 0) return false;
     invalidateRecognition();
@@ -163,6 +174,7 @@ export function createKanjiInkController({
   }
 
   function clear() {
+    assertDraftMutable();
     const changed = Boolean(activeStroke) || state.strokes.length > 0;
     if (!changed) return false;
     activeStroke = null;
@@ -177,6 +189,7 @@ export function createKanjiInkController({
   }
 
   async function runRecognition() {
+    assertDraftMutable();
     if (state.strokes.length === 0) throw codedError("KANJI_STROKES_REQUIRED");
     const token = ++recognitionToken;
     const input = cloneStrokes(state.strokes);
@@ -213,6 +226,7 @@ export function createKanjiInkController({
   }
 
   function selectCandidate(character) {
+    assertDraftMutable();
     if (!state.candidates.some((candidate) => candidate.character === character)) {
       throw codedError("KANJI_CANDIDATE_INVALID");
     }
@@ -225,6 +239,7 @@ export function createKanjiInkController({
   }
 
   function requestClose() {
+    assertDraftMutable();
     if (!state.dirty) {
       return { closed: true, focusTarget: "opener" };
     }
@@ -233,10 +248,12 @@ export function createKanjiInkController({
   }
 
   function keepDrawing() {
+    assertDraftMutable();
     state = { ...state, status: "drawing", errorCode: null };
   }
 
   function discardDraft() {
+    assertDraftMutable();
     recognitionToken += 1;
     activeStroke = null;
     lastSaveInput = null;
@@ -252,23 +269,21 @@ export function createKanjiInkController({
     return { closed: true, focusTarget: "opener" };
   }
 
-  async function save({ noteId } = {}) {
-    if (!state.selectedCharacter) throw codedError("KANJI_CANDIDATE_REQUIRED");
-    const selectedRank = state.candidates.findIndex(
-      (candidate) => candidate.character === state.selectedCharacter,
-    );
-    const timestamp = now();
-    const entry = createKanjiInkEntry({
-      id: createId(),
-      noteId,
-      character: state.selectedCharacter,
-      strokes: state.strokes,
-      recognizer: KANJI_RECOGNIZER_INFO,
-      timestamp,
-    });
-    lastSaveInput = { noteId };
-    state = { ...state, status: "saving", errorCode: null };
+  async function persistSelected({ noteId } = {}) {
     try {
+      lastSaveInput = { noteId };
+      const selectedRank = state.candidates.findIndex(
+        (candidate) => candidate.character === state.selectedCharacter,
+      );
+      const timestamp = now();
+      const entry = createKanjiInkEntry({
+        id: createId(),
+        noteId,
+        character: state.selectedCharacter,
+        strokes: state.strokes,
+        recognizer: KANJI_RECOGNIZER_INFO,
+        timestamp,
+      });
       const persisted = await persist(entry, { selectedRank });
       state = {
         status: "idle",
@@ -288,6 +303,36 @@ export function createKanjiInkController({
       };
       throw codedError("KANJI_SAVE_FAILED");
     }
+  }
+
+  function save(input = {}) {
+    if (saveInFlight) {
+      return saveInFlight;
+    }
+
+    if (!state.selectedCharacter) {
+      return Promise.reject(codedError("KANJI_CANDIDATE_REQUIRED"));
+    }
+
+    let resolveSave;
+    let rejectSave;
+    const operation = new Promise((resolve, reject) => {
+      resolveSave = resolve;
+      rejectSave = reject;
+    });
+
+    saveInFlight = operation;
+    state = { ...state, status: "saving", errorCode: null };
+
+    void persistSelected(input).then((result) => {
+      saveInFlight = null;
+      resolveSave(result);
+    }, (error) => {
+      saveInFlight = null;
+      rejectSave(error);
+    });
+
+    return operation;
   }
 
   function retrySave(input = lastSaveInput) {

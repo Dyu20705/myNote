@@ -244,3 +244,185 @@ test("failed save preserves exact draft and exposes retry state", async () => {
   assert.equal(saved.character, "木");
   assert.equal(controller.snapshot().dirty, false);
 });
+
+test("save is single-flight and draft mutation is blocked while persistence is pending", async () => {
+  const { createKanjiInkController } = await loadModule();
+
+  const gate = deferred();
+  let persistCalls = 0;
+  let idCalls = 0;
+
+  const controller = createKanjiInkController({
+    recognize: async () => [
+      { character: "人", score: 1 },
+    ],
+    persist: async (entry) => {
+      persistCalls += 1;
+      await gate.promise;
+      return entry;
+    },
+    createId: () => `ink-${++idCalls}`,
+    now: () => "2026-08-07T15:00:00.000Z",
+  });
+
+  controller.beginStroke(pointA);
+  controller.appendPoint(pointB);
+  controller.endStroke();
+
+  await controller.recognize();
+  controller.selectCandidate("人");
+
+  const first = controller.save({ noteId: "note-1" });
+  const second = controller.save({ noteId: "note-1" });
+
+  assert.strictEqual(first, second);
+  assert.equal(persistCalls, 1);
+  assert.equal(idCalls, 1);
+  assert.equal(controller.snapshot().status, "saving");
+
+  assert.throws(
+    () => controller.beginStroke({ x: 0.1, y: 0.1 }),
+    { code: "KANJI_SAVE_IN_PROGRESS" },
+  );
+
+  assert.throws(
+    () => controller.clear(),
+    { code: "KANJI_SAVE_IN_PROGRESS" },
+  );
+
+  gate.resolve();
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(firstResult.id, "ink-1");
+  assert.equal(secondResult.id, "ink-1");
+  assert.equal(persistCalls, 1);
+  assert.equal(idCalls, 1);
+
+  assert.equal(controller.snapshot().status, "idle");
+  assert.equal(controller.snapshot().dirty, false);
+});
+
+test("save publishes its single-flight promise before injected callbacks can re-enter", async () => {
+  const { createKanjiInkController } = await loadModule();
+
+  for (const reentryHook of ["createId", "now", "persist"]) {
+    const gate = deferred();
+    let controller;
+    let reentrantSave;
+    let didReenter = false;
+    let persistCalls = 0;
+    let idCalls = 0;
+    let nowCalls = 0;
+    const callbackStatuses = [];
+
+    function reenterFrom(hook) {
+      if (hook !== reentryHook || didReenter) return;
+      didReenter = true;
+      reentrantSave = controller.save({ noteId: "note-reentrant" });
+    }
+
+    controller = createKanjiInkController({
+      recognize: async () => [{ character: "人", score: 1 }],
+      persist: async (entry) => {
+        persistCalls += 1;
+        callbackStatuses.push(["persist", controller.snapshot().status]);
+        reenterFrom("persist");
+        await gate.promise;
+        return entry;
+      },
+      createId: () => {
+        idCalls += 1;
+        callbackStatuses.push(["createId", controller.snapshot().status]);
+        reenterFrom("createId");
+        return `ink-${idCalls}`;
+      },
+      now: () => {
+        nowCalls += 1;
+        callbackStatuses.push(["now", controller.snapshot().status]);
+        reenterFrom("now");
+        return "2026-08-07T15:00:00.000Z";
+      },
+    });
+
+    controller.beginStroke(pointA);
+    controller.appendPoint(pointB);
+    controller.endStroke();
+    await controller.recognize();
+    controller.selectCandidate("人");
+
+    const first = controller.save({ noteId: "note-1" });
+
+    assert.strictEqual(reentrantSave, first, `${reentryHook} re-entry must join the first save`);
+    assert.equal(persistCalls, 1);
+    assert.equal(idCalls, 1);
+    assert.equal(nowCalls, 1);
+    assert.equal(controller.snapshot().status, "saving");
+    assert.deepEqual(callbackStatuses, [
+      ["now", "saving"],
+      ["createId", "saving"],
+      ["persist", "saving"],
+    ]);
+
+    gate.resolve();
+    assert.equal((await first).id, "ink-1");
+  }
+});
+
+test("every public draft transition is locked during save and a failed draft retries intact", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const firstGate = deferred();
+  const retryGate = deferred();
+  const gates = [firstGate, retryGate];
+  let persistCalls = 0;
+
+  const controller = createKanjiInkController({
+    recognize: async () => [{ character: "木", score: 1 }],
+    persist: async (entry) => {
+      const gate = gates[persistCalls++];
+      await gate.promise;
+      return entry;
+    },
+  });
+
+  controller.beginStroke(pointA);
+  controller.appendPoint(pointB);
+  controller.endStroke();
+  await controller.recognize();
+  controller.selectCandidate("木");
+
+  const saving = controller.save({ noteId: "note-1" });
+  const pendingSnapshot = controller.snapshot();
+  const synchronousMutations = [
+    () => controller.beginStroke(pointA),
+    () => controller.appendPoint(pointB),
+    () => controller.endStroke(),
+    () => controller.undoLastStroke(),
+    () => controller.clear(),
+    () => controller.selectCandidate("木"),
+    () => controller.requestClose(),
+    () => controller.keepDrawing(),
+    () => controller.discardDraft(),
+  ];
+
+  for (const mutate of synchronousMutations) {
+    assert.throws(mutate, { code: "KANJI_SAVE_IN_PROGRESS" });
+  }
+  await assert.rejects(
+    () => controller.recognize(),
+    { code: "KANJI_SAVE_IN_PROGRESS" },
+  );
+  assert.deepEqual(controller.snapshot(), pendingSnapshot);
+
+  firstGate.reject(new Error("storage details"));
+  await assert.rejects(() => saving, { code: "KANJI_SAVE_FAILED" });
+  assert.equal(controller.snapshot().selectedCharacter, "木");
+  assert.deepEqual(controller.snapshot().strokes, [[pointA, pointB]]);
+
+  const retry = controller.retrySave();
+  assert.equal(controller.snapshot().status, "saving");
+  retryGate.resolve();
+  assert.equal((await retry).character, "木");
+  assert.equal(persistCalls, 2);
+  assert.equal(controller.snapshot().dirty, false);
+});

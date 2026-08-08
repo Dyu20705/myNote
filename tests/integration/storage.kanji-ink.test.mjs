@@ -246,6 +246,35 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     });
   });
 
+  test("note deletion removes corrupt ink dependents while restoring valid entries", async () => {
+    const database = await openTestDatabase();
+    const note = makeNote();
+    const valid = makeEntry();
+    await putNoteToDb(database, note);
+    await addKanjiInkEntryToDb(database, valid);
+    await writeRawEntry(database, makeEntry({
+      id: "ink-corrupt",
+      character: "not-one-Han-character",
+    }));
+
+    const capture = await deleteNoteWithDependentsFromDb(database, note.id);
+
+    assert.deepEqual(capture, {
+      note,
+      review: undefined,
+      kanjiInkEntries: [valid],
+    });
+    assert.deepEqual(await listNotesFromDb(database), []);
+    assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);
+
+    await restoreNoteWithDependentsToDb(database, capture);
+    assert.deepEqual(await listNotesFromDb(database), [note]);
+    assert.deepEqual(await listKanjiInkEntriesFromDb(database, note.id), {
+      entries: [valid],
+      invalidCount: 0,
+    });
+  });
+
   test("generic note lifecycle cascades ink and restores it during command undo", async () => {
     const database = await openTestDatabase();
     const note = makeNote();

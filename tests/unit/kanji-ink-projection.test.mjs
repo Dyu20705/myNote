@@ -36,9 +36,24 @@ const note = {
   id: "note-1",
   title: "Ordinary note",
   content: "Canonical Markdown-like content",
+  blocks: [
+    {
+      id: "block-1",
+      type: "paragraph",
+      content: "Canonical Markdown-like content",
+      meta: {},
+    },
+  ],
   tags: ["daily"],
-  links: [],
+  createdAt: "2026-08-04T00:00:00.000Z",
   updatedAt: "2026-08-04T00:00:00.000Z",
+  pinned: false,
+  archived: false,
+  links: [],
+  ast: [{ type: "paragraph", text: "Canonical Markdown-like content" }],
+  checksum: "b272aa77",
+  version: 1,
+  searchBlob: "ordinary note canonical markdown-like content daily ",
 };
 
 test("search projection is bounded Unicode text with no vector payload", () => {
@@ -58,9 +73,24 @@ test("search projection is bounded Unicode text with no vector payload", () => {
     id: "note-1",
     title: "Ordinary note",
     content: "Canonical Markdown-like content",
+    blocks: [
+      {
+        id: "block-1",
+        type: "paragraph",
+        content: "Canonical Markdown-like content",
+        meta: {},
+      },
+    ],
     tags: ["daily"],
-    links: [],
+    createdAt: "2026-08-04T00:00:00.000Z",
     updatedAt: "2026-08-04T00:00:00.000Z",
+    pinned: false,
+    archived: false,
+    links: [],
+    ast: [{ type: "paragraph", text: "Canonical Markdown-like content" }],
+    checksum: "b272aa77",
+    version: 1,
+    searchBlob: "ordinary note canonical markdown-like content daily ",
   });
 });
 
@@ -108,11 +138,20 @@ test("import validation accepts only an exact lossless v3 export bundle", () => 
   assert.equal(source.notes[0].title, "Ordinary note");
   assert.equal(source.kanjiInkEntries[0].strokes[0][0].x, 0.5);
 
+  const reorderedNote = Object.fromEntries(Object.entries(note).reverse());
+  const reorderedSource = createKanjiExportBundle([reorderedNote], [makeEntry()], {
+    exportedAt: "2026-08-04T02:00:00.000Z",
+  });
+  assert.deepEqual(validateKanjiExportBundle(reorderedSource), reorderedSource);
+
   for (const invalid of [
     null,
     { ...source, schemaVersion: 2 },
     { ...source, extra: true },
     { ...source, exportedAt: "not-a-date" },
+    { ...source, notes: [{ id: "x" }], kanjiInkEntries: [] },
+    { ...source, notes: [{ ...note, checksum: "stale" }] },
+    { ...source, notes: [{ ...note, unexpected: true }] },
     { ...source, notes: [note, note] },
     { ...source, kanjiInkEntries: [makeEntry({ noteId: "missing" })] },
     { ...source, recognizerAttribution: { ...source.recognizerAttribution, source: "" } },

@@ -249,6 +249,7 @@ function renderCandidates(snapshot) {
     button.dataset.character = candidate.character;
     button.lang = "ja";
     button.textContent = candidate.character;
+    button.disabled = snapshot.status === "saving";
     button.setAttribute("aria-label", `Select candidate ${candidate.character}`);
     button.setAttribute("aria-pressed", String(snapshot.selectedCharacter === candidate.character));
     button.addEventListener("click", () => {
@@ -262,10 +263,14 @@ function renderCandidates(snapshot) {
 function renderController() {
   if (!controller) return;
   const snapshot = controller.snapshot();
-  const busy = snapshot.status === "recognizing" || snapshot.status === "saving";
+  const saving = snapshot.status === "saving";
+  const busy = snapshot.status === "recognizing" || saving;
   elements.undoStroke.disabled = busy || snapshot.strokes.length === 0;
   elements.clear.disabled = busy || snapshot.strokes.length === 0;
   elements.recognize.disabled = busy || snapshot.strokes.length === 0;
+  elements.close.disabled = saving;
+  elements.cancel.disabled = saving;
+  elements.canvas.setAttribute("aria-disabled", String(saving));
   elements.recognize.textContent = snapshot.errorCode === "KANJI_RECOGNITION_FAILED"
     ? "Retry recognition"
     : "Recognize";
@@ -308,6 +313,7 @@ function appendPointerPoint(event) {
 
 function beginPointerStroke(event) {
   if (!controller || activePointerId !== null || event.button !== 0) return;
+  if (controller.snapshot().status === "saving") return;
   if (controller.snapshot().strokes.length >= KANJI_INK_LIMITS.maxStrokes) {
     elements.status.textContent = `Maximum ${KANJI_INK_LIMITS.maxStrokes} strokes reached.`;
     return;
@@ -353,6 +359,10 @@ function closeDialogCleanly() {
 }
 
 function requestDialogClose() {
+  if (controller?.snapshot().status === "saving") {
+    elements.status.textContent = "Saving is in progress. Wait for local persistence to finish.";
+    return;
+  }
   if (!controller) return closeDialogCleanly();
   const outcome = controller.requestClose();
   if (outcome.closed) return closeDialogCleanly();
@@ -391,11 +401,11 @@ async function saveEntry() {
   if (!controller || !dialogNoteId) return;
   try {
     const snapshot = controller.snapshot();
-    if (snapshot.errorCode === "KANJI_SAVE_FAILED") {
-      await controller.retrySave({ noteId: dialogNoteId });
-    } else {
-      await controller.save({ noteId: dialogNoteId });
-    }
+    const operation = snapshot.errorCode === "KANJI_SAVE_FAILED"
+      ? controller.retrySave({ noteId: dialogNoteId })
+      : controller.save({ noteId: dialogNoteId });
+    renderController();
+    await operation;
     await synchronizeActiveNote();
     closeDialogCleanly();
   } catch {

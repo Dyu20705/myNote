@@ -1,4 +1,5 @@
 import { validateKanjiInkEntry } from "./kanjiInkEntry.js";
+import { normalizeNote } from "./model.js";
 
 const MAX_PROJECTED_ENTRIES = 128;
 const MAX_EXPORT_NOTES = 50_000;
@@ -15,6 +16,22 @@ const ATTRIBUTION_KEYS = Object.freeze([
   "engineVersion",
   "datasetVersion",
   "source",
+]);
+const CANONICAL_NOTE_KEYS = Object.freeze([
+  "id",
+  "title",
+  "content",
+  "blocks",
+  "tags",
+  "createdAt",
+  "updatedAt",
+  "pinned",
+  "archived",
+  "links",
+  "ast",
+  "checksum",
+  "version",
+  "searchBlob",
 ]);
 const ATTRIBUTION = Object.freeze({
   engineId: "mynote-geometric-template",
@@ -50,6 +67,47 @@ function validateNote(note, errorCode) {
   } catch {
     throw codedError(errorCode);
   }
+}
+
+function sameData(left, right, seenLeft = new WeakMap(), seenRight = new WeakMap()) {
+  if (Object.is(left, right)) return true;
+
+  const leftIsArray = Array.isArray(left);
+  const rightIsArray = Array.isArray(right);
+  if (leftIsArray || rightIsArray) {
+    if (!leftIsArray || !rightIsArray || left.length !== right.length) return false;
+  } else if (!isPlainObject(left) || !isPlainObject(right)) {
+    return false;
+  }
+
+  const previousRight = seenLeft.get(left);
+  const previousLeft = seenRight.get(right);
+  if (previousRight || previousLeft) {
+    return previousRight === right && previousLeft === left;
+  }
+  seenLeft.set(left, right);
+  seenRight.set(right, left);
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => (
+      Object.hasOwn(right, key)
+      && sameData(left[key], right[key], seenLeft, seenRight)
+    ));
+}
+
+function validateCanonicalNote(note, errorCode) {
+  const cloned = validateNote(note, errorCode);
+  if (!hasExactOwnKeys(cloned, CANONICAL_NOTE_KEYS)) {
+    throw codedError(errorCode);
+  }
+
+  const normalized = normalizeNote(structuredClone(cloned));
+  if (!sameData(cloned, normalized)) {
+    throw codedError(errorCode);
+  }
+  return cloned;
 }
 
 function validatedEntries(entries, errorCode = "KANJI_EXPORT_INVALID") {
@@ -151,7 +209,9 @@ export function validateKanjiExportBundle(input) {
       throw codedError("KANJI_IMPORT_INVALID");
     }
 
-    const notes = input.notes.map((note) => validateNote(note, "KANJI_IMPORT_INVALID"));
+    const notes = input.notes.map((note) => (
+      validateCanonicalNote(note, "KANJI_IMPORT_INVALID")
+    ));
     const entries = validatedEntries(input.kanjiInkEntries, "KANJI_IMPORT_INVALID");
     validatedRelations(notes, entries, "KANJI_IMPORT_INVALID");
     return {

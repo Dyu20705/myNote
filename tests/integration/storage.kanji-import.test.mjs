@@ -20,9 +20,24 @@ function makeNote(id = "import-note") {
     id,
     title: "Imported Kanji note",
     content: "Canonical imported content",
+    blocks: [
+      {
+        id: "import-block",
+        type: "paragraph",
+        content: "Canonical imported content",
+        meta: {},
+      },
+    ],
     tags: [],
-    links: [],
+    createdAt: "2026-08-04T00:00:00.000Z",
     updatedAt: "2026-08-04T00:00:00.000Z",
+    pinned: false,
+    archived: false,
+    links: [],
+    ast: [{ type: "paragraph", text: "Canonical imported content" }],
+    checksum: "64e5f0cb",
+    version: 1,
+    searchBlob: "imported kanji note canonical imported content  ",
   };
 }
 
@@ -139,6 +154,28 @@ describe("Kanji export bundle restore", { concurrency: false }, () => {
         recognizerAttribution: {},
       }),
       { code: "KANJI_IMPORT_INVALID" },
+    );
+    assert.equal(transactionCalls, 0);
+  });
+
+  test("a non-canonical note is rejected before opening a transaction", async () => {
+    let transactionCalls = 0;
+    const database = {
+      transaction() {
+        transactionCalls += 1;
+        throw new Error("transaction must not open");
+      },
+    };
+    const bundle = createKanjiExportBundle([{ id: "x" }], [], {
+      exportedAt: "2026-08-04T02:00:00.000Z",
+    });
+
+    await assert.rejects(
+      () => restoreKanjiExportBundleToDb(database, bundle),
+      {
+        code: "KANJI_IMPORT_INVALID",
+        message: "KANJI_IMPORT_INVALID",
+      },
     );
     assert.equal(transactionCalls, 0);
   });
