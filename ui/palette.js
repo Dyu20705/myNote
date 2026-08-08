@@ -144,7 +144,14 @@ export function createPalette({ root, input, list, registry, getContext }) {
     close({ restoreFocus: false });
     Promise.resolve(registry.execute(command.id, context))
       .finally(() => {
-        if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) {
+        const activeElement = document.activeElement;
+        const commandMovedFocus = activeElement instanceof HTMLElement
+          && activeElement !== document.body
+          && !root.contains(activeElement);
+        if (!commandMovedFocus
+          && opener instanceof HTMLElement
+          && opener.isConnected
+          && !opener.matches(":disabled")) {
           opener.focus();
         }
       })

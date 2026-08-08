@@ -30,6 +30,16 @@
             <span id="noteCount">0 notes</span>
           </div>
           <button id="newNoteButton" class="primary-button" type="button">New note</button>
+          <div id="japaneseCreate" class="japanese-create" hidden>
+            <button id="newJapaneseNoteButton" class="primary-button" type="button" aria-expanded="false" aria-controls="japaneseCreateMenu">New Japanese note</button>
+            <div id="japaneseCreateMenu" class="japanese-create-menu" role="group" aria-label="New Japanese note" hidden>
+              <button type="button" data-japanese-template="vocabulary" data-command-id="japanese.create.vocabulary">Create vocabulary note</button>
+              <button type="button" data-japanese-template="kanji" data-command-id="japanese.create.kanji">Create kanji note</button>
+              <button type="button" data-japanese-template="grammar" data-command-id="japanese.create.grammar">Create grammar note</button>
+              <button type="button" data-japanese-template="output" data-command-id="japanese.create.output">Create today’s output note</button>
+              <button type="button" data-japanese-template="planner" data-command-id="japanese.create.planner">Create this week’s planner</button>
+            </div>
+          </div>
           <button id="refreshButton" class="shell-button" type="button">Refresh</button>
         </div>
       </header>
@@ -40,31 +50,51 @@
             <h2 id="noteNavigationTitle">Notes</h2>
             <span id="activeNoteLabel">Ready</span>
           </div>
-          <div id="noteList" class="note-list" aria-live="polite"></div>
 
-          <section id="japaneseFilters" class="japanese-filters" aria-label="Japanese note filters" hidden>
-            <label class="japanese-filter-field" for="japaneseDateFrom">
-              <span>Created from</span>
-              <input id="japaneseDateFrom" type="date" />
-            </label>
-            <label class="japanese-filter-field" for="japaneseDateTo">
-              <span>Created to</span>
-              <input id="japaneseDateTo" type="date" />
-            </label>
-            <label class="japanese-filter-field" for="japaneseNoteType">
-              <span>Note type</span>
-              <select id="japaneseNoteType">
-                <option value="all">All types</option>
-                <option value="vocabulary">Vocabulary</option>
-                <option value="kanji">Kanji</option>
-                <option value="grammar">Grammar</option>
-                <option value="output">Output</option>
-                <option value="planner">Planner</option>
-              </select>
-            </label>
-            <button id="clearJapaneseFilters" type="button" aria-label="Clear Japanese filters" disabled>Clear filters</button>
-            <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+          <nav id="japaneseSubviewNavigation" class="japanese-subview-navigation" aria-label="Japanese workspace views" hidden>
+            <button id="japaneseNotesSubviewButton" type="button" aria-pressed="true">Japanese Notes</button>
+            <button id="japaneseReviewSubviewButton" type="button" aria-pressed="false">Review <span id="japaneseReviewDueLabel">0 due</span></button>
+          </nav>
+
+          <section id="japaneseNotesSummary" class="japanese-notes-summary" aria-label="Japanese review summary" hidden>
+            <div>
+              <span>Due reviews</span>
+              <strong id="japaneseNotesDueCount">0</strong>
+            </div>
+            <button id="japaneseSummaryReviewButton" type="button">Open review</button>
           </section>
+
+          <section id="japaneseFilterTools" class="japanese-filter-tools" hidden>
+            <div class="japanese-filter-toolbar">
+              <button id="japaneseFilterToggle" type="button" aria-expanded="false" aria-controls="japaneseFilters">Filters</button>
+              <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+            </div>
+            <div id="japaneseFilterChips" class="japanese-filter-chips" aria-label="Active Japanese filters"></div>
+            <section id="japaneseFilters" class="japanese-filters" role="region" aria-label="Japanese note filters" hidden>
+              <label class="japanese-filter-field" for="japaneseDateFrom">
+                <span>Created from</span>
+                <input id="japaneseDateFrom" type="date" />
+              </label>
+              <label class="japanese-filter-field" for="japaneseDateTo">
+                <span>Created to</span>
+                <input id="japaneseDateTo" type="date" />
+              </label>
+              <label class="japanese-filter-field" for="japaneseNoteType">
+                <span>Note type</span>
+                <select id="japaneseNoteType">
+                  <option value="all">All types</option>
+                  <option value="vocabulary">Vocabulary</option>
+                  <option value="kanji">Kanji</option>
+                  <option value="grammar">Grammar</option>
+                  <option value="output">Output</option>
+                  <option value="planner">Planner</option>
+                </select>
+              </label>
+              <button id="clearJapaneseFilters" type="button" hidden>Clear all</button>
+            </section>
+          </section>
+
+          <div id="noteList" class="note-list" aria-live="polite"></div>
 
           <section id="japaneseDashboard" class="japanese-dashboard" aria-label="Japanese learning dashboard" hidden>
             <div class="dashboard-header">
@@ -72,7 +102,6 @@
                 <p class="eyebrow" lang="ja">日本語 workspace</p>
                 <h2>Study dashboard</h2>
               </div>
-              <button id="startReviewButton" class="primary-button" type="button">Start review</button>
             </div>
 
             <div class="dashboard-grid">
@@ -102,15 +131,7 @@
               </article>
             </div>
 
-            <div class="japanese-actions" role="group" aria-label="Japanese quick create">
-              <button type="button" data-japanese-template="vocabulary">Create vocabulary note</button>
-              <button type="button" data-japanese-template="kanji">Create kanji note</button>
-              <button type="button" data-japanese-template="grammar">Create grammar note</button>
-              <button type="button" data-japanese-template="output">Create today’s output note</button>
-              <button type="button" data-japanese-template="planner">Create this week’s planner</button>
-            </div>
-
-            <section class="repair-region" role="region" aria-label="Needs repair">
+            <section id="japaneseRepairRegion" class="repair-region" role="region" aria-label="Needs repair" hidden>
               <div class="repair-header">
                 <h3>Needs repair</h3>
                 <span id="japaneseRepairCount">0</span>
@@ -121,6 +142,13 @@
         </aside>
 
         <main id="editorRegion" class="panel editor-panel" aria-label="Editor">
+          <section id="japaneseReviewOverview" class="japanese-review-overview" aria-labelledby="japaneseReviewHeading" hidden>
+            <p class="eyebrow" lang="ja">復習</p>
+            <h2 id="japaneseReviewHeading">Review ready</h2>
+            <p>Work through due Japanese notes in a focused reveal-first session.</p>
+            <button id="startReviewButton" class="primary-button" type="button">Start review</button>
+          </section>
+
           <header id="editorContextHeader" class="editor-context-header">
             <div class="editor-context-copy">
               <span class="editor-context-label">Editor</span>

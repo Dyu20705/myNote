@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openJapaneseReviewSubview } from "./japanese-helpers.mjs";
 
 async function seedInvalidReview(page) {
   await page.route("**/", async (route) => {
@@ -59,13 +60,14 @@ test("invalid study data retains Japanese commands with an actionable reason", a
   await page.goto("/");
 
   await page.getByRole("button", { name: "日本語", exact: true }).click();
+  await openJapaneseReviewSubview(page);
   await expect(page.getByRole("region", { name: "Needs repair" }))
     .toContainText("study-data-unavailable");
 
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
   await page.locator("#commandInput").fill("Create vocabulary note");
-  const command = page.locator("#commandList [data-command-id='legacy.japanese-create-vocabulary']");
+  const command = page.locator("#commandList [data-command-id='japanese.create.vocabulary']");
   await expect(command).toBeVisible();
   await expect(command).toHaveAttribute("aria-disabled", "true");
   await expect(command).toContainText("Japanese study data is unavailable");

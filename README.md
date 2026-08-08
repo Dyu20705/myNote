@@ -45,8 +45,8 @@ npm run test:e2e
 - Markdown and JSON export.
 - Legacy localStorage migration to IndexedDB.
 - Notes and 日本語 workspace switching through one shared application runtime.
-- Six-card Japanese study dashboard with bounded repair diagnostics.
-- Five Japanese template actions discoverable in both the dashboard and command palette.
+- Editor-first Japanese Notes plus a distinct Review subview with the canonical six-card dashboard and non-empty bounded repair diagnostics.
+- One New Japanese note disclosure backed by the same five command-registry actions exposed in the palette.
 - Reveal-first, keyboard-operable review sessions with durable ratings, close/resume, deterministic skips, and explicit retry state.
 - Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
 - Additive schema-v2 compatibility that preserves existing schema-v1 note records and never enrolls them automatically.

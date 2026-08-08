@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  createJapaneseNoteFromMenu,
+  openJapaneseReviewSubview,
+} from "./japanese-helpers.mjs";
 
 async function openApplication(page) {
   await page.goto("/");
@@ -76,11 +80,12 @@ test("IME composition suppresses shell navigation commands", async ({ page }) =>
 
 test("review modal isolates background note-navigation commands", async ({ page }) => {
   await openJapaneseWorkspace(page);
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
-  await page.getByRole("button", { name: "Create kanji note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create kanji note");
   await expect(page.locator("#titleInput")).toHaveValue("新しい漢字");
 
+  await openJapaneseReviewSubview(page);
   await page.getByRole("button", { name: "Start review" }).click();
   await page.getByRole("button", { name: "Reveal review content" }).click();
   const dialog = page.getByRole("dialog", { name: "Japanese review session" });
@@ -99,7 +104,8 @@ test("review modal isolates background note-navigation commands", async ({ page 
 
 test("review numeric shortcut remains owned by the active modal", async ({ page }) => {
   await openJapaneseWorkspace(page);
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
+  await openJapaneseReviewSubview(page);
   await page.getByRole("button", { name: "Start review" }).click();
   await page.getByRole("button", { name: "Reveal review content" }).click();
 

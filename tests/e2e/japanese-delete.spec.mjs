@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  createJapaneseNoteFromMenu,
+  openJapaneseReviewSubview,
+} from "./japanese-helpers.mjs";
 
 async function openJapaneseWorkspace(page) {
   await page.goto("/");
@@ -21,7 +25,7 @@ async function enrolledRecordPresence(page, noteId) {
 
 test("palette delete, undo, and Delete key keep enrolled note and review atomic across reloads", async ({ page }) => {
   await openJapaneseWorkspace(page);
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#japaneseDueCount")).toHaveText("1");
 
@@ -39,6 +43,7 @@ test("palette delete, undo, and Delete key keep enrolled note and review atomic 
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect.poll(() => enrolledRecordPresence(page, noteId)).toEqual({ note: false, review: false });
 
+  await openJapaneseReviewSubview(page);
   await page.getByRole("heading", { name: "Study dashboard" }).click();
   await page.keyboard.press("Control+z");
 
@@ -52,6 +57,7 @@ test("palette delete, undo, and Delete key keep enrolled note and review atomic 
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect.poll(() => enrolledRecordPresence(page, noteId)).toEqual({ note: true, review: true });
 
+  await openJapaneseReviewSubview(page);
   await page.getByRole("heading", { name: "Study dashboard" }).click();
   await page.keyboard.press("Delete");
 

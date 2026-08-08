@@ -12,7 +12,6 @@ import {
   restoreNoteWithReviewToDb,
 } from "./core/storage.js";
 import { createJapaneseFilterController } from "./ui/japanese-filters.js";
-import { registerPaletteCommands } from "./ui/palette.js";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -50,6 +49,11 @@ function validateRuntime(runtime) {
     && runtime.backlinkIndex
     && runtime.workspace
     && typeof runtime.workspace.refresh === "function"
+    && runtime.commandRegistry
+    && typeof runtime.commandRegistry.register === "function"
+    && typeof runtime.commandRegistry.execute === "function"
+    && typeof runtime.commandRegistry.snapshot === "function"
+    && typeof runtime.getCommandContext === "function"
     && typeof runtime.registerEnrolledDelete === "function";
   if (!valid) {
     throw new TypeError("Invalid Japanese application runtime");
@@ -61,14 +65,29 @@ function collectElements(document) {
     notesButton: document.querySelector("#notesWorkspaceButton"),
     japaneseButton: document.querySelector("#japaneseWorkspaceButton"),
     noteNavigationTitle: document.querySelector("#noteNavigationTitle"),
+    searchBox: document.querySelector(".search-box"),
     searchInput: document.querySelector("#searchInput"),
     newNoteButton: document.querySelector("#newNoteButton"),
+    japaneseCreate: document.querySelector("#japaneseCreate"),
+    newJapaneseNote: document.querySelector("#newJapaneseNoteButton"),
+    japaneseCreateMenu: document.querySelector("#japaneseCreateMenu"),
+    subviewNavigation: document.querySelector("#japaneseSubviewNavigation"),
+    notesSubview: document.querySelector("#japaneseNotesSubviewButton"),
+    reviewSubview: document.querySelector("#japaneseReviewSubviewButton"),
+    reviewDueLabel: document.querySelector("#japaneseReviewDueLabel"),
+    notesSummary: document.querySelector("#japaneseNotesSummary"),
+    notesDueCount: document.querySelector("#japaneseNotesDueCount"),
+    summaryReview: document.querySelector("#japaneseSummaryReviewButton"),
+    filterTools: document.querySelector("#japaneseFilterTools"),
     filtersRoot: document.querySelector("#japaneseFilters"),
+    filterToggle: document.querySelector("#japaneseFilterToggle"),
+    filterChips: document.querySelector("#japaneseFilterChips"),
     filterDateFrom: document.querySelector("#japaneseDateFrom"),
     filterDateTo: document.querySelector("#japaneseDateTo"),
     filterNotebookType: document.querySelector("#japaneseNoteType"),
     clearFilters: document.querySelector("#clearJapaneseFilters"),
     filterStatus: document.querySelector("#japaneseFilterStatus"),
+    noteList: document.querySelector("#noteList"),
     dashboard: document.querySelector("#japaneseDashboard"),
     dueCount: document.querySelector("#japaneseDueCount"),
     newVocabulary: document.querySelector("#japaneseNewVocabulary"),
@@ -78,6 +97,8 @@ function collectElements(document) {
     plannerProgress: document.querySelector("#japanesePlannerProgress"),
     repairCount: document.querySelector("#japaneseRepairCount"),
     repairList: document.querySelector("#japaneseRepairList"),
+    repairRegion: document.querySelector("#japaneseRepairRegion"),
+    reviewOverview: document.querySelector("#japaneseReviewOverview"),
     startReview: document.querySelector("#startReviewButton"),
     quickCreateButtons: [...document.querySelectorAll("[data-japanese-template]")],
     titleInput: document.querySelector("#titleInput"),
@@ -138,11 +159,14 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   const {
     store,
     commandStack,
+    commandRegistry,
     history,
     searchClient,
     backlinkIndex,
   } = runtime;
   const workspace = runtime.workspace;
+  let activeSubview = "notes";
+  let quickCreatePending = false;
 
   function persistenceDatabase() {
     const database = store.getState().db;
@@ -204,25 +228,40 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   });
 
   function renderDashboard(state = store.getState()) {
-    if (!state.studyDashboard) {
-      return;
-    }
-
     const japanese = state.workspace === "japanese";
+    const review = japanese && activeSubview === "review";
     const unavailable = Boolean(state.studyDataUnavailable);
     document.body.dataset.workspace = japanese ? "japanese" : "notes";
+    document.body.dataset.japaneseSubview = activeSubview;
     elements.notesButton.setAttribute("aria-pressed", String(!japanese));
     elements.japaneseButton.setAttribute("aria-pressed", String(japanese));
     elements.noteNavigationTitle.textContent = japanese ? "Japanese Notes" : "Notes";
     elements.searchInput.placeholder = japanese ? "Search Japanese notes" : "Search notes";
+    elements.searchBox.hidden = review;
     elements.newNoteButton.hidden = japanese;
-    elements.dashboard.hidden = !japanese;
-    for (const button of elements.quickCreateButtons) {
-      button.disabled = unavailable;
-    }
+    elements.japaneseCreate.hidden = !japanese || review;
+    elements.subviewNavigation.hidden = !japanese;
+    elements.notesSubview.setAttribute("aria-pressed", String(japanese && !review));
+    elements.reviewSubview.setAttribute("aria-pressed", String(review));
+    elements.notesSummary.hidden = !japanese || review;
+    elements.filterTools.hidden = !japanese || review;
+    elements.noteList.hidden = review;
+    elements.dashboard.hidden = !review;
+    elements.reviewOverview.hidden = !review;
 
-    const dashboard = state.studyDashboard;
+    const dashboard = state.studyDashboard || {
+      dueCount: 0,
+      newVocabulary: 0,
+      dueKanji: 0,
+      grammarTotal: 0,
+      outputStreak: 0,
+      plannerProgress: { completed: 0, total: 0 },
+      needsRepair: [],
+      needsRepairOmitted: 0,
+    };
     elements.dueCount.textContent = String(dashboard.dueCount);
+    elements.notesDueCount.textContent = String(dashboard.dueCount);
+    elements.reviewDueLabel.textContent = `${dashboard.dueCount} due`;
     elements.newVocabulary.textContent = String(dashboard.newVocabulary);
     elements.dueKanji.textContent = String(dashboard.dueKanji);
     elements.grammarTotal.textContent = String(dashboard.grammarTotal);
@@ -240,15 +279,36 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       item.textContent = `${repair.code}${target} ×${repair.count}`;
       return item;
     }));
+    elements.repairRegion.hidden = !review || repairs.length === 0;
 
     const activeSession = state.reviewSession?.status === "active";
     elements.startReview.textContent = activeSession ? "Resume review" : "Start review";
     elements.startReview.disabled = unavailable || (!activeSession && dashboard.dueCount === 0);
+
+    const quickCreateAvailability = new Map(commandRegistry
+      .snapshot(runtime.getCommandContext())
+      .filter((command) => command.id.startsWith("japanese.create."))
+      .map((command) => [command.id, command]));
+    for (const button of elements.quickCreateButtons) {
+      const command = quickCreateAvailability.get(button.dataset.commandId);
+      button.disabled = !command?.available;
+      button.title = command?.available ? "" : command?.unavailableReason || "";
+    }
+    elements.newJapaneseNote.disabled = unavailable || quickCreatePending;
+  }
+
+  function setSubview(nextSubview) {
+    activeSubview = nextSubview === "review" ? "review" : "notes";
+    filterController.render();
+    renderDashboard();
   }
 
   const filterController = createJapaneseFilterController({
     elements: {
-      root: elements.filtersRoot,
+      root: elements.filterTools,
+      panel: elements.filtersRoot,
+      toggle: elements.filterToggle,
+      chips: elements.filterChips,
       dateFrom: elements.filterDateFrom,
       dateTo: elements.filterDateTo,
       notebookType: elements.filterNotebookType,
@@ -261,6 +321,34 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     requestRefresh: coordinator.refreshCurrent,
   });
 
+  function quickCreateUnavailableReason() {
+    if (store.getState().studyDataUnavailable) {
+      return "Japanese study data is unavailable";
+    }
+    if (quickCreatePending) {
+      return "Japanese note creation is already in progress";
+    }
+    return "";
+  }
+
+  async function runQuickCreate(type) {
+    quickCreatePending = true;
+    elements.japaneseCreate.setAttribute("aria-busy", "true");
+    elements.japaneseCreateMenu.hidden = true;
+    elements.newJapaneseNote.setAttribute("aria-expanded", "false");
+    renderDashboard();
+    try {
+      activeSubview = "notes";
+      const note = await coordinator.quickCreate(type);
+      elements.titleInput.focus();
+      return note;
+    } finally {
+      quickCreatePending = false;
+      elements.japaneseCreate.removeAttribute("aria-busy");
+      renderDashboard();
+    }
+  }
+
   const quickCreateCommands = [
     ["vocabulary", "Create vocabulary note"],
     ["kanji", "Create kanji note"],
@@ -268,17 +356,16 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     ["output", "Create today’s output note"],
     ["planner", "Create this week’s planner"],
   ].map(([type, title]) => ({
-    id: `japanese-create-${type}`,
+    id: `japanese.create.${type}`,
     title,
-    run: async () => {
-      const note = await coordinator.quickCreate(type);
-      elements.titleInput.focus();
-      return note;
-    },
+    description: `${title} from the canonical Japanese template`,
+    shortcuts: [],
+    scope: "shell",
+    isAvailable: () => !store.getState().studyDataUnavailable && !quickCreatePending,
+    unavailableReason: quickCreateUnavailableReason,
+    run: () => runQuickCreate(type),
   }));
-  const unregisterCommands = registerPaletteCommands(() => (
-    store.getState().studyDataUnavailable ? [] : quickCreateCommands
-  ));
+  const unregisterCommands = quickCreateCommands.map((command) => commandRegistry.register(command));
   const unregisterDelete = runtime.registerEnrolledDelete(async (noteId) => {
     const state = store.getState();
     if (state.studyDataUnavailable && state.workspace === "japanese") {
@@ -294,18 +381,50 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   const unsubscribeDashboard = store.subscribe(renderDashboard);
 
   elements.notesButton.addEventListener("click", () => {
+    elements.japaneseCreateMenu.hidden = true;
+    elements.newJapaneseNote.setAttribute("aria-expanded", "false");
     coordinator.switchWorkspace("notes").catch(() => undefined);
   });
   elements.japaneseButton.addEventListener("click", () => {
+    activeSubview = "notes";
     coordinator.switchWorkspace("japanese").catch(() => undefined);
+  });
+  elements.notesSubview.addEventListener("click", () => setSubview("notes"));
+  elements.reviewSubview.addEventListener("click", () => setSubview("review"));
+  elements.summaryReview.addEventListener("click", () => {
+    setSubview("review");
+    elements.reviewSubview.focus();
+  });
+  elements.newJapaneseNote.addEventListener("click", () => {
+    const open = elements.japaneseCreateMenu.hidden;
+    elements.japaneseCreateMenu.hidden = !open;
+    elements.newJapaneseNote.setAttribute("aria-expanded", String(open));
+    if (open) {
+      elements.quickCreateButtons[0]?.focus();
+    }
   });
   for (const button of elements.quickCreateButtons) {
     button.addEventListener("click", () => {
-      coordinator.quickCreate(button.dataset.japaneseTemplate)
-        .then(() => elements.titleInput.focus())
-        .catch(() => undefined);
+      elements.japaneseCreateMenu.hidden = true;
+      elements.newJapaneseNote.setAttribute("aria-expanded", "false");
+      Promise.resolve(commandRegistry.execute(
+        button.dataset.commandId,
+        runtime.getCommandContext({
+          source: "control",
+          opener: button,
+          target: button,
+        }),
+      )).catch(() => undefined);
     });
   }
+  elements.japaneseCreateMenu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      elements.japaneseCreateMenu.hidden = true;
+      elements.newJapaneseNote.setAttribute("aria-expanded", "false");
+      elements.newJapaneseNote.focus();
+    }
+  });
 
   let reviewOpener = elements.startReview;
 
@@ -429,7 +548,9 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     ready: coordinator.ready,
     destroy() {
       filterController.destroy();
-      unregisterCommands();
+      for (const unregisterCommand of unregisterCommands) {
+        unregisterCommand();
+      }
       unregisterDelete();
       unregisterResultPolicy();
       unsubscribeDashboard();

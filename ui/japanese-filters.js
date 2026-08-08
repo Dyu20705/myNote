@@ -2,6 +2,9 @@ import { JAPANESE_FILTER_ERRORS } from "../core/japaneseFilters.js";
 
 const REQUIRED_ELEMENTS = Object.freeze([
   "root",
+  "panel",
+  "toggle",
+  "chips",
   "dateFrom",
   "dateTo",
   "notebookType",
@@ -44,6 +47,28 @@ export function createJapaneseFilterController(options) {
   } = options;
   const onError = typeof options.onError === "function" ? options.onError : () => {};
   let refreshToken = 0;
+  let disclosureOpen = false;
+
+  const chipDefinitions = Object.freeze([
+    {
+      key: "fromDate",
+      active: (value) => Boolean(value),
+      label: (value) => `From: ${value}`,
+      reset: "",
+    },
+    {
+      key: "toDate",
+      active: (value) => Boolean(value),
+      label: (value) => `To: ${value}`,
+      reset: "",
+    },
+    {
+      key: "notebookType",
+      active: (value) => value !== "all",
+      label: (value) => `Type: ${value[0].toUpperCase()}${value.slice(1)}`,
+      reset: "all",
+    },
+  ]);
 
   function syncControls() {
     const values = filter.getFilters();
@@ -57,6 +82,8 @@ export function createJapaneseFilterController(options) {
   function render(state = getState()) {
     const japanese = state?.workspace === "japanese";
     elements.root.hidden = !japanese;
+    elements.panel.hidden = !disclosureOpen;
+    elements.toggle.setAttribute("aria-expanded", String(disclosureOpen));
     if (!japanese) {
       return;
     }
@@ -66,7 +93,8 @@ export function createJapaneseFilterController(options) {
     elements.dateFrom.setAttribute("aria-invalid", String(invalidRange));
     elements.dateTo.setAttribute("aria-invalid", String(invalidRange));
     elements.status.dataset.state = invalidRange ? "error" : "ready";
-    elements.clear.disabled = !filter.isActive();
+    elements.clear.hidden = !filter.isActive();
+    renderChips(filter.getFilters());
 
     if (invalidRange) {
       elements.status.textContent = "Created from must be on or before Created to";
@@ -76,6 +104,27 @@ export function createJapaneseFilterController(options) {
     const total = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []).size;
     const visible = resultCount(state);
     elements.status.textContent = `Showing ${visible} of ${total} Japanese ${total === 1 ? "note" : "notes"}`;
+  }
+
+  function renderChips(values) {
+    elements.chips.replaceChildren(...chipDefinitions
+      .filter((definition) => definition.active(values[definition.key]))
+      .map((definition) => {
+        const label = definition.label(values[definition.key]);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "japanese-filter-chip";
+        button.textContent = `${label} ×`;
+        button.setAttribute("aria-label", `Remove ${label} filter`);
+        button.addEventListener("click", () => {
+          filter.update({ [definition.key]: definition.reset });
+          syncControls();
+          render();
+          refresh();
+          elements.toggle.focus();
+        });
+        return button;
+      }));
   }
 
   async function refresh() {
@@ -109,13 +158,22 @@ export function createJapaneseFilterController(options) {
     syncControls();
     render();
     refresh();
-    elements.notebookType.focus();
+    elements.toggle.focus();
+  }
+
+  function toggleDisclosure() {
+    disclosureOpen = !disclosureOpen;
+    render();
+    if (disclosureOpen) {
+      elements.dateFrom.focus();
+    }
   }
 
   elements.dateFrom.addEventListener("input", readControls);
   elements.dateTo.addEventListener("input", readControls);
   elements.notebookType.addEventListener("change", readControls);
   elements.clear.addEventListener("click", clearFilters);
+  elements.toggle.addEventListener("click", toggleDisclosure);
   const unsubscribe = subscribe(render);
 
   syncControls();
@@ -127,6 +185,7 @@ export function createJapaneseFilterController(options) {
       elements.dateTo.removeEventListener("input", readControls);
       elements.notebookType.removeEventListener("change", readControls);
       elements.clear.removeEventListener("click", clearFilters);
+      elements.toggle.removeEventListener("click", toggleDisclosure);
       unsubscribe();
     },
     render,
