@@ -1,4 +1,5 @@
 import { commandRuntime } from "../app.js";
+import "./kanjiInkApp.js";
 import { createNoteActionRegistry } from "./noteActionRegistry.js";
 
 const elements = {
@@ -31,6 +32,7 @@ const unregisterActions = [
   actionRegistry.register({ commandId: "editor.save", order: 10 }),
   actionRegistry.register({ commandId: "notes.pin", order: 30 }),
   actionRegistry.register({ commandId: "notes.archive", order: 40 }),
+  actionRegistry.register({ commandId: "notes.kanji-ink", order: 50 }),
   actionRegistry.register({ commandId: "notes.delete", tone: "danger", order: 90 }),
 ];
 
