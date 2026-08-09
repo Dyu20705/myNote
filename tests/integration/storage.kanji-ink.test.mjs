@@ -246,12 +246,20 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     });
   });
 
-  test("note deletion removes corrupt ink dependents while restoring valid entries", async () => {
+  test("note deletion removes corrupt owner dependents without affecting unrelated data", async () => {
     const database = await openTestDatabase();
     const note = makeNote();
     const valid = makeEntry();
+    const unrelatedNote = makeNote("note-unrelated");
+    const unrelatedEntry = makeEntry({
+      id: "ink-unrelated",
+      noteId: unrelatedNote.id,
+      character: "木",
+    });
     await putNoteToDb(database, note);
+    await putNoteToDb(database, unrelatedNote);
     await addKanjiInkEntryToDb(database, valid);
+    await addKanjiInkEntryToDb(database, unrelatedEntry);
     await writeRawEntry(database, makeEntry({
       id: "ink-corrupt",
       character: "not-one-Han-character",
@@ -264,13 +272,28 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
       review: undefined,
       kanjiInkEntries: [valid],
     });
-    assert.deepEqual(await listNotesFromDb(database), []);
-    assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);
+    assert.deepEqual(await listNotesFromDb(database), [unrelatedNote]);
+    assert.deepEqual(await listKanjiInkEntriesFromDb(database, note.id), {
+      entries: [],
+      invalidCount: 0,
+    });
+    assert.deepEqual(await listKanjiInkEntriesFromDb(database, unrelatedNote.id), {
+      entries: [unrelatedEntry],
+      invalidCount: 0,
+    });
+    assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), [unrelatedEntry]);
 
     await restoreNoteWithDependentsToDb(database, capture);
-    assert.deepEqual(await listNotesFromDb(database), [note]);
+    assert.deepEqual(
+      (await listNotesFromDb(database)).map((storedNote) => storedNote.id).sort(),
+      [note.id, unrelatedNote.id].sort(),
+    );
     assert.deepEqual(await listKanjiInkEntriesFromDb(database, note.id), {
       entries: [valid],
+      invalidCount: 0,
+    });
+    assert.deepEqual(await listKanjiInkEntriesFromDb(database, unrelatedNote.id), {
+      entries: [unrelatedEntry],
       invalidCount: 0,
     });
   });
