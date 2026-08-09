@@ -5,8 +5,37 @@ async function loadModule() {
   return import(new URL("../../core/kanjiInkController.js", import.meta.url));
 }
 
-const pointA = { x: 0.2, y: 0.2 };
-const pointB = { x: 0.8, y: 0.8 };
+const penPoints = [
+  { x: 0.1, y: 0.2, t: 0 },
+  { x: 0.8, y: 0.2, t: 12 },
+];
+const markerPoints = [
+  { x: 0.2, y: 0.7, t: 0 },
+  { x: 0.7, y: 0.7, t: 16 },
+];
+
+function draw(controller, points) {
+  controller.beginGesture(points[0]);
+  for (const point of points.slice(1)) controller.appendGesture(point);
+  return controller.endGesture();
+}
+
+function canvasEntry(overrides = {}) {
+  return {
+    id: "ink-existing",
+    noteId: "note-1",
+    strokes: [{
+      tool: "pen",
+      width: 0.008,
+      points: penPoints,
+    }],
+    paperStyle: "grid",
+    createdAt: "2026-08-09T00:00:00.000Z",
+    updatedAt: "2026-08-09T00:00:00.000Z",
+    schemaVersion: 2,
+    ...overrides,
+  };
+}
 
 function deferred() {
   let resolve;
@@ -18,411 +47,311 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-test("drawing, undo, and clear mutate only the current bounded draft", async () => {
-  const { createKanjiInkController } = await loadModule();
-  const controller = createKanjiInkController({ recognize: () => [] });
-
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  assert.equal(controller.snapshot().status, "drawing");
-  assert.equal(controller.snapshot().dirty, true);
-  assert.equal(controller.snapshot().strokes.length, 1);
-
-  assert.equal(controller.undoLastStroke(), true);
-  assert.equal(controller.snapshot().strokes.length, 0);
-  assert.equal(controller.undoLastStroke(), false);
-
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  assert.equal(controller.clear(), true);
-  assert.equal(controller.snapshot().strokes.length, 0);
-  assert.equal(controller.snapshot().candidates.length, 0);
-  assert.equal(controller.snapshot().selectedCharacter, null);
-});
-
-test("an edit draft starts from a defensive copy of persisted strokes", async () => {
-  const { createKanjiInkController } = await loadModule();
-  const expectedStrokes = [[
-    { x: 0.2, y: 0.2 },
-    { x: 0.8, y: 0.8 },
-  ]];
-  const initialStrokes = structuredClone(expectedStrokes);
-  const controller = createKanjiInkController({
-    recognize: () => [],
-    initialStrokes,
-  });
-
-  initialStrokes[0][0].x = 0;
-  const snapshot = controller.snapshot();
-  assert.equal(snapshot.status, "drawing");
-  assert.equal(snapshot.dirty, true);
-  assert.deepEqual(snapshot.strokes, expectedStrokes);
-
-  snapshot.strokes[0][0].x = 1;
-  assert.deepEqual(controller.snapshot().strokes, expectedStrokes);
-});
-
-test("recognition resolves candidates but never auto-selects one", async () => {
-  const { createKanjiInkController } = await loadModule();
-  const controller = createKanjiInkController({
-    recognize: async () => [
-      { character: "人", score: 0.99 },
-      { character: "入", score: 0.75 },
-    ],
-  });
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-
-  const pending = controller.recognize();
-  assert.equal(controller.snapshot().status, "recognizing");
-  await pending;
-  assert.equal(controller.snapshot().status, "candidates");
-  assert.equal(controller.snapshot().selectedCharacter, null);
-  assert.deepEqual(controller.snapshot().candidates.map((item) => item.character), ["人", "入"]);
-
-  controller.selectCandidate("人");
-  assert.equal(controller.snapshot().status, "selected");
-  assert.equal(controller.snapshot().selectedCharacter, "人");
-});
-
-test("stroke mutation invalidates candidate selection and stale recognition results", async () => {
-  const { createKanjiInkController } = await loadModule();
-  const first = deferred();
-  const second = deferred();
-  let invocation = 0;
-  const controller = createKanjiInkController({
-    recognize: () => (++invocation === 1 ? first.promise : second.promise),
-  });
-
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  const firstRequest = controller.recognize();
-
-  controller.beginStroke({ x: 0.1, y: 0.8 });
-  controller.appendPoint({ x: 0.9, y: 0.2 });
-  controller.endStroke();
-  const secondRequest = controller.recognize();
-
-  first.resolve([{ character: "人", score: 1 }]);
-  await firstRequest;
-  assert.equal(controller.snapshot().status, "recognizing");
-  assert.equal(controller.snapshot().candidates.length, 0);
-
-  second.resolve([{ character: "木", score: 0.9 }]);
-  await secondRequest;
-  controller.selectCandidate("木");
-  assert.equal(controller.snapshot().selectedCharacter, "木");
-
-  controller.undoLastStroke();
-  assert.equal(controller.snapshot().selectedCharacter, null);
-  assert.equal(controller.snapshot().candidates.length, 0);
-  assert.equal(controller.snapshot().status, "drawing");
-});
-
-test("recognition failure preserves strokes and supports retry", async () => {
-  const { createKanjiInkController } = await loadModule();
-  let shouldFail = true;
-  const controller = createKanjiInkController({
-    recognize: async () => {
-      if (shouldFail) {
-        throw new Error("engine details");
-      }
-      return [{ character: "八", score: 0.8 }];
-    },
-  });
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-
-  await controller.recognize();
-  assert.equal(controller.snapshot().status, "error");
-  assert.equal(controller.snapshot().errorCode, "KANJI_RECOGNITION_FAILED");
-  assert.equal(controller.snapshot().strokes.length, 1);
-
-  shouldFail = false;
-  await controller.retryRecognition();
-  assert.equal(controller.snapshot().status, "candidates");
-  assert.equal(controller.snapshot().candidates[0].character, "八");
-});
-
-test("dirty close confirms discard while clean cancel closes with focus intent", async () => {
-  const { createKanjiInkController } = await loadModule();
-  const controller = createKanjiInkController({ recognize: () => [] });
-
-  assert.deepEqual(controller.requestClose(), {
-    closed: true,
-    focusTarget: "opener",
-  });
-
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  assert.deepEqual(controller.requestClose(), {
-    closed: false,
-    focusTarget: "keep-drawing",
-  });
-  assert.equal(controller.snapshot().status, "confirm-discard");
-
-  controller.keepDrawing();
-  assert.equal(controller.snapshot().status, "drawing");
-  controller.requestClose();
-  assert.deepEqual(controller.discardDraft(), {
-    closed: true,
-    focusTarget: "opener",
-  });
-  assert.equal(controller.snapshot().dirty, false);
-  assert.equal(controller.snapshot().strokes.length, 0);
-});
-
-test("save requires explicit selection and persists before committed state", async () => {
+test("Pen is the default and Marker saves its canonical width", async () => {
   const { createKanjiInkController } = await loadModule();
   const persisted = [];
-  const saveGate = deferred();
   const controller = createKanjiInkController({
-    recognize: async () => [{ character: "人", score: 1 }],
     persist: async (entry) => {
       persisted.push(entry);
-      await saveGate.promise;
       return entry;
     },
     createId: () => "ink-created",
-    now: () => "2026-08-04T02:03:04.000Z",
-  });
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  await controller.recognize();
-
-  await assert.rejects(() => controller.save({ noteId: "note-1" }), {
-    code: "KANJI_CANDIDATE_REQUIRED",
+    now: () => "2026-08-09T12:00:00.000Z",
   });
 
-  controller.selectCandidate("人");
-  const saving = controller.save({ noteId: "note-1" });
-  assert.equal(controller.snapshot().status, "saving");
-  assert.equal(controller.snapshot().dirty, true);
-  assert.equal(persisted.length, 1);
+  assert.equal(controller.snapshot().tool, "pen");
+  assert.equal(draw(controller, penPoints), true);
+  controller.selectTool("marker");
+  assert.equal(draw(controller, markerPoints), true);
 
-  saveGate.resolve();
-  const result = await saving;
-  assert.equal(result.id, "ink-created");
-  assert.equal(controller.snapshot().status, "idle");
-  assert.equal(controller.snapshot().dirty, false);
-  assert.equal(controller.snapshot().savedEntry.id, "ink-created");
+  await controller.save({ noteId: "note-1" });
+  assert.deepEqual(persisted, [{
+    id: "ink-created",
+    noteId: "note-1",
+    strokes: [
+      { tool: "pen", width: 0.008, points: penPoints },
+      { tool: "marker", width: 0.024, points: markerPoints },
+    ],
+    paperStyle: "grid",
+    createdAt: "2026-08-09T12:00:00.000Z",
+    updatedAt: "2026-08-09T12:00:00.000Z",
+    schemaVersion: 2,
+  }]);
 });
 
-test("failed save preserves exact draft and exposes retry state", async () => {
+test("Eraser removes intersecting canonical strokes without persisting eraser events", async () => {
   const { createKanjiInkController } = await loadModule();
-  let fail = true;
-  const controller = createKanjiInkController({
-    recognize: async () => [{ character: "木", score: 1 }],
-    persist: async (entry) => {
-      if (fail) throw new Error("storage details");
-      return entry;
+  const controller = createKanjiInkController();
+  draw(controller, penPoints);
+  controller.selectTool("eraser");
+
+  assert.equal(draw(controller, [
+    { x: 0.45, y: 0.1, t: 0 },
+    { x: 0.45, y: 0.3, t: 10 },
+  ]), true);
+  assert.deepEqual(controller.snapshot().strokes, []);
+  assert.equal(controller.snapshot().tool, "eraser");
+
+  controller.undo();
+  assert.deepEqual(controller.snapshot().strokes, [{
+    tool: "pen",
+    width: 0.008,
+    points: penPoints,
+  }]);
+  assert.equal(controller.redo(), true);
+  assert.equal(controller.snapshot().strokes.length, 0);
+});
+
+test("Undo and Redo restore exact immutable drafts and a new edit clears Redo", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const controller = createKanjiInkController();
+  draw(controller, penPoints);
+  controller.selectTool("marker");
+  draw(controller, markerPoints);
+  const twoStrokes = controller.snapshot().strokes;
+
+  assert.equal(controller.undo(), true);
+  assert.deepEqual(controller.snapshot().strokes, [twoStrokes[0]]);
+  assert.equal(controller.redo(), true);
+  assert.deepEqual(controller.snapshot().strokes, twoStrokes);
+  assert.equal(controller.undo(), true);
+  controller.selectTool("pen");
+  draw(controller, [
+    { x: 0.1, y: 0.4, t: 0 },
+    { x: 0.4, y: 0.4, t: 9 },
+  ]);
+  assert.equal(controller.redo(), false);
+
+  const snapshot = controller.snapshot();
+  snapshot.strokes[0].points[0].x = 1;
+  assert.notEqual(controller.snapshot().strokes[0].points[0].x, 1);
+});
+
+test("Clear is one undoable edit", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const controller = createKanjiInkController();
+  draw(controller, penPoints);
+  const beforeClear = controller.snapshot().strokes;
+
+  assert.equal(controller.clear(), true);
+  assert.deepEqual(controller.snapshot().strokes, []);
+  assert.equal(controller.undo(), true);
+  assert.deepEqual(controller.snapshot().strokes, beforeClear);
+  assert.equal(controller.redo(), true);
+  assert.deepEqual(controller.snapshot().strokes, []);
+});
+
+test("History retains no more than 100 committed draft states", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const controller = createKanjiInkController();
+
+  for (let index = 0; index < 101; index += 1) {
+    draw(controller, [
+      { x: 0.1, y: 0.1, t: 0 },
+      { x: 0.2, y: 0.2, t: index + 1 },
+    ]);
+    controller.clear();
+  }
+
+  for (let index = 0; index < 100; index += 1) assert.equal(controller.undo(), true);
+  assert.equal(controller.undo(), false);
+});
+
+test("An untouched V2 edit is clean and closes without discard", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const initialEntry = canvasEntry();
+  const expectedStrokes = structuredClone(initialEntry.strokes);
+  const controller = createKanjiInkController({ initialEntry });
+
+  initialEntry.strokes[0].points[0].x = 1;
+  assert.equal(controller.snapshot().dirty, false);
+  assert.deepEqual(controller.snapshot().strokes, expectedStrokes);
+  assert.deepEqual(controller.requestClose(), {
+    closed: true,
+    focusTarget: "opener",
+  });
+});
+
+test("V1 initial entries are rejected rather than reinterpreted as V2 canvases", async () => {
+  const { createKanjiInkController } = await loadModule();
+  assert.throws(() => createKanjiInkController({
+    initialEntry: {
+      id: "ink-v1",
+      noteId: "note-1",
+      schemaVersion: 1,
+      revision: 1,
+      character: "人",
+      strokes: [[{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }]],
+      recognizer: {
+        engineId: "legacy",
+        engineVersion: "1",
+        datasetVersion: "1",
+      },
+      createdAt: "2026-08-09T00:00:00.000Z",
+      updatedAt: "2026-08-09T00:00:00.000Z",
     },
-  });
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  await controller.recognize();
-  controller.selectCandidate("木");
-
-  await assert.rejects(() => controller.save({ noteId: "note-1" }), {
-    code: "KANJI_SAVE_FAILED",
-  });
-  assert.equal(controller.snapshot().status, "error");
-  assert.equal(controller.snapshot().errorCode, "KANJI_SAVE_FAILED");
-  assert.equal(controller.snapshot().selectedCharacter, "木");
-  assert.equal(controller.snapshot().strokes.length, 1);
-
-  fail = false;
-  const saved = await controller.retrySave({ noteId: "note-1" });
-  assert.equal(saved.character, "木");
-  assert.equal(controller.snapshot().dirty, false);
+  }), { code: "KANJI_CONTROLLER_OPTIONS_INVALID" });
 });
 
-test("save is single-flight and draft mutation is blocked while persistence is pending", async () => {
+test("Gesture boundaries reject excess strokes, points, total points, and elapsed time", async () => {
   const { createKanjiInkController } = await loadModule();
+  const twoPoints = [
+    { x: 0.1, y: 0.1, t: 0 },
+    { x: 0.2, y: 0.2, t: 1 },
+  ];
 
+  const strokeBound = createKanjiInkController();
+  for (let index = 0; index < 32; index += 1) assert.equal(draw(strokeBound, twoPoints), true);
+  strokeBound.beginGesture(twoPoints[0]);
+  strokeBound.appendGesture(twoPoints[1]);
+  assert.throws(() => strokeBound.endGesture(), { code: "KANJI_INK_ENTRY_LIMIT" });
+
+  const pointBound = createKanjiInkController();
+  pointBound.beginGesture(twoPoints[0]);
+  for (let index = 1; index < 256; index += 1) {
+    pointBound.appendGesture({ x: 0.2, y: 0.2, t: index });
+  }
+  assert.throws(() => pointBound.appendGesture({ x: 0.2, y: 0.2, t: 256 }), {
+    code: "KANJI_INK_ENTRY_LIMIT",
+  });
+
+  const totalBound = createKanjiInkController();
+  for (let stroke = 0; stroke < 16; stroke += 1) {
+    totalBound.beginGesture(twoPoints[0]);
+    for (let point = 1; point < 256; point += 1) {
+      totalBound.appendGesture({ x: 0.2, y: 0.2, t: point });
+    }
+    assert.equal(totalBound.endGesture(), true);
+  }
+  totalBound.beginGesture(twoPoints[0]);
+  totalBound.appendGesture(twoPoints[1]);
+  assert.throws(() => totalBound.endGesture(), { code: "KANJI_INK_ENTRY_LIMIT" });
+
+  const durationBound = createKanjiInkController();
+  assert.equal(draw(durationBound, [
+    { x: 0.1, y: 0.1, t: 0 },
+    { x: 0.2, y: 0.2, t: 600000 },
+  ]), true);
+  durationBound.beginGesture(twoPoints[0]);
+  assert.throws(() => durationBound.appendGesture({ x: 0.2, y: 0.2, t: 600001 }), {
+    code: "KANJI_INK_POINT_INVALID",
+  });
+});
+
+test("Save rejects an empty canvas", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const controller = createKanjiInkController();
+
+  await assert.rejects(controller.save({ noteId: "note-1" }), {
+    code: "KANJI_STROKES_REQUIRED",
+  });
+});
+
+test("Save is single-flight and blocks every draft mutation while pending", async () => {
+  const { createKanjiInkController } = await loadModule();
   const gate = deferred();
   let persistCalls = 0;
-  let idCalls = 0;
-
   const controller = createKanjiInkController({
-    recognize: async () => [
-      { character: "人", score: 1 },
-    ],
     persist: async (entry) => {
       persistCalls += 1;
       await gate.promise;
       return entry;
     },
-    createId: () => `ink-${++idCalls}`,
-    now: () => "2026-08-07T15:00:00.000Z",
   });
-
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-
-  await controller.recognize();
-  controller.selectCandidate("人");
+  draw(controller, penPoints);
 
   const first = controller.save({ noteId: "note-1" });
   const second = controller.save({ noteId: "note-1" });
-
-  assert.strictEqual(first, second);
+  assert.strictEqual(second, first);
   assert.equal(persistCalls, 1);
-  assert.equal(idCalls, 1);
-  assert.equal(controller.snapshot().status, "saving");
-
-  assert.throws(
-    () => controller.beginStroke({ x: 0.1, y: 0.1 }),
-    { code: "KANJI_SAVE_IN_PROGRESS" },
-  );
-
-  assert.throws(
+  for (const mutate of [
+    () => controller.selectTool("marker"),
+    () => controller.beginGesture({ x: 0.2, y: 0.2, t: 0 }),
+    () => controller.undo(),
+    () => controller.redo(),
     () => controller.clear(),
-    { code: "KANJI_SAVE_IN_PROGRESS" },
-  );
-
-  gate.resolve();
-
-  const [firstResult, secondResult] = await Promise.all([first, second]);
-
-  assert.equal(firstResult.id, "ink-1");
-  assert.equal(secondResult.id, "ink-1");
-  assert.equal(persistCalls, 1);
-  assert.equal(idCalls, 1);
-
-  assert.equal(controller.snapshot().status, "idle");
-  assert.equal(controller.snapshot().dirty, false);
-});
-
-test("save publishes its single-flight promise before injected callbacks can re-enter", async () => {
-  const { createKanjiInkController } = await loadModule();
-
-  for (const reentryHook of ["createId", "now", "persist"]) {
-    const gate = deferred();
-    let controller;
-    let reentrantSave;
-    let didReenter = false;
-    let persistCalls = 0;
-    let idCalls = 0;
-    let nowCalls = 0;
-    const callbackStatuses = [];
-
-    function reenterFrom(hook) {
-      if (hook !== reentryHook || didReenter) return;
-      didReenter = true;
-      reentrantSave = controller.save({ noteId: "note-reentrant" });
-    }
-
-    controller = createKanjiInkController({
-      recognize: async () => [{ character: "人", score: 1 }],
-      persist: async (entry) => {
-        persistCalls += 1;
-        callbackStatuses.push(["persist", controller.snapshot().status]);
-        reenterFrom("persist");
-        await gate.promise;
-        return entry;
-      },
-      createId: () => {
-        idCalls += 1;
-        callbackStatuses.push(["createId", controller.snapshot().status]);
-        reenterFrom("createId");
-        return `ink-${idCalls}`;
-      },
-      now: () => {
-        nowCalls += 1;
-        callbackStatuses.push(["now", controller.snapshot().status]);
-        reenterFrom("now");
-        return "2026-08-07T15:00:00.000Z";
-      },
-    });
-
-    controller.beginStroke(pointA);
-    controller.appendPoint(pointB);
-    controller.endStroke();
-    await controller.recognize();
-    controller.selectCandidate("人");
-
-    const first = controller.save({ noteId: "note-1" });
-
-    assert.strictEqual(reentrantSave, first, `${reentryHook} re-entry must join the first save`);
-    assert.equal(persistCalls, 1);
-    assert.equal(idCalls, 1);
-    assert.equal(nowCalls, 1);
-    assert.equal(controller.snapshot().status, "saving");
-    assert.deepEqual(callbackStatuses, [
-      ["now", "saving"],
-      ["createId", "saving"],
-      ["persist", "saving"],
-    ]);
-
-    gate.resolve();
-    assert.equal((await first).id, "ink-1");
-  }
-});
-
-test("every public draft transition is locked during save and a failed draft retries intact", async () => {
-  const { createKanjiInkController } = await loadModule();
-  const firstGate = deferred();
-  const retryGate = deferred();
-  const gates = [firstGate, retryGate];
-  let persistCalls = 0;
-
-  const controller = createKanjiInkController({
-    recognize: async () => [{ character: "木", score: 1 }],
-    persist: async (entry) => {
-      const gate = gates[persistCalls++];
-      await gate.promise;
-      return entry;
-    },
-  });
-
-  controller.beginStroke(pointA);
-  controller.appendPoint(pointB);
-  controller.endStroke();
-  await controller.recognize();
-  controller.selectCandidate("木");
-
-  const saving = controller.save({ noteId: "note-1" });
-  const pendingSnapshot = controller.snapshot();
-  const synchronousMutations = [
-    () => controller.beginStroke(pointA),
-    () => controller.appendPoint(pointB),
-    () => controller.endStroke(),
-    () => controller.undoLastStroke(),
-    () => controller.clear(),
-    () => controller.selectCandidate("木"),
     () => controller.requestClose(),
     () => controller.keepDrawing(),
     () => controller.discardDraft(),
-  ];
-
-  for (const mutate of synchronousMutations) {
+  ]) {
     assert.throws(mutate, { code: "KANJI_SAVE_IN_PROGRESS" });
   }
-  await assert.rejects(
-    () => controller.recognize(),
-    { code: "KANJI_SAVE_IN_PROGRESS" },
-  );
-  assert.deepEqual(controller.snapshot(), pendingSnapshot);
 
-  firstGate.reject(new Error("storage details"));
-  await assert.rejects(() => saving, { code: "KANJI_SAVE_FAILED" });
-  assert.equal(controller.snapshot().selectedCharacter, "木");
-  assert.deepEqual(controller.snapshot().strokes, [[pointA, pointB]]);
+  gate.resolve();
+  await first;
+  assert.equal(controller.snapshot().dirty, false);
+});
+
+test("A direct retry reuses the exact prepared V2 entry without rebuilding it", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const attempted = [];
+  let createIdCalls = 0;
+  let nowCalls = 0;
+  const controller = createKanjiInkController({
+    persist: async (entry) => {
+      attempted.push(structuredClone(entry));
+      if (attempted.length === 1) throw new Error("storage unavailable");
+      return entry;
+    },
+    createId: () => `ink-${++createIdCalls}`,
+    now: () => `2026-08-09T14:00:0${++nowCalls}.000Z`,
+  });
+  draw(controller, penPoints);
+
+  await assert.rejects(controller.save({ noteId: "note-1" }), {
+    code: "KANJI_SAVE_FAILED",
+  });
+  const preparedEntry = structuredClone(attempted[0]);
+  await controller.retrySave();
+
+  assert.equal(createIdCalls, 1);
+  assert.equal(nowCalls, 1);
+  assert.deepEqual(attempted, [preparedEntry, preparedEntry]);
+});
+
+test("Failed persistence retains exact draft, tool, and history for one V2 retry", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const saveGate = deferred();
+  let attempts = 0;
+  const persisted = [];
+  const controller = createKanjiInkController({
+    persist: async (entry) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("storage unavailable");
+      await saveGate.promise;
+      persisted.push(entry);
+      return entry;
+    },
+    createId: () => "ink-retry",
+    now: () => "2026-08-09T13:00:00.000Z",
+  });
+  controller.selectTool("marker");
+  draw(controller, markerPoints);
+  const beforeFailure = controller.snapshot();
+
+  await assert.rejects(controller.save({ noteId: "note-1" }), {
+    code: "KANJI_SAVE_FAILED",
+  });
+  assert.deepEqual(controller.snapshot().strokes, beforeFailure.strokes);
+  assert.equal(controller.snapshot().tool, "marker");
+  assert.equal(controller.undo(), true);
+  assert.equal(controller.redo(), true);
 
   const retry = controller.retrySave();
   assert.equal(controller.snapshot().status, "saving");
-  retryGate.resolve();
-  assert.equal((await retry).character, "木");
-  assert.equal(persistCalls, 2);
+  assert.equal(controller.snapshot().dirty, true);
+  assert.throws(() => controller.selectTool("pen"), { code: "KANJI_SAVE_IN_PROGRESS" });
+  saveGate.resolve();
+  await retry;
+
+  assert.deepEqual(persisted, [{
+    id: "ink-retry",
+    noteId: "note-1",
+    strokes: [{ tool: "marker", width: 0.024, points: markerPoints }],
+    paperStyle: "grid",
+    createdAt: "2026-08-09T13:00:00.000Z",
+    updatedAt: "2026-08-09T13:00:00.000Z",
+    schemaVersion: 2,
+  }]);
   assert.equal(controller.snapshot().dirty, false);
 });

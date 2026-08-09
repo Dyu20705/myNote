@@ -1,8 +1,12 @@
 import {
-  createKanjiInkEntry,
-  validateKanjiStrokes,
+  createKanjiInkEntryV2,
+  KANJI_INK_LIMITS,
+  KANJI_INK_WIDTHS,
+  validateKanjiInkEntryV2,
 } from "./kanjiInkEntry.js";
-import { KANJI_RECOGNIZER_INFO } from "./kanjiRecognizer.js";
+
+const MAX_HISTORY_STATES = 100;
+const ERASER_RADIUS = 0.03;
 
 function codedError(code) {
   const error = new Error(code);
@@ -10,7 +14,7 @@ function codedError(code) {
   return error;
 }
 
-function clonePoint(point) {
+function clonePoint(point, previousTime = null, first = false) {
   if (
     point === null
     || typeof point !== "object"
@@ -20,43 +24,83 @@ function clonePoint(point) {
     || point.x > 1
     || point.y < 0
     || point.y > 1
+    || !Number.isInteger(point.t)
+    || point.t < 0
+    || point.t > KANJI_INK_LIMITS.maxStrokeDurationMs
+    || (first && point.t !== 0)
+    || (previousTime !== null && point.t < previousTime)
   ) {
     throw codedError("KANJI_INK_POINT_INVALID");
   }
-  return { x: point.x, y: point.y };
+  return { x: point.x, y: point.y, t: point.t };
 }
 
 function cloneStrokes(strokes) {
-  return strokes.map((stroke) => stroke.map(clonePoint));
+  return strokes.map((stroke) => ({
+    tool: stroke.tool,
+    width: stroke.width,
+    points: stroke.points.map((point) => ({ ...point })),
+  }));
 }
 
-function cloneCandidate(candidate) {
-  return {
-    character: candidate.character,
-    score: candidate.score,
-  };
+function equalStrokes(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function sanitizeCandidates(value) {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set();
-  const candidates = [];
-  for (const item of value) {
-    if (
-      !item
-      || typeof item !== "object"
-      || typeof item.character !== "string"
-      || !/^\p{Script=Han}$/u.test(item.character)
-      || !Number.isFinite(item.score)
-      || item.score < 0
-      || item.score > 1
-      || seen.has(item.character)
-    ) continue;
-    seen.add(item.character);
-    candidates.push(cloneCandidate(item));
-    if (candidates.length === 8) break;
+function distanceSquaredToSegment(point, start, end) {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const lengthSquared = deltaX ** 2 + deltaY ** 2;
+  if (lengthSquared === 0) return (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
+  const projection = Math.max(0, Math.min(1, ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) / lengthSquared));
+  const closestX = start.x + projection * deltaX;
+  const closestY = start.y + projection * deltaY;
+  return (point.x - closestX) ** 2 + (point.y - closestY) ** 2;
+}
+
+function orientation(first, second, third) {
+  return (second.x - first.x) * (third.y - first.y) - (second.y - first.y) * (third.x - first.x);
+}
+
+function segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd) {
+  const first = orientation(firstStart, firstEnd, secondStart);
+  const second = orientation(firstStart, firstEnd, secondEnd);
+  const third = orientation(secondStart, secondEnd, firstStart);
+  const fourth = orientation(secondStart, secondEnd, firstEnd);
+  if (first * second < 0 && third * fourth < 0) return true;
+  const between = (value, start, end) => value >= Math.min(start, end) && value <= Math.max(start, end);
+  return (first === 0 && between(secondStart.x, firstStart.x, firstEnd.x) && between(secondStart.y, firstStart.y, firstEnd.y))
+    || (second === 0 && between(secondEnd.x, firstStart.x, firstEnd.x) && between(secondEnd.y, firstStart.y, firstEnd.y))
+    || (third === 0 && between(firstStart.x, secondStart.x, secondEnd.x) && between(firstStart.y, secondStart.y, secondEnd.y))
+    || (fourth === 0 && between(firstEnd.x, secondStart.x, secondEnd.x) && between(firstEnd.y, secondStart.y, secondEnd.y));
+}
+
+function segmentsWithinRadius(firstStart, firstEnd, secondStart, secondEnd) {
+  if (segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)) return true;
+  const radiusSquared = ERASER_RADIUS ** 2;
+  return [
+    distanceSquaredToSegment(firstStart, secondStart, secondEnd),
+    distanceSquaredToSegment(firstEnd, secondStart, secondEnd),
+    distanceSquaredToSegment(secondStart, firstStart, firstEnd),
+    distanceSquaredToSegment(secondEnd, firstStart, firstEnd),
+  ].some((distance) => distance <= radiusSquared);
+}
+
+function strokeIntersectsEraser(stroke, eraserPoints) {
+  const radiusSquared = ERASER_RADIUS ** 2;
+  for (let strokeIndex = 1; strokeIndex < stroke.points.length; strokeIndex += 1) {
+    const strokeStart = stroke.points[strokeIndex - 1];
+    const strokeEnd = stroke.points[strokeIndex];
+    for (let eraserIndex = 1; eraserIndex < eraserPoints.length; eraserIndex += 1) {
+      if (segmentsWithinRadius(strokeStart, strokeEnd, eraserPoints[eraserIndex - 1], eraserPoints[eraserIndex])) {
+        return true;
+      }
+    }
+    if (eraserPoints.length === 1 && distanceSquaredToSegment(eraserPoints[0], strokeStart, strokeEnd) <= radiusSquared) {
+      return true;
+    }
   }
-  return candidates;
+  return false;
 }
 
 function defaultId() {
@@ -64,255 +108,207 @@ function defaultId() {
   return `ink-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function hydrateInitialStrokes(value) {
-  if (value === undefined || (Array.isArray(value) && value.length === 0)) return [];
-  try {
-    return validateKanjiStrokes(value);
-  } catch {
-    throw codedError("KANJI_CONTROLLER_OPTIONS_INVALID");
-  }
+function cloneEntry(entry) {
+  return entry ? validateKanjiInkEntryV2(entry) : null;
 }
 
 export function createKanjiInkController({
-  recognize,
   persist = async (entry) => entry,
   createId = defaultId,
   now = () => new Date().toISOString(),
-  initialStrokes = [],
+  initialEntry = null,
 } = {}) {
-  if (typeof recognize !== "function" || typeof persist !== "function") {
+  if (typeof persist !== "function" || typeof createId !== "function" || typeof now !== "function") {
     throw codedError("KANJI_CONTROLLER_OPTIONS_INVALID");
   }
 
-  const hydratedStrokes = hydrateInitialStrokes(initialStrokes);
-  let recognitionToken = 0;
-  let activeStroke = null;
-  let lastSaveInput = null;
-  let saveInFlight = null;
-  let state = {
-    status: hydratedStrokes.length > 0 ? "drawing" : "idle",
-    dirty: hydratedStrokes.length > 0,
-    strokes: hydratedStrokes,
-    candidates: [],
-    selectedCharacter: null,
-    errorCode: null,
-    savedEntry: null,
-  };
-
-  function assertDraftMutable() {
-    if (saveInFlight) {
-      throw codedError("KANJI_SAVE_IN_PROGRESS");
-    }
+  let savedEntry;
+  try {
+    savedEntry = cloneEntry(initialEntry);
+  } catch {
+    throw codedError("KANJI_CONTROLLER_OPTIONS_INVALID");
   }
 
-  function invalidateRecognition() {
-    recognitionToken += 1;
-    state = {
-      ...state,
-      candidates: [],
-      selectedCharacter: null,
-      errorCode: null,
-    };
+  let baselineStrokes = savedEntry ? cloneStrokes(savedEntry.strokes) : [];
+  let strokes = cloneStrokes(baselineStrokes);
+  let tool = "pen";
+  let status = strokes.length > 0 ? "drawing" : "idle";
+  let errorCode = null;
+  let activeGesture = null;
+  let undoStack = [];
+  let redoStack = [];
+  let saveInFlight = null;
+  let lastSaveInput = null;
+  let retryEntry = null;
+
+  function isDirty() {
+    return !equalStrokes(strokes, baselineStrokes);
+  }
+
+  function assertDraftMutable() {
+    if (saveInFlight) throw codedError("KANJI_SAVE_IN_PROGRESS");
+  }
+
+  function recordHistory(previousStrokes) {
+    undoStack = [...undoStack, cloneStrokes(previousStrokes)].slice(-MAX_HISTORY_STATES);
+    redoStack = [];
+    retryEntry = null;
+  }
+
+  function setDrawingStatus() {
+    status = strokes.length > 0 ? "drawing" : "idle";
+    errorCode = null;
   }
 
   function snapshot() {
     return {
-      ...state,
-      strokes: cloneStrokes(state.strokes),
-      candidates: state.candidates.map(cloneCandidate),
-      savedEntry: state.savedEntry ? structuredClone(state.savedEntry) : null,
+      status,
+      dirty: isDirty(),
+      tool,
+      strokes: cloneStrokes(strokes),
+      canUndo: undoStack.length > 0,
+      canRedo: redoStack.length > 0,
+      errorCode,
+      savedEntry: savedEntry ? cloneEntry(savedEntry) : null,
     };
   }
 
-  function beginStroke(point) {
+  function selectTool(nextTool) {
     assertDraftMutable();
-    const cloned = clonePoint(point);
-    invalidateRecognition();
-    activeStroke = [cloned];
-    state = {
-      ...state,
-      status: "drawing",
-      dirty: true,
-    };
+    if (!["pen", "marker", "eraser"].includes(nextTool)) throw codedError("KANJI_TOOL_INVALID");
+    if (activeGesture) throw codedError("KANJI_GESTURE_ACTIVE");
+    tool = nextTool;
+    return tool;
   }
 
-  function appendPoint(point) {
+  function beginGesture(point) {
     assertDraftMutable();
-    if (!activeStroke) throw codedError("KANJI_STROKE_NOT_ACTIVE");
-    activeStroke.push(clonePoint(point));
+    if (activeGesture) throw codedError("KANJI_GESTURE_ACTIVE");
+    activeGesture = [clonePoint(point, null, true)];
+    errorCode = null;
   }
 
-  function endStroke() {
+  function appendGesture(point) {
     assertDraftMutable();
-    if (!activeStroke) return false;
-    if (activeStroke.length < 2) {
-      activeStroke = null;
-      return false;
+    if (!activeGesture) throw codedError("KANJI_GESTURE_NOT_ACTIVE");
+    if (activeGesture.length >= KANJI_INK_LIMITS.maxPointsPerStroke) throw codedError("KANJI_INK_ENTRY_LIMIT");
+    activeGesture.push(clonePoint(point, activeGesture.at(-1).t));
+  }
+
+  function endGesture() {
+    assertDraftMutable();
+    if (!activeGesture) return false;
+    const gesture = activeGesture;
+    activeGesture = null;
+    const previousStrokes = strokes;
+
+    if (tool === "eraser") {
+      const nextStrokes = strokes.filter((stroke) => !strokeIntersectsEraser(stroke, gesture));
+      if (nextStrokes.length === strokes.length) return false;
+      recordHistory(previousStrokes);
+      strokes = cloneStrokes(nextStrokes);
+      setDrawingStatus();
+      return true;
     }
-    state = {
-      ...state,
-      status: "drawing",
-      dirty: true,
-      strokes: [...state.strokes, activeStroke],
-    };
-    activeStroke = null;
+
+    if (gesture.length < 2) return false;
+    if (strokes.length >= KANJI_INK_LIMITS.maxStrokes
+      || strokes.reduce((total, stroke) => total + stroke.points.length, 0) + gesture.length > KANJI_INK_LIMITS.maxTotalPoints) {
+      throw codedError("KANJI_INK_ENTRY_LIMIT");
+    }
+    recordHistory(previousStrokes);
+    strokes = [...strokes, {
+      tool,
+      width: KANJI_INK_WIDTHS[tool],
+      points: gesture.map((point) => ({ ...point })),
+    }];
+    setDrawingStatus();
     return true;
   }
 
-  function undoLastStroke() {
+  function undo() {
     assertDraftMutable();
-    if (activeStroke) activeStroke = null;
-    if (state.strokes.length === 0) return false;
-    invalidateRecognition();
-    state = {
-      ...state,
-      status: "drawing",
-      dirty: true,
-      strokes: state.strokes.slice(0, -1),
-    };
+    activeGesture = null;
+    const previousStrokes = undoStack.at(-1);
+    if (!previousStrokes) return false;
+    undoStack = undoStack.slice(0, -1);
+    redoStack = [...redoStack, cloneStrokes(strokes)].slice(-MAX_HISTORY_STATES);
+    strokes = cloneStrokes(previousStrokes);
+    retryEntry = null;
+    setDrawingStatus();
+    return true;
+  }
+
+  function redo() {
+    assertDraftMutable();
+    activeGesture = null;
+    const nextStrokes = redoStack.at(-1);
+    if (!nextStrokes) return false;
+    redoStack = redoStack.slice(0, -1);
+    undoStack = [...undoStack, cloneStrokes(strokes)].slice(-MAX_HISTORY_STATES);
+    strokes = cloneStrokes(nextStrokes);
+    retryEntry = null;
+    setDrawingStatus();
     return true;
   }
 
   function clear() {
     assertDraftMutable();
-    const changed = Boolean(activeStroke) || state.strokes.length > 0;
-    if (!changed) return false;
-    activeStroke = null;
-    invalidateRecognition();
-    state = {
-      ...state,
-      status: "drawing",
-      dirty: true,
-      strokes: [],
-    };
+    activeGesture = null;
+    if (strokes.length === 0) return false;
+    recordHistory(strokes);
+    strokes = [];
+    setDrawingStatus();
     return true;
-  }
-
-  async function runRecognition() {
-    assertDraftMutable();
-    if (state.strokes.length === 0) throw codedError("KANJI_STROKES_REQUIRED");
-    const token = ++recognitionToken;
-    const input = cloneStrokes(state.strokes);
-    state = {
-      ...state,
-      status: "recognizing",
-      candidates: [],
-      selectedCharacter: null,
-      errorCode: null,
-    };
-    try {
-      const result = await recognize(input);
-      if (token !== recognitionToken) return [];
-      const candidates = sanitizeCandidates(result);
-      state = {
-        ...state,
-        status: "candidates",
-        candidates,
-        selectedCharacter: null,
-        errorCode: null,
-      };
-      return candidates.map(cloneCandidate);
-    } catch {
-      if (token !== recognitionToken) return [];
-      state = {
-        ...state,
-        status: "error",
-        errorCode: "KANJI_RECOGNITION_FAILED",
-        candidates: [],
-        selectedCharacter: null,
-      };
-      return [];
-    }
-  }
-
-  function selectCandidate(character) {
-    assertDraftMutable();
-    if (!state.candidates.some((candidate) => candidate.character === character)) {
-      throw codedError("KANJI_CANDIDATE_INVALID");
-    }
-    state = {
-      ...state,
-      status: "selected",
-      selectedCharacter: character,
-      errorCode: null,
-    };
   }
 
   function requestClose() {
     assertDraftMutable();
-    if (!state.dirty) {
-      return { closed: true, focusTarget: "opener" };
-    }
-    state = { ...state, status: "confirm-discard" };
+    activeGesture = null;
+    if (!isDirty()) return { closed: true, focusTarget: "opener" };
+    status = "confirm-discard";
     return { closed: false, focusTarget: "keep-drawing" };
   }
 
   function keepDrawing() {
     assertDraftMutable();
-    state = { ...state, status: "drawing", errorCode: null };
+    setDrawingStatus();
   }
 
   function discardDraft() {
     assertDraftMutable();
-    recognitionToken += 1;
-    activeStroke = null;
+    activeGesture = null;
+    strokes = cloneStrokes(baselineStrokes);
+    undoStack = [];
+    redoStack = [];
+    retryEntry = null;
     lastSaveInput = null;
-    state = {
-      status: "idle",
-      dirty: false,
-      strokes: [],
-      candidates: [],
-      selectedCharacter: null,
-      errorCode: null,
-      savedEntry: state.savedEntry,
-    };
+    setDrawingStatus();
     return { closed: true, focusTarget: "opener" };
   }
 
-  async function persistSelected({ noteId } = {}) {
-    try {
-      lastSaveInput = { noteId };
-      const selectedRank = state.candidates.findIndex(
-        (candidate) => candidate.character === state.selectedCharacter,
-      );
-      const timestamp = now();
-      const entry = createKanjiInkEntry({
-        id: createId(),
-        noteId,
-        character: state.selectedCharacter,
-        strokes: state.strokes,
-        recognizer: KANJI_RECOGNIZER_INFO,
-        timestamp,
-      });
-      const persisted = await persist(entry, { selectedRank });
-      state = {
-        status: "idle",
-        dirty: false,
-        strokes: [],
-        candidates: [],
-        selectedCharacter: null,
-        errorCode: null,
-        savedEntry: structuredClone(persisted ?? entry),
-      };
-      return structuredClone(persisted ?? entry);
-    } catch {
-      state = {
-        ...state,
-        status: "error",
-        errorCode: "KANJI_SAVE_FAILED",
-      };
-      throw codedError("KANJI_SAVE_FAILED");
-    }
+  function buildEntry(input) {
+    const timestamp = now();
+    const existing = savedEntry;
+    const entry = createKanjiInkEntryV2({
+      id: existing ? existing.id : createId(),
+      noteId: existing ? existing.noteId : input?.noteId,
+      strokes,
+      paperStyle: "grid",
+      timestamp: existing ? existing.createdAt : timestamp,
+    });
+    return existing ? validateKanjiInkEntryV2({ ...entry, updatedAt: timestamp }) : entry;
   }
 
-  function save(input = {}) {
-    if (saveInFlight) {
-      return saveInFlight;
-    }
+  function entryForSave(input, useRetryEntry) {
+    if (useRetryEntry && retryEntry) return cloneEntry(retryEntry);
+    return buildEntry(input);
+  }
 
-    if (!state.selectedCharacter) {
-      return Promise.reject(codedError("KANJI_CANDIDATE_REQUIRED"));
-    }
+  function startSave(input = {}, useRetryEntry = false) {
+    if (saveInFlight) return saveInFlight;
+    if (strokes.length === 0) return Promise.reject(codedError("KANJI_STROKES_REQUIRED"));
+    if (activeGesture) return Promise.reject(codedError("KANJI_GESTURE_ACTIVE"));
 
     let resolveSave;
     let rejectSave;
@@ -320,39 +316,58 @@ export function createKanjiInkController({
       resolveSave = resolve;
       rejectSave = reject;
     });
-
     saveInFlight = operation;
-    state = { ...state, status: "saving", errorCode: null };
+    status = "saving";
+    errorCode = null;
 
-    void persistSelected(input).then((result) => {
-      saveInFlight = null;
-      resolveSave(result);
-    }, (error) => {
-      saveInFlight = null;
-      rejectSave(error);
-    });
+    void (async () => {
+      try {
+        lastSaveInput = { ...input };
+        const entry = entryForSave(input, useRetryEntry);
+        retryEntry = cloneEntry(entry);
+        const persisted = validateKanjiInkEntryV2(await persist(cloneEntry(entry)) ?? entry);
+        savedEntry = cloneEntry(persisted);
+        baselineStrokes = cloneStrokes(persisted.strokes);
+        strokes = cloneStrokes(persisted.strokes);
+        undoStack = [];
+        redoStack = [];
+        retryEntry = null;
+        status = "idle";
+        errorCode = null;
+        saveInFlight = null;
+        resolveSave(cloneEntry(persisted));
+      } catch {
+        status = "error";
+        errorCode = "KANJI_SAVE_FAILED";
+        saveInFlight = null;
+        rejectSave(codedError("KANJI_SAVE_FAILED"));
+      }
+    })();
 
     return operation;
   }
 
-  function retrySave(input = lastSaveInput) {
-    return save(input ?? {});
+  function save(input = {}) {
+    return startSave(input, false);
+  }
+
+  function retrySave(input = lastSaveInput ?? {}) {
+    return startSave(input, true);
   }
 
   return Object.freeze({
-    snapshot,
-    beginStroke,
-    appendPoint,
-    endStroke,
-    undoLastStroke,
+    selectTool,
+    beginGesture,
+    appendGesture,
+    endGesture,
+    undo,
+    redo,
     clear,
-    recognize: runRecognition,
-    retryRecognition: runRecognition,
-    selectCandidate,
     requestClose,
     keepDrawing,
     discardDraft,
     save,
     retrySave,
+    snapshot,
   });
 }
