@@ -1,9 +1,9 @@
 import { commandRuntime } from "../app.js";
 import { kanjiInkApplication } from "../core/kanjiInkApplication.js";
-import { KANJI_INK_LIMITS } from "../core/kanjiInkEntry.js";
+import { KANJI_INK_LIMITS, KANJI_INK_WIDTHS } from "../core/kanjiInkEntry.js";
 
 const MAX_RENDERED_ENTRIES = 64;
-const MIN_POINT_DISTANCE = 0.006;
+const MIN_POINT_DISTANCE = 0.002;
 const MAX_DEVICE_PIXEL_RATIO = 3;
 
 function ensureStylesheet() {
@@ -15,6 +15,10 @@ function ensureStylesheet() {
   document.head.append(link);
 }
 
+function iconButton(id, label, icon, className = "kanji-icon-button") {
+  return `<button id="${id}" class="${className}" type="button" aria-label="${label}" title="${label}"><img src="${new URL(`../assets/icons/${icon}`, import.meta.url).href}" alt=""></button>`;
+}
+
 function createDialog() {
   const dialog = document.createElement("dialog");
   dialog.id = "kanjiInkDialog";
@@ -23,29 +27,25 @@ function createDialog() {
   dialog.innerHTML = `
     <div class="kanji-ink-shell">
       <header class="kanji-ink-header">
-        <div>
-          <p class="eyebrow" lang="ja">漢字 handwriting</p>
-          <h2 id="kanjiInkDialogTitle">Add Kanji handwriting</h2>
-        </div>
-        <button id="closeKanjiDialogButton" type="button" aria-label="Close Kanji handwriting dialog">Close</button>
+        <h2 id="kanjiInkDialogTitle">Draw Kanji</h2>
+        ${iconButton("closeKanjiDialogButton", "Close", "kanji-close.svg")}
       </header>
-      <section class="kanji-ink-candidate-region" aria-labelledby="kanjiCandidateHeading">
-        <strong id="kanjiCandidateHeading">Candidates</strong>
-        <div id="kanjiCandidateList" class="kanji-candidate-list" aria-live="polite"></div>
-      </section>
       <div class="kanji-canvas-frame">
-        <canvas id="kanjiInkCanvas" tabindex="0" aria-label="Draw one Kanji with a mouse or pen"></canvas>
+        <canvas id="kanjiInkCanvas" tabindex="0" aria-label="Kanji drawing canvas"></canvas>
       </div>
-      <div class="kanji-ink-toolbar" role="group" aria-label="Handwriting controls">
-        <button id="undoKanjiStrokeButton" type="button">Undo stroke</button>
-        <button id="clearKanjiButton" type="button">Clear</button>
-        <button id="recognizeKanjiButton" class="primary-button" type="button">Recognize</button>
+      <div class="kanji-ink-bottom-row">
+        <div class="kanji-ink-toolbar" role="toolbar" aria-label="Drawing tools">
+          ${iconButton("kanjiPenButton", "Pen", "kanji-pen.svg", "kanji-icon-button kanji-tool-button")}
+          ${iconButton("kanjiMarkerButton", "Marker", "kanji-marker.svg", "kanji-icon-button kanji-tool-button")}
+          ${iconButton("kanjiEraserButton", "Eraser", "kanji-eraser.svg", "kanji-icon-button kanji-tool-button")}
+          <span class="kanji-toolbar-divider" aria-hidden="true"></span>
+          ${iconButton("undoKanjiStrokeButton", "Undo", "kanji-undo.svg")}
+          ${iconButton("redoKanjiStrokeButton", "Redo", "kanji-redo.svg")}
+          ${iconButton("clearKanjiButton", "Clear", "kanji-clear.svg")}
+        </div>
+        ${iconButton("saveKanjiButton", "Save drawing", "kanji-save.svg", "kanji-icon-button kanji-save-button")}
       </div>
-      <section class="kanji-ink-preview" aria-label="Selected Kanji preview">
-        <span>Selected standard character</span>
-        <strong id="kanjiSelectedCharacter" class="kanji-selected-character" lang="ja">—</strong>
-      </section>
-      <p id="kanjiInkStatus" class="kanji-ink-status" role="status" aria-live="polite">Draw one character to begin.</p>
+      <p id="kanjiInkStatus" class="kanji-ink-status" role="status" aria-live="polite"></p>
       <section id="kanjiDiscardConfirmation" class="kanji-discard-confirmation" aria-label="Discard handwriting draft" hidden>
         <strong>Discard this unsaved drawing?</strong>
         <div class="kanji-discard-actions">
@@ -53,12 +53,7 @@ function createDialog() {
           <button id="discardKanjiDrawingButton" type="button">Discard drawing</button>
         </div>
       </section>
-      <footer class="kanji-ink-footer">
-        <button id="cancelKanjiButton" type="button">Cancel</button>
-        <button id="saveKanjiButton" class="primary-button" type="button" disabled>Save to note</button>
-      </footer>
-    </div>
-  `;
+    </div>`;
   document.body.append(dialog);
   return dialog;
 }
@@ -68,7 +63,6 @@ function createSupplementaryRegion() {
   region.id = "kanjiInkRegion";
   region.className = "kanji-ink-region";
   region.dataset.supplementaryEntity = "kanji-handwriting";
-
   const header = document.createElement("div");
   header.className = "kanji-entry-header";
   const heading = document.createElement("h4");
@@ -76,17 +70,14 @@ function createSupplementaryRegion() {
   const count = document.createElement("span");
   count.id = "kanjiInkCount";
   header.append(heading, count);
-
   const entries = document.createElement("div");
   entries.id = "kanjiInkEntries";
   entries.className = "kanji-ink-entries";
-
   const status = document.createElement("p");
   status.id = "kanjiInkRegionStatus";
   status.className = "hint";
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-
   const recovery = document.createElement("div");
   recovery.id = "kanjiInkRecovery";
   recovery.className = "kanji-ink-recovery";
@@ -100,7 +91,6 @@ function createSupplementaryRegion() {
   undo.setAttribute("aria-label", "Undo handwriting deletion");
   undo.textContent = "Undo delete";
   recovery.append(recoveryText, undo);
-
   region.append(header, entries, status, recovery);
   return { region, count, entries, status, recovery, undo };
 }
@@ -110,38 +100,32 @@ const dialog = createDialog();
 const supplementary = createSupplementaryRegion();
 const supplementaryHost = document.getElementById("noteSupplementaryList");
 const supplementaryContainer = document.getElementById("noteSupplementaryRegion");
-
-if (!supplementaryHost || !supplementaryContainer) {
-  throw new Error("KANJI_INK_UI_MISSING_HOST");
-}
+if (!supplementaryHost || !supplementaryContainer) throw new Error("KANJI_INK_UI_MISSING_HOST");
 
 const elements = {
   title: document.getElementById("kanjiInkDialogTitle"),
   close: document.getElementById("closeKanjiDialogButton"),
-  candidates: document.getElementById("kanjiCandidateList"),
   canvas: document.getElementById("kanjiInkCanvas"),
-  undoStroke: document.getElementById("undoKanjiStrokeButton"),
+  pen: document.getElementById("kanjiPenButton"),
+  marker: document.getElementById("kanjiMarkerButton"),
+  eraser: document.getElementById("kanjiEraserButton"),
+  undo: document.getElementById("undoKanjiStrokeButton"),
+  redo: document.getElementById("redoKanjiStrokeButton"),
   clear: document.getElementById("clearKanjiButton"),
-  recognize: document.getElementById("recognizeKanjiButton"),
-  selected: document.getElementById("kanjiSelectedCharacter"),
+  save: document.getElementById("saveKanjiButton"),
   status: document.getElementById("kanjiInkStatus"),
   discardConfirmation: document.getElementById("kanjiDiscardConfirmation"),
   keepDrawing: document.getElementById("keepKanjiDrawingButton"),
   discardDrawing: document.getElementById("discardKanjiDrawingButton"),
-  cancel: document.getElementById("cancelKanjiButton"),
-  save: document.getElementById("saveKanjiButton"),
 };
-
-if (Object.values(elements).some((element) => !element)) {
-  throw new Error("KANJI_INK_UI_MISSING_CONTROL");
-}
+if (Object.values(elements).some((element) => !element)) throw new Error("KANJI_INK_UI_MISSING_CONTROL");
 
 let controller = null;
-let editingEntry = null;
 let dialogOpener = null;
 let dialogNoteId = null;
 let activePointerId = null;
-let liveStroke = [];
+let strokeStartedAt = 0;
+let liveStroke = null;
 let lastDeletedEntry = null;
 let syncSequence = 0;
 let syncScheduled = false;
@@ -163,206 +147,175 @@ function triggerDownload({ content, type, filename }) {
   URL.revokeObjectURL(href);
 }
 
-function canvasMetrics() {
-  const rect = elements.canvas.getBoundingClientRect();
-  return {
-    rect,
-    width: Math.max(1, rect.width),
-    height: Math.max(1, rect.height),
-  };
+function canvasMetrics(canvas = elements.canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return { rect, width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
 }
 
-function configureCanvas() {
-  const { width, height } = canvasMetrics();
+function configureCanvas(canvas = elements.canvas) {
+  const { width, height } = canvasMetrics(canvas);
   const ratio = Math.min(window.devicePixelRatio || 1, MAX_DEVICE_PIXEL_RATIO);
   const pixelWidth = Math.max(1, Math.round(width * ratio));
   const pixelHeight = Math.max(1, Math.round(height * ratio));
-  if (elements.canvas.width !== pixelWidth || elements.canvas.height !== pixelHeight) {
-    elements.canvas.width = pixelWidth;
-    elements.canvas.height = pixelHeight;
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
   }
-  const context = elements.canvas.getContext("2d");
+  const context = canvas.getContext("2d");
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   return { context, width, height };
 }
 
-function drawStrokes(context, strokes, width, height, lineWidth = 4) {
-  context.strokeStyle = "#111827";
-  context.lineWidth = lineWidth;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  for (const stroke of strokes) {
-    if (stroke.length < 2) continue;
+function drawGrid(context, width, height) {
+  context.fillStyle = "#11151b";
+  context.fillRect(0, 0, width, height);
+  context.save();
+  context.strokeStyle = "#4b5563";
+  context.lineWidth = 1;
+  context.setLineDash([5, 5]);
+  context.beginPath();
+  context.moveTo(width / 2, 0);
+  context.lineTo(width / 2, height);
+  context.moveTo(0, height / 2);
+  context.lineTo(width, height / 2);
+  context.stroke();
+  context.setLineDash([]);
+  context.restore();
+}
+
+function normalizedStroke(stroke) {
+  return Array.isArray(stroke)
+    ? { tool: "pen", width: KANJI_INK_WIDTHS.pen, points: stroke }
+    : stroke;
+}
+
+function drawStrokes(context, strokes, width, height) {
+  for (const input of strokes) {
+    const stroke = normalizedStroke(input);
+    if (!stroke?.points || stroke.points.length < 2) continue;
+    context.save();
+    context.strokeStyle = "#e7edf5";
+    context.globalAlpha = stroke.tool === "marker" ? 0.42 : 0.96;
+    context.lineWidth = Math.max(1, stroke.width * Math.min(width, height));
+    context.lineCap = "round";
+    context.lineJoin = "round";
     context.beginPath();
-    context.moveTo(stroke[0].x * width, stroke[0].y * height);
-    for (const point of stroke.slice(1)) {
-      context.lineTo(point.x * width, point.y * height);
-    }
+    context.moveTo(stroke.points[0].x * width, stroke.points[0].y * height);
+    for (const point of stroke.points.slice(1)) context.lineTo(point.x * width, point.y * height);
     context.stroke();
+    context.restore();
   }
 }
 
 function renderCanvas() {
   const { context, width, height } = configureCanvas();
-  context.clearRect(0, 0, width, height);
+  drawGrid(context, width, height);
   drawStrokes(context, controller?.snapshot().strokes || [], width, height);
-  if (liveStroke.length > 1) drawStrokes(context, [liveStroke], width, height);
+  if (liveStroke?.points.length > 1 && liveStroke.tool !== "eraser") {
+    drawStrokes(context, [liveStroke], width, height);
+  }
 }
 
 function drawEntryPreview(canvas, entry) {
-  const ratio = 2;
-  const size = 88;
-  canvas.width = size * ratio;
-  canvas.height = size * ratio;
-  const context = canvas.getContext("2d");
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.fillStyle = "#fff";
-  context.fillRect(0, 0, size, size);
-  drawStrokes(context, entry.strokes, size, size, 3);
+  const { context, width, height } = configureCanvas(canvas);
+  drawGrid(context, width, height);
+  drawStrokes(context, entry.strokes, width, height);
 }
 
 function statusText(snapshot) {
-  if (snapshot.status === "recognizing") return "Recognizing locally…";
-  if (snapshot.status === "saving") return "Saving drawing and character locally…";
-  if (snapshot.errorCode === "KANJI_RECOGNITION_FAILED") {
-    return "Recognition failed. Your drawing is preserved; retry recognition.";
-  }
-  if (snapshot.errorCode === "KANJI_SAVE_FAILED") {
-    return "Save failed. Your drawing and selection are preserved; retry save.";
-  }
-  if (snapshot.status === "candidates" && snapshot.candidates.length === 0) {
-    return "No supported candidate matched. Redraw and try again.";
-  }
-  if (snapshot.selectedCharacter) return `Selected ${snapshot.selectedCharacter}. Ready to save.`;
-  if (snapshot.candidates.length > 0) return "Choose one candidate explicitly.";
-  if (snapshot.strokes.length > 0) {
-    return `${snapshot.strokes.length} stroke${snapshot.strokes.length === 1 ? "" : "s"} captured.`;
-  }
-  return "Draw one character to begin.";
-}
-
-function renderCandidates(snapshot) {
-  elements.candidates.replaceChildren();
-  for (const candidate of snapshot.candidates) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.character = candidate.character;
-    button.lang = "ja";
-    button.textContent = candidate.character;
-    button.disabled = snapshot.status === "saving";
-    button.setAttribute("aria-label", `Select candidate ${candidate.character}`);
-    button.setAttribute("aria-pressed", String(snapshot.selectedCharacter === candidate.character));
-    button.addEventListener("click", () => {
-      controller.selectCandidate(candidate.character);
-      renderController();
-    });
-    elements.candidates.append(button);
-  }
+  if (snapshot.status === "saving") return "Saving drawing locally…";
+  if (snapshot.errorCode === "KANJI_SAVE_FAILED") return "Save failed. Your drawing is preserved; retry save.";
+  if (snapshot.strokes.length > 0) return `${snapshot.strokes.length} stroke${snapshot.strokes.length === 1 ? "" : "s"}`;
+  return "";
 }
 
 function renderController() {
   if (!controller) return;
   const snapshot = controller.snapshot();
   const saving = snapshot.status === "saving";
-  const busy = snapshot.status === "recognizing" || saving;
-  elements.undoStroke.disabled = busy || snapshot.strokes.length === 0;
-  elements.clear.disabled = busy || snapshot.strokes.length === 0;
-  elements.recognize.disabled = busy || snapshot.strokes.length === 0;
+  for (const [name, button] of [["pen", elements.pen], ["marker", elements.marker], ["eraser", elements.eraser]]) {
+    button.setAttribute("aria-pressed", String(snapshot.tool === name));
+    button.disabled = saving;
+  }
+  elements.undo.disabled = saving || !snapshot.canUndo;
+  elements.redo.disabled = saving || !snapshot.canRedo;
+  elements.clear.disabled = saving || snapshot.strokes.length === 0;
+  elements.save.disabled = saving || snapshot.strokes.length === 0;
   elements.close.disabled = saving;
-  elements.cancel.disabled = saving;
   elements.canvas.setAttribute("aria-disabled", String(saving));
-  elements.recognize.textContent = snapshot.errorCode === "KANJI_RECOGNITION_FAILED"
-    ? "Retry recognition"
-    : "Recognize";
-  elements.save.disabled = busy || !snapshot.selectedCharacter;
-  elements.save.textContent = snapshot.errorCode === "KANJI_SAVE_FAILED"
-    ? "Retry save"
-    : editingEntry
-      ? "Save changes"
-      : "Save to note";
-  elements.selected.textContent = snapshot.selectedCharacter || "—";
+  elements.save.setAttribute("aria-label", snapshot.errorCode === "KANJI_SAVE_FAILED" ? "Retry save drawing" : "Save drawing");
+  elements.save.title = elements.save.getAttribute("aria-label");
   elements.status.textContent = statusText(snapshot);
   elements.discardConfirmation.hidden = snapshot.status !== "confirm-discard";
-  renderCandidates(snapshot);
   renderCanvas();
 }
 
-function pointFromPointer(event) {
+function pointFromPointer(event, first = false) {
   const { rect, width, height } = canvasMetrics();
+  const previousTime = liveStroke?.points.at(-1)?.t ?? 0;
+  const elapsed = first ? 0 : Math.max(0, Math.min(KANJI_INK_LIMITS.maxStrokeDurationMs, Math.round(event.timeStamp - strokeStartedAt)));
   return {
     x: Math.max(0, Math.min(1, (event.clientX - rect.left) / width)),
     y: Math.max(0, Math.min(1, (event.clientY - rect.top) / height)),
+    t: Math.max(previousTime, elapsed),
   };
 }
 
 function totalPointCount(snapshot) {
-  return snapshot.strokes.reduce((sum, stroke) => sum + stroke.length, 0) + liveStroke.length;
+  return snapshot.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0) + (liveStroke?.points.length ?? 0);
 }
 
 function appendPointerPoint(event) {
-  if (!controller || event.pointerId !== activePointerId) return;
-  if (liveStroke.length >= KANJI_INK_LIMITS.maxPointsPerStroke) return;
+  if (!controller || event.pointerId !== activePointerId || !liveStroke) return;
+  if (liveStroke.points.length >= KANJI_INK_LIMITS.maxPointsPerStroke) return;
   if (totalPointCount(controller.snapshot()) >= KANJI_INK_LIMITS.maxTotalPoints) return;
   const point = pointFromPointer(event);
-  const previous = liveStroke.at(-1);
+  const previous = liveStroke.points.at(-1);
   if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < MIN_POINT_DISTANCE) return;
-  controller.appendPoint(point);
-  liveStroke.push(point);
+  controller.appendGesture(point);
+  liveStroke.points.push(point);
   renderCanvas();
 }
 
 function beginPointerStroke(event) {
-  if (!controller || activePointerId !== null || event.button !== 0) return;
-  if (controller.snapshot().status === "saving") return;
-  if (controller.snapshot().strokes.length >= KANJI_INK_LIMITS.maxStrokes) {
-    elements.status.textContent = `Maximum ${KANJI_INK_LIMITS.maxStrokes} strokes reached.`;
-    return;
-  }
+  if (!controller || activePointerId !== null || event.button !== 0 || controller.snapshot().status === "saving") return;
   event.preventDefault();
-  const point = pointFromPointer(event);
   activePointerId = event.pointerId;
-  liveStroke = [point];
-  controller.beginStroke(point);
-  try {
-    elements.canvas.setPointerCapture(event.pointerId);
-  } catch {
-    // Pointer capture is progressive enhancement; document events preserve mouse input.
-  }
+  strokeStartedAt = event.timeStamp;
+  const snapshot = controller.snapshot();
+  const point = pointFromPointer(event, true);
+  liveStroke = { tool: snapshot.tool, width: KANJI_INK_WIDTHS[snapshot.tool] ?? KANJI_INK_WIDTHS.pen, points: [point] };
+  controller.beginGesture(point);
+  try { elements.canvas.setPointerCapture(event.pointerId); } catch { /* capture is progressive enhancement */ }
   renderCanvas();
 }
 
 function finishPointerStroke(event) {
   if (!controller || event.pointerId !== activePointerId) return;
   if (event.type === "pointerup") appendPointerPoint(event);
-  controller.endStroke();
+  controller.endGesture();
   activePointerId = null;
-  liveStroke = [];
+  liveStroke = null;
   renderController();
 }
 
 function restoreDialogFocus() {
   const fallback = activeNoteButton() || document.getElementById("noteActionsButton");
-  const target = dialogOpener instanceof HTMLElement && dialogOpener.isConnected
-    ? dialogOpener
-    : fallback;
+  const target = dialogOpener instanceof HTMLElement && dialogOpener.isConnected ? dialogOpener : fallback;
   target?.focus();
 }
 
 function closeDialogCleanly() {
   if (dialog.open) dialog.close();
   controller = null;
-  editingEntry = null;
   dialogNoteId = null;
   activePointerId = null;
-  liveStroke = [];
+  liveStroke = null;
   restoreDialogFocus();
 }
 
 function requestDialogClose() {
-  if (controller?.snapshot().status === "saving") {
-    elements.status.textContent = "Saving is in progress. Wait for local persistence to finish.";
-    return;
-  }
+  if (controller?.snapshot().status === "saving") return;
   if (!controller) return closeDialogCleanly();
   const outcome = controller.requestClose();
   if (outcome.closed) return closeDialogCleanly();
@@ -372,12 +325,11 @@ function requestDialogClose() {
 
 async function openDialog(entry = null, opener = document.activeElement) {
   const noteId = activeNoteId();
-  if (!noteId) return false;
-  editingEntry = entry;
+  if (!noteId || entry?.schemaVersion === 1) return false;
   dialogNoteId = noteId;
   dialogOpener = opener instanceof HTMLElement ? opener : document.getElementById("noteActionsButton");
   controller = kanjiInkApplication.createEntryController(entry);
-  elements.title.textContent = entry ? "Edit Kanji handwriting" : "Add Kanji handwriting";
+  elements.title.textContent = entry ? "Edit Kanji drawing" : "Draw Kanji";
   elements.discardConfirmation.hidden = true;
   dialog.showModal();
   requestAnimationFrame(() => {
@@ -387,30 +339,26 @@ async function openDialog(entry = null, opener = document.activeElement) {
   return true;
 }
 
-async function recognizeDraft() {
-  if (!controller) return;
-  try {
-    await controller.recognize();
-  } catch (error) {
-    if (error?.code !== "KANJI_STROKES_REQUIRED") throw error;
-  }
-  renderController();
-}
-
 async function saveEntry() {
   if (!controller || !dialogNoteId) return;
   try {
     const snapshot = controller.snapshot();
+    const editedEntryId = snapshot.savedEntry?.id ?? null;
     const operation = snapshot.errorCode === "KANJI_SAVE_FAILED"
       ? controller.retrySave({ noteId: dialogNoteId })
       : controller.save({ noteId: dialogNoteId });
     renderController();
     await operation;
     await synchronizeActiveNote();
+    if (editedEntryId) {
+      const refreshedCard = [...supplementary.entries.children]
+        .find((card) => card.dataset.kanjiEntryId === editedEntryId);
+      const refreshedEditButton = refreshedCard
+        ?.querySelector('button[aria-label="Edit Kanji drawing"]');
+      if (refreshedEditButton instanceof HTMLElement) dialogOpener = refreshedEditButton;
+    }
     closeDialogCleanly();
-  } catch {
-    renderController();
-  }
+  } catch { renderController(); }
 }
 
 function detachSupplementaryRegion() {
@@ -419,78 +367,67 @@ function detachSupplementaryRegion() {
 }
 
 function makeEntryCard(entry) {
+  const legacy = entry.schemaVersion === 1;
+  const label = legacy ? entry.character : "Kanji drawing";
   const card = document.createElement("article");
   card.className = "kanji-entry";
   card.dataset.kanjiEntryId = entry.id;
-
+  card.dataset.kanjiSchemaVersion = String(entry.schemaVersion);
   const preview = document.createElement("canvas");
   preview.className = "kanji-entry-preview";
   preview.setAttribute("role", "img");
-  preview.setAttribute("aria-label", `Handwriting sample for ${entry.character}`);
-  drawEntryPreview(preview, entry);
-
+  preview.setAttribute("aria-label", legacy ? `Handwriting sample for ${entry.character}` : "Kanji drawing preview");
   const copy = document.createElement("div");
   copy.className = "kanji-entry-copy";
-  const character = document.createElement("span");
-  character.className = "kanji-entry-character";
-  character.dataset.kanjiCharacter = entry.character;
-  character.lang = "ja";
-  character.textContent = entry.character;
-  character.setAttribute("aria-label", `${entry.character}, handwriting sample attached`);
-
+  const heading = document.createElement("strong");
+  heading.className = "kanji-entry-label";
+  heading.textContent = label;
+  if (legacy) heading.lang = "ja";
+  const detail = document.createElement("span");
+  detail.className = "hint";
+  detail.textContent = legacy ? "Legacy recognized entry · read only" : "Saved grid drawing";
   const actions = document.createElement("div");
   actions.className = "kanji-entry-actions";
-  const edit = document.createElement("button");
-  edit.type = "button";
-  edit.textContent = "Edit";
-  edit.setAttribute("aria-label", `Edit handwriting ${entry.character}`);
-  edit.addEventListener("click", () => void openDialog(entry, edit));
+  if (!legacy) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "Edit";
+    edit.setAttribute("aria-label", "Edit Kanji drawing");
+    edit.addEventListener("click", () => void openDialog(entry, edit));
+    actions.append(edit);
+  }
   const remove = document.createElement("button");
   remove.type = "button";
   remove.textContent = "Delete";
-  remove.setAttribute("aria-label", `Delete handwriting ${entry.character}`);
+  remove.setAttribute("aria-label", legacy ? `Delete handwriting ${entry.character}` : "Delete Kanji drawing");
   remove.addEventListener("click", async () => {
     const deleted = await kanjiInkApplication.deleteEntry(entry.id);
     if (deleted) lastDeletedEntry = deleted;
     await synchronizeActiveNote();
     supplementary.undo.focus();
   });
-  actions.append(edit, remove);
-  copy.append(character, actions);
+  actions.append(remove);
+  copy.append(heading, detail, actions);
   card.append(preview, copy);
+  requestAnimationFrame(() => drawEntryPreview(preview, entry));
   return card;
 }
 
 async function synchronizeActiveNote() {
   const sequence = ++syncSequence;
   const noteId = activeNoteId();
-  if (!noteId) {
-    detachSupplementaryRegion();
-    return;
-  }
+  if (!noteId) return detachSupplementaryRegion();
   const result = await kanjiInkApplication.loadNoteContext(noteId);
   if (sequence !== syncSequence || noteId !== activeNoteId()) return;
-
   const hasRecovery = lastDeletedEntry?.noteId === noteId;
-  if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) {
-    detachSupplementaryRegion();
-    return;
-  }
-
+  if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) return detachSupplementaryRegion();
   if (!supplementary.region.isConnected) supplementaryHost.append(supplementary.region);
   supplementaryContainer.hidden = false;
-  supplementary.entries.replaceChildren();
-  for (const entry of result.entries.slice(0, MAX_RENDERED_ENTRIES)) {
-    supplementary.entries.append(makeEntryCard(entry));
-  }
+  supplementary.entries.replaceChildren(...result.entries.slice(0, MAX_RENDERED_ENTRIES).map(makeEntryCard));
   supplementary.count.textContent = `${result.entries.length} entr${result.entries.length === 1 ? "y" : "ies"}`;
   const messages = [];
-  if (result.entries.length > MAX_RENDERED_ENTRIES) {
-    messages.push(`Showing the first ${MAX_RENDERED_ENTRIES} entries.`);
-  }
-  if (result.invalidCount > 0) {
-    messages.push(`${result.invalidCount} invalid stored entr${result.invalidCount === 1 ? "y was" : "ies were"} isolated.`);
-  }
+  if (result.entries.length > MAX_RENDERED_ENTRIES) messages.push(`Showing the first ${MAX_RENDERED_ENTRIES} entries.`);
+  if (result.invalidCount > 0) messages.push(`${result.invalidCount} invalid stored entr${result.invalidCount === 1 ? "y was" : "ies were"} isolated.`);
   supplementary.status.textContent = messages.join(" ");
   supplementary.recovery.hidden = !hasRecovery;
 }
@@ -498,10 +435,7 @@ async function synchronizeActiveNote() {
 function scheduleSynchronization() {
   if (syncScheduled) return;
   syncScheduled = true;
-  queueMicrotask(() => {
-    syncScheduled = false;
-    void synchronizeActiveNote();
-  });
+  queueMicrotask(() => { syncScheduled = false; void synchronizeActiveNote(); });
 }
 
 supplementary.undo.addEventListener("click", async () => {
@@ -516,88 +450,50 @@ elements.canvas.addEventListener("pointermove", appendPointerPoint);
 elements.canvas.addEventListener("pointerup", finishPointerStroke);
 elements.canvas.addEventListener("pointercancel", finishPointerStroke);
 elements.canvas.addEventListener("lostpointercapture", finishPointerStroke);
-elements.undoStroke.addEventListener("click", () => {
-  controller?.undoLastStroke();
-  renderController();
-});
-elements.clear.addEventListener("click", () => {
-  controller?.clear();
-  renderController();
-});
-elements.recognize.addEventListener("click", () => void recognizeDraft());
+for (const [tool, button] of [["pen", elements.pen], ["marker", elements.marker], ["eraser", elements.eraser]]) {
+  button.addEventListener("click", () => { controller?.selectTool(tool); renderController(); });
+}
+elements.undo.addEventListener("click", () => { controller?.undo(); renderController(); });
+elements.redo.addEventListener("click", () => { controller?.redo(); renderController(); });
+elements.clear.addEventListener("click", () => { controller?.clear(); renderController(); });
 elements.save.addEventListener("click", () => void saveEntry());
 elements.close.addEventListener("click", requestDialogClose);
-elements.cancel.addEventListener("click", requestDialogClose);
-elements.keepDrawing.addEventListener("click", () => {
-  controller?.keepDrawing();
-  renderController();
-  elements.canvas.focus();
-});
-elements.discardDrawing.addEventListener("click", () => {
-  controller?.discardDraft();
-  closeDialogCleanly();
-});
-
-dialog.addEventListener("cancel", (event) => {
-  event.preventDefault();
-  requestDialogClose();
-});
-dialog.addEventListener("click", (event) => {
-  if (event.target === dialog) requestDialogClose();
-});
+elements.keepDrawing.addEventListener("click", () => { controller?.keepDrawing(); renderController(); elements.canvas.focus(); });
+elements.discardDrawing.addEventListener("click", () => { controller?.discardDraft(); closeDialogCleanly(); });
+dialog.addEventListener("cancel", (event) => { event.preventDefault(); requestDialogClose(); });
+dialog.addEventListener("click", (event) => { if (event.target === dialog) requestDialogClose(); });
 dialog.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    requestDialogClose();
-  }
+  if (event.key === "Escape") { event.preventDefault(); requestDialogClose(); }
   event.stopPropagation();
 }, true);
-window.addEventListener("resize", () => {
-  if (dialog.open) renderCanvas();
-});
+window.addEventListener("resize", () => { if (dialog.open) renderCanvas(); });
 
 const noteObserver = new MutationObserver(scheduleSynchronization);
-noteObserver.observe(document.getElementById("noteList"), {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: ["aria-current"],
-});
+noteObserver.observe(document.getElementById("noteList"), { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current"] });
 const saveObserver = new MutationObserver(scheduleSynchronization);
-saveObserver.observe(document.getElementById("saveState"), {
-  childList: true,
-  subtree: true,
-  characterData: true,
-});
+saveObserver.observe(document.getElementById("saveState"), { childList: true, subtree: true, characterData: true });
 
 const unregisterCommands = [
   commandRuntime.registry.register({
     id: "notes.kanji-ink",
     title: "Add Kanji handwriting",
-    description: "Draw one Kanji and attach the confirmed character to the active note",
-    shortcuts: [],
-    scope: "shell",
+    description: "Draw a Kanji grid entry and attach it to the active note",
+    shortcuts: [], scope: "shell",
     isAvailable: () => Boolean(activeNoteId()),
     unavailableReason: () => "No active note is available",
     run: (context) => openDialog(null, context.opener),
   }),
   commandRuntime.registry.register({
-    id: "export.kanji-json",
-    title: "Export Kanji data as JSON",
+    id: "export.kanji-json", title: "Export Kanji data as JSON",
     description: "Download lossless note-linked handwriting records",
-    shortcuts: [],
-    scope: "shell",
-    isAvailable: () => true,
+    shortcuts: [], scope: "shell", isAvailable: () => true,
     unavailableReason: () => "Kanji export is unavailable",
     run: async () => triggerDownload(await kanjiInkApplication.exportJson()),
   }),
   commandRuntime.registry.register({
-    id: "export.kanji-markdown",
-    title: "Export Kanji data as Markdown",
-    description: "Download confirmed characters with SVG handwriting previews",
-    shortcuts: [],
-    scope: "shell",
-    isAvailable: () => true,
+    id: "export.kanji-markdown", title: "Export Kanji data as Markdown",
+    description: "Download grid-backed handwriting previews",
+    shortcuts: [], scope: "shell", isAvailable: () => true,
     unavailableReason: () => "Kanji export is unavailable",
     run: async () => triggerDownload(await kanjiInkApplication.exportMarkdown()),
   }),
