@@ -1,6 +1,6 @@
 # Issue #69 Saved-Grid Kanji Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For implementers:** Use the repository's subtask-driven or plan-execution workflow to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace recognition-era Kanji input with an owner-approved saved-grid vector canvas while preserving legacy V1 records losslessly.
 
@@ -330,7 +330,7 @@ Give the reviewer the full #69 body/comments, node `43:343`, base/head SHAs, rev
 
 - [ ] **Step 4: Fix and re-review blockers once**
 
-Use `superpowers:receiving-code-review`. Fix every validated P0/P1 and safe in-scope P2 through a separate implementer, rerun affected tests, then run one scoped re-review. Re-run the full gate if fixes are material.
+Use the repository's code-review intake workflow. Fix every validated P0/P1 and safe in-scope P2 through a separate implementer, rerun affected tests, then run one scoped re-review. Re-run the full gate if fixes are material.
 
 - [ ] **Step 5: Prepare the PR and stop**
 

@@ -1,32 +1,22 @@
-# Kanji handwriting architecture
+# Kanji saved-grid architecture
 
-Issue: #69  
-Scope: M2 desktop-first mouse/pen handwriting input
+Issue: #69
+
+Scope: M2 desktop-first mouse/pen saved-grid drawing
+
+Presentation authority: accepted Figma node `43:343`
+
+The 2026-08-09 owner decision replaced runtime handwriting recognition with a saved-grid vector canvas. Recognition, OCR, candidates, Unicode confirmation, and remote services are not part of the current write path.
 
 ## User flow
 
 1. Open **More actions → Add Kanji handwriting** for the active note.
-2. Draw one character on the square canvas.
-3. Run the local recognizer.
-4. Select one candidate explicitly; no candidate is auto-selected.
-5. Save only after IndexedDB persistence succeeds.
-6. Inspect, edit, delete, or undo the attached handwriting from **Details → Supplementary entities**.
+2. Draw on the grid with Pen or Marker; Eraser removes intersecting strokes.
+3. Use bounded Undo, Redo, or Clear as needed.
+4. Save a non-empty valid drawing only after IndexedDB persistence succeeds.
+5. Reload, edit a V2 drawing, delete/undo, or export it from the supplementary entry surface.
 
-The first-release recognizer supports only:
-
-```text
-人 入 八 大 犬 火 木 本
-```
-
-This is a bounded geometric recognizer, not universal Japanese OCR or stroke-order grading.
-
-## Recognition scale and packaging boundary
-
-The eight embedded geometric templates are the experimental Issue #69 sample pack, not broad recognition coverage. Do not indefinitely append large datasets to the current flat embedded list.
-
-Any recognition expansion requires a separate issue or ADR that defines the character inventory, template provenance and licensing, versioned manifests, lazy worker loading, an evaluation corpus and quality thresholds, performance and bundle budgets, and migration and rollback behavior.
-
-The MVP keeps its flat-file packaging boundary. A future approved package may group templates by version and load groups lazily through a worker, while retaining explicit manifests and a rollback path; that direction is not implemented by this release.
+The accepted desktop dialog is a viewport-bounded `900 × 594` surface with an `860 × 430` grid canvas, icon-first tools with accessible names and tooltips, Pen selected by default, and a concise live failure state. It has no recognition or candidate region. Mobile/touch redesign remains out of scope.
 
 ## Module boundaries
 
@@ -36,108 +26,87 @@ ui/kanjiInkImportCommand.js
         │
         ▼
 core/kanjiInkApplication.js
-        ├── controller / recognizer
+        ├── core/kanjiInkController.js
+        ├── core/kanjiInkEntry.js
         ├── storage adapter
-        ├── search projection
-        └── export / import
+        ├── V1-only search projection
+        └── mixed-record export / import
 ```
 
-The UI imports the application service and domain limits only. A unit contract rejects UI imports of `core/storage.js`, `openDatabase`, or IndexedDB APIs.
+The UI adapts pointer coordinates/times and renders state. It imports the application service and domain limits, but never opens IndexedDB. The controller owns tools, normalized geometry, eraser hit testing, bounded history, dirty/discard state, and single-flight persist-before-success save/retry. The application service owns database-handle lifetime and closes handles in `finally`.
 
-`core/kanjiInkApplication.js` owns database handle lifetime and closes every handle in `finally`. It exposes note-context loading, controller creation, entry delete/restore, lossless export, human-readable export, and atomic import.
+No module in this feature performs a network request, loads a remote model/dataset, or sends handwriting off-device.
 
-## Persisted model
+## Database and persisted record union
 
-IndexedDB schema version: `3`  
-Object store: `kanjiInkEntries`  
-Key path: `id`  
-Indexes: `noteId`, `updatedAt`
+`myNoteDB` remains at IndexedDB version `3`. The additive `kanjiInkEntries` store remains unchanged with key path `id` and indexes `noteId` and `updatedAt`; it may contain both record generations.
+
+### Legacy V1 compatibility
+
+V1 is the historical recognition-era record containing a confirmed `character`, vector `strokes`, `revision`, and recognizer metadata. Reads validate its required historical fields while preserving cloneable unknown own data fields. V1 is never upgraded on read or rewritten as V2.
+
+V1 remains readable, grid-renderable, searchable by its already-confirmed character, deletable, restorable, and losslessly exportable/importable. It is read-only in the current editor because rewriting it would discard or reinterpret historical metadata.
+
+### Saved-grid V2
+
+New records and current-path edits use this exact shape:
 
 ```js
 {
   id: string,
   noteId: string,
-  schemaVersion: 1,
-  revision: integer >= 1,
-  character: one Han Unicode character,
-  strokes: Array<Array<{ x: number, y: number }>>,
-  recognizer: {
-    engineId: string,
-    engineVersion: string,
-    datasetVersion: string,
-    selectedRank?: integer // 0..7; omitted only for legacy v1 records
-  },
+  strokes: Array<{
+    tool: "pen" | "marker",
+    width: 0.008 | 0.024,
+    points: Array<{ x: number, y: number, t: integer }>
+  }>,
+  paperStyle: "grid",
   createdAt: ISO-8601 string,
-  updatedAt: ISO-8601 string
+  updatedAt: ISO-8601 string,
+  schemaVersion: 2
 }
 ```
 
-Coordinates are normalized to `[0, 1]`. Raster canvas pixels are a render-only projection and are never the canonical record.
+V2 contains no Unicode character, recognizer provenance, candidate data, parser metadata, image, base64 payload, or Markdown vector payload. Coordinates are normalized to `[0, 1]`; each stroke starts at `t: 0`, and time is monotonic within that stroke. Eraser is an interaction tool and is never persisted.
 
-### Literal limits
+### Resource bounds
 
 | Limit | Value |
 | --- | ---: |
 | Strokes per entry | 32 |
 | Points per stroke | 256 |
-| Total points per entry | 4096 |
+| Total points per entry | 4,096 |
+| Stroke duration | 600,000 ms |
 | Serialized entry size | 262,144 bytes |
-| Candidates returned | 8 |
-| Entries rendered in one inspector view | 64 |
+| Committed draft history states | 100 |
+| Entries projected into search | 128 |
+| Export notes / entries | 50,000 each |
 | Import file size | 8 MiB |
 
-Malformed, hostile, oversized, orphaned, and duplicate records fail before durable mutation where possible. Invalid persisted records are isolated and reported rather than silently rewritten.
+Malformed, hostile, oversized, orphaned, and duplicate records fail before durable mutation where possible. Invalid persisted entries are isolated and reported rather than silently repaired.
 
-## Dual representation
+## Search, transactions, and recovery
 
-The feature maintains two related representations:
-
-- **Canonical note:** ordinary note content remains unchanged.
-- **Supplementary handwriting:** normalized vectors plus the confirmed Unicode character live in `kanjiInkEntries`.
-
-Search receives only the confirmed Unicode character projection. Stroke arrays, coordinates, and recognizer candidate lists are excluded from `searchBlob`.
-
-Candidate lists are transient. New records retain only recognizer identity and the zero-based rank of the candidate selected by the user.
-
-## Transactions and recovery
-
+- Canonical note Markdown remains unchanged; handwriting is supplementary data.
+- Search projects only the confirmed character stored in legacy V1 records. V2 contributes no guessed text.
 - Create and update validate the note owner before writing.
-- Note deletion removes note, review, and handwriting dependents in one transaction.
-- Existing note Undo restores captured dependents in one transaction.
-- Handwriting delete exposes a feature-local Undo action.
-- Import validates the complete v3 bundle before opening a transaction.
-- Import uses `add`, not overwrite semantics; any note or entry collision aborts the complete transaction.
-- Recognition failure, no-result, and save failure preserve the current drawing.
-- Closing a dirty dialog requires explicit discard confirmation.
+- Note deletion removes the note, review, and handwriting dependents in one transaction; Undo restores the captured valid dependents atomically.
+- Handwriting deletion has feature-local Undo.
+- Import validates the complete bundle before durable mutation and uses `add`; any note or entry collision aborts the complete transaction.
+- Save is single-flight. A failed save keeps the exact draft, selected tool, Undo/Redo state, and retry intent; success is not shown before persistence completes.
+- Dirty close uses the same-dialog discard confirmation. Pointer cancellation/lost capture ends one bounded gesture deterministically.
+- Resize and device-pixel-ratio changes re-render normalized geometry without mutating canonical strokes.
 
 ## Export and import
 
-### JSON
+New `myNote-kanji-export.json` bundles use schema `4` and preserve mixed V1/V2 entries. Exact historical schema-3 recognition bundles remain importable and may contain only V1 entries. The top-level recognizer attribution remains in the bundle contract for schema-3 compatibility; it does not imply recognition of V2 drawings.
 
-`myNote-kanji-export.json` is the lossless, versioned format. It contains notes, related handwriting entries, export timestamp, and recognizer attribution.
+`myNote-kanji-export.md` renders grid-backed SVG from normalized vectors. V1 may show its stored character and historical attribution. V2 is labelled `Kanji drawing` and never invents a character. Canonical note bodies are not duplicated in this supplementary report.
 
-### Human-readable
+## Verification and rollback
 
-`myNote-kanji-export.md` contains confirmed characters, note IDs, entry IDs, recognizer attribution, and SVG previews derived from normalized vectors. It intentionally excludes canonical note bodies to avoid duplicating note content in the supplementary report.
+Automated coverage owns strict V1/V2 validation, V1 unknown-field preservation, mixed-record CRUD/delete/restore/import/export, V1-only search projection, Pen/Marker/Eraser/history behavior, empty-save and failed-save retry, database v2→v3 migration, atomic lifecycle failure, and the browser draw/save/reload/edit/delete/export path. Runtime evidence must also cover focus return, resize/DPR, required desktop viewports, 200% browser zoom, no horizontal document overflow, repeated-open resource cleanup, and no recognizer call path.
 
-### Restore
+Physical Windows 11 mouse/pen usability and OS-level 200% display scaling remain `UNKNOWN — REQUIRES VALIDATION` until recorded manual evidence exists.
 
-Only an exact v3 JSON bundle with valid attribution, unique note/entry IDs, valid entries, and resolvable note relationships is accepted.
-
-## Automated evidence
-
-CI covers:
-
-- strict entry validation and size bounds;
-- deterministic local recognition for all eight canonical fixtures;
-- latency and template-payload bounds;
-- application-service and UI/storage boundary contracts;
-- IndexedDB v2→v3 additive migration;
-- CRUD, orphan prevention, invalid-record isolation, cascade delete, and undo restore;
-- strict export validation and atomic import;
-- Chromium mouse workflow, reload durability, edit, delete/undo, search, export, import, safe import failure, and 200% zoom visibility;
-- zero network requests during recognition.
-
-## Manual release evidence
-
-`UNKNOWN — REQUIRES VALIDATION`: physical Windows 11 + mouse workflow, OS-level 200% display scaling, and subjective handwriting usability must be reviewed manually before merge. The PR remains draft until that review is explicitly approved.
+Rollback is code-only and must remain database-v3 aware. It must preserve both V1 and V2 records without deletion, rewrite, or downgrade. A rollback client may expose V2 as an unsupported preserved entry; it must not claim a save succeeded when persistence failed.
