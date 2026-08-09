@@ -1,4 +1,7 @@
-import { validateKanjiExportBundle } from "./kanjiInkProjection.js";
+import {
+  parseKanjiExportBundleEnvelope,
+  validateKanjiExportBundle,
+} from "./kanjiInkProjection.js";
 
 const STORE_NOTES = "notes";
 const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
@@ -31,7 +34,9 @@ async function abortAndSettle(transaction, done) {
 }
 
 export async function restoreKanjiExportBundleToDb(database, input) {
-  const bundle = validateKanjiExportBundle(input);
+  const bundle = Array.isArray(input)
+    ? parseKanjiExportBundleEnvelope(input)
+    : validateKanjiExportBundle(input);
   const transaction = database.transaction(
     [STORE_NOTES, STORE_KANJI_INK_ENTRIES],
     "readwrite",

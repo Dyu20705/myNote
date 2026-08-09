@@ -137,10 +137,14 @@ test("schema-4 mixed JSON bundle is lossless, related, and defensively cloned", 
 });
 
 test("tagged schema-4 bundle JSON preserves supported V1 unknown values", () => {
+  const shared = { raw: "keep" };
+  const graph = { first: shared, second: shared };
+  graph.self = graph;
   const legacy = makeEntry({ legacyVendorField: {
     values: new Map([["keep", new Set([1n])]]),
     bytes: new Uint8Array([7, 8]),
     missing: undefined,
+    graph,
   } });
   const bundle = createKanjiExportBundle([note], [legacy], {
     exportedAt: "2026-08-04T02:00:00.000Z",
@@ -150,6 +154,8 @@ test("tagged schema-4 bundle JSON preserves supported V1 unknown values", () => 
   assert.deepEqual([...field.values], [["keep", new Set([1n])]]);
   assert.deepEqual([...field.bytes], [7, 8]);
   assert.equal(field.missing, undefined);
+  assert.equal(field.graph.self, field.graph);
+  assert.equal(field.graph.first, field.graph.second);
   assert.equal(parsed.schemaVersion, 4);
 });
 

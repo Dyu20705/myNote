@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { createKanjiInkApplication } from "../../core/kanjiInkApplication.js";
 
-function makeEntry(overrides = {}) {
+function makeLegacyEntry(overrides = {}) {
   return {
     id: "ink-1",
     noteId: "note-1",
@@ -23,11 +23,28 @@ function makeEntry(overrides = {}) {
   };
 }
 
+function makeCanvasEntry(overrides = {}) {
+  return {
+    id: "ink-2",
+    noteId: "note-1",
+    schemaVersion: 2,
+    paperStyle: "grid",
+    strokes: [{
+      tool: "pen",
+      width: 0.008,
+      points: [{ x: 0.5, y: 0.1, t: 0 }, { x: 0.2, y: 0.9, t: 100 }],
+    }],
+    createdAt: "2026-08-06T00:00:00.000Z",
+    updatedAt: "2026-08-06T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function makeDependencies() {
   const calls = [];
   const database = { close: () => calls.push("close") };
   const notes = [{ id: "note-1", title: "Note", content: "Body" }];
-  const entries = [makeEntry()];
+  const entries = [makeLegacyEntry()];
   return {
     calls,
     database,
@@ -69,7 +86,6 @@ function makeDependencies() {
         calls.push(`import:${bundle.schemaVersion}`);
         return { importedNotes: 1, importedKanjiInkEntries: 1 };
       },
-      recognize: () => [{ character: "人", score: 1 }],
       createController: (options) => options,
       projectNote: (note, noteEntries) => ({
         ...note,
@@ -79,10 +95,11 @@ function makeDependencies() {
         upsert: async (note) => calls.push(`search:${note.searchBlob}`),
       }),
       createJsonBundle: (allNotes, allEntries) => ({
-        schemaVersion: 3,
+        schemaVersion: 4,
         notes: allNotes,
         kanjiInkEntries: allEntries,
       }),
+      serializeJsonBundle: (bundle) => `tagged:${bundle.schemaVersion}`,
       createMarkdown: () => "# export\n",
     },
   };
@@ -107,28 +124,43 @@ test("application service owns database lifetime and search projection", async (
   ]);
 });
 
-test("controller persistence is selected-rank aware and hides storage from UI", async () => {
+test("controller persistence is recognizer-free and preserves V2 edit identity", async () => {
   const fixture = makeDependencies();
+  fixture.entries = [makeCanvasEntry()];
   const application = createKanjiInkApplication(fixture.dependencies);
-  const createOptions = application.createEntryController();
+  const createOptions = application.createEntryController(null);
   const editOptions = application.createEntryController(fixture.entries[0]);
 
-  assert.deepEqual(createOptions.initialStrokes, []);
-  assert.deepEqual(createOptions.recognize([]), [{ character: "人", score: 1 }]);
-  const created = makeEntry({ id: "created" });
-  assert.deepEqual(await createOptions.persist(created, { selectedRank: 0 }), created);
+  assert.equal(createOptions.initialEntry, null);
+  assert.equal(Object.hasOwn(createOptions, "recognize"), false);
+  const created = makeCanvasEntry({ id: "created" });
+  assert.deepEqual(await createOptions.persist(created), created);
 
-  assert.deepEqual(editOptions.initialStrokes, fixture.entries[0].strokes);
-  const edited = makeEntry({ revision: 1, character: "木", recognizer: {
-    ...makeEntry().recognizer,
-    selectedRank: 3,
-  } });
-  const persisted = await editOptions.persist(edited, { selectedRank: 3 });
-  assert.equal(persisted.id, "ink-1");
-  assert.equal(persisted.revision, 2);
-  assert.equal(persisted.recognizer.selectedRank, 3);
+  assert.deepEqual(editOptions.initialEntry, fixture.entries[0]);
+  const edited = makeCanvasEntry({
+    id: "replacement-id",
+    noteId: "replacement-note",
+    createdAt: "2026-08-06T00:30:00.000Z",
+    updatedAt: "2026-08-06T01:00:00.000Z",
+  });
+  const persisted = await editOptions.persist(edited);
+  assert.equal(persisted.id, fixture.entries[0].id);
+  assert.equal(persisted.noteId, fixture.entries[0].noteId);
   assert.equal(persisted.createdAt, fixture.entries[0].createdAt);
+  assert.equal(persisted.updatedAt, "2026-08-06T01:00:00.000Z");
+  assert.equal(Object.hasOwn(persisted, "recognizer"), false);
   assert.deepEqual(fixture.calls, ["open", "add", "close", "open", "update", "close"]);
+});
+
+test("legacy entries refuse editing before a controller is opened", () => {
+  const fixture = makeDependencies();
+  const application = createKanjiInkApplication(fixture.dependencies);
+
+  assert.throws(
+    () => application.createEntryController(makeLegacyEntry()),
+    { code: "KANJI_LEGACY_ENTRY_READ_ONLY" },
+  );
+  assert.deepEqual(fixture.calls, []);
 });
 
 test("delete, restore, export, and import remain atomic service operations", async () => {
@@ -140,11 +172,7 @@ test("delete, restore, export, and import remain atomic service operations", asy
   assert.deepEqual(await application.exportJson(), {
     filename: "myNote-kanji-export.json",
     type: "application/json",
-    content: JSON.stringify({
-      schemaVersion: 3,
-      notes: fixture.notes,
-      kanjiInkEntries: fixture.entries,
-    }, null, 2),
+    content: "tagged:4",
   });
   assert.deepEqual(await application.exportMarkdown(), {
     filename: "myNote-kanji-export.md",

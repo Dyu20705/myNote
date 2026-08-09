@@ -1,4 +1,9 @@
-import { parseKanjiInkJson, serializeKanjiInkJson, validateKanjiInkEntry } from "./kanjiInkEntry.js";
+import {
+  parseKanjiInkJson,
+  parseKanjiInkJsonEnvelope,
+  serializeKanjiInkJson,
+  validateKanjiInkEntry,
+} from "./kanjiInkEntry.js";
 import { normalizeNote } from "./model.js";
 
 const MAX_PROJECTED_ENTRIES = 128;
@@ -247,6 +252,14 @@ export function serializeKanjiExportBundle(bundle) {
 export function parseKanjiExportBundle(serialized) {
   try {
     return validateKanjiExportBundle(parseKanjiInkJson(serialized));
+  } catch {
+    throw codedError("KANJI_IMPORT_INVALID");
+  }
+}
+
+export function parseKanjiExportBundleEnvelope(envelope) {
+  try {
+    return validateKanjiExportBundle(parseKanjiInkJsonEnvelope(envelope));
   } catch {
     throw codedError("KANJI_IMPORT_INVALID");
   }

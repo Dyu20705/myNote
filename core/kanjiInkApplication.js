@@ -4,8 +4,8 @@ import {
   createKanjiExportBundle,
   createKanjiHumanReadableExport,
   projectNoteForKanjiSearch,
+  serializeKanjiExportBundle,
 } from "./kanjiInkProjection.js";
-import { recognizeKanji } from "./kanjiRecognizer.js";
 import { getActiveSearchClient } from "./searchClient.js";
 import {
   addKanjiInkEntryToDb,
@@ -25,6 +25,12 @@ function requiredFunction(value, name) {
   return value;
 }
 
+function codedError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
 export function createKanjiInkApplication(dependencies) {
   const openDb = requiredFunction(dependencies?.openDatabase, "openDatabase");
   const listNotes = requiredFunction(dependencies?.listNotes, "listNotes");
@@ -33,11 +39,14 @@ export function createKanjiInkApplication(dependencies) {
   const updateEntry = requiredFunction(dependencies?.updateEntry, "updateEntry");
   const deleteEntry = requiredFunction(dependencies?.deleteEntry, "deleteEntry");
   const restoreImport = requiredFunction(dependencies?.restoreImport, "restoreImport");
-  const recognize = requiredFunction(dependencies?.recognize, "recognize");
   const createController = requiredFunction(dependencies?.createController, "createController");
   const projectNote = requiredFunction(dependencies?.projectNote, "projectNote");
   const getSearchClient = requiredFunction(dependencies?.getSearchClient, "getSearchClient");
   const createJsonBundle = requiredFunction(dependencies?.createJsonBundle, "createJsonBundle");
+  const serializeJsonBundle = requiredFunction(
+    dependencies?.serializeJsonBundle,
+    "serializeJsonBundle",
+  );
   const createMarkdown = requiredFunction(dependencies?.createMarkdown, "createMarkdown");
 
   async function withDatabase(operation) {
@@ -68,23 +77,19 @@ export function createKanjiInkApplication(dependencies) {
   }
 
   function createEntryController(existingEntry = null) {
+    const schemaVersion = existingEntry && typeof existingEntry === "object"
+      ? Object.getOwnPropertyDescriptor(existingEntry, "schemaVersion")?.value
+      : undefined;
+    if (schemaVersion === 1) throw codedError("KANJI_LEGACY_ENTRY_READ_ONLY");
+
     return createController({
-      recognize,
-      initialStrokes: existingEntry?.strokes ?? [],
-      createId: existingEntry ? () => existingEntry.id : undefined,
-      persist: async (entry, metadata = {}) => withDatabase((database) => {
-        const entryWithProvenance = {
-          ...entry,
-          recognizer: {
-            ...entry.recognizer,
-            selectedRank: metadata.selectedRank,
-          },
-        };
-        if (!existingEntry) return addEntry(database, entryWithProvenance);
+      initialEntry: existingEntry,
+      persist: async (entry) => withDatabase((database) => {
+        if (!existingEntry) return addEntry(database, entry);
         return updateEntry(database, {
-          ...entryWithProvenance,
+          ...entry,
           id: existingEntry.id,
-          revision: existingEntry.revision + 1,
+          noteId: existingEntry.noteId,
           createdAt: existingEntry.createdAt,
         });
       }),
@@ -118,7 +123,7 @@ export function createKanjiInkApplication(dependencies) {
       return {
         filename: "myNote-kanji-export.json",
         type: "application/json",
-        content: JSON.stringify(createJsonBundle(notes, entries), null, 2),
+        content: serializeJsonBundle(createJsonBundle(notes, entries)),
       };
     },
     async exportMarkdown() {
@@ -141,10 +146,10 @@ export const kanjiInkApplication = createKanjiInkApplication({
   updateEntry: putKanjiInkEntryToDb,
   deleteEntry: deleteKanjiInkEntryFromDb,
   restoreImport: restoreKanjiExportBundleToDb,
-  recognize: recognizeKanji,
   createController: createKanjiInkController,
   projectNote: projectNoteForKanjiSearch,
   getSearchClient: getActiveSearchClient,
   createJsonBundle: createKanjiExportBundle,
+  serializeJsonBundle: serializeKanjiExportBundle,
   createMarkdown: createKanjiHumanReadableExport,
 });
