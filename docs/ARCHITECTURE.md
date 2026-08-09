@@ -67,7 +67,7 @@ Browser composition and UI adapters
 
 - Exports `createJapaneseApp({ runtime, document })` as an injected browser adapter.
 - Creates Japanese lifecycle persistence adapters and registers the Japanese search-result policy.
-- Binds dashboard, filter, quick-create, review, and workspace controls to coordinator/action APIs.
+- Binds the Japanese Notes/Review presentation, filter disclosure, registry-backed quick-create action group, dashboard, and review controls to coordinator/action APIs.
 - Renders state but does not own workspace refresh sequencing.
 - Does not retrieve active runtime singletons or create a second store, command stack, search worker, history, or backlink index.
 

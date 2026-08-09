@@ -42,8 +42,9 @@ test("editor-first shell has one application header and one editor context heade
   assert.equal(index.match(/<header\b/g)?.length, 2);
   assert.match(index, /<header[^>]+id="applicationHeader"/);
   assert.match(index, /<header[^>]+id="editorContextHeader"/);
-  assert.equal(index.match(/<nav\b/g)?.length, 1);
+  assert.equal(index.match(/<nav\b/g)?.length, 2);
   assert.match(index, /<nav[^>]+id="workspaceNavigation"[^>]+aria-label="Workspace"/);
+  assert.match(index, /<nav[^>]+id="japaneseSubviewNavigation"[^>]+aria-label="Japanese workspace views"/);
   assert.match(index, /<aside[^>]+id="noteNavigationRegion"[^>]+aria-label="Note navigation"/);
   assert.match(index, /<aside[^>]+id="noteInspector"[^>]+aria-label="Note details"/);
   assert.equal(index.match(/<main\b/g)?.length, 1);

@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { createJapaneseNoteFromMenu } from "./japanese-helpers.mjs";
 
 async function createJapaneseNote(page, buttonName, expectedTitle) {
-  await page.getByRole("button", { name: buttonName }).click();
+  await createJapaneseNoteFromMenu(page, buttonName);
   const title = page.getByRole("textbox", { name: "Note title", exact: true });
   await expect(title).toHaveValue(expectedTitle);
   await expect(title).toBeFocused();
@@ -14,6 +15,8 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
 
   await page.getByRole("button", { name: "日本語", exact: true }).click();
   const filters = page.getByRole("region", { name: "Japanese note filters" });
+  await expect(filters).toBeHidden();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
   await expect(filters).toBeVisible();
 
   await createJapaneseNote(page, "Create vocabulary note", "New vocabulary");
@@ -52,6 +55,7 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(4);
 
   await page.getByRole("button", { name: "日本語", exact: true }).click();
+  await expect(filters).toBeVisible();
   await expect(page.locator("#japaneseNoteType")).toHaveValue("grammar");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(1);
 
@@ -61,8 +65,8 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   await expect(page.locator("#japaneseFilterStatus")).toHaveText("Created from must be on or before Created to");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Clear Japanese filters" }).click();
+  await page.getByRole("button", { name: "Clear all" }).click();
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(3);
   await expect(page.locator("#japaneseFilterStatus")).toHaveText("Showing 3 of 3 Japanese notes");
-  await expect(page.locator("#japaneseNoteType")).toBeFocused();
+  await expect(page.getByRole("button", { name: "Filters", exact: true })).toBeFocused();
 });

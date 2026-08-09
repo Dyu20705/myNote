@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  createJapaneseNoteFromMenu,
+  openJapaneseReviewSubview,
+} from "./japanese-helpers.mjs";
 
 async function openBlankOrigin(page) {
   await page.route("**/", async (route) => {
@@ -147,7 +151,7 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
     "Create this week’s planner",
   ];
   for (const [index, action] of createActions.entries()) {
-    await page.getByRole("button", { name: action }).click();
+    await createJapaneseNoteFromMenu(page, action);
     await expect(page.locator("#noteCount")).toHaveText(`${index + 2} notes`);
   }
 
@@ -158,8 +162,8 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
   await expect(page.locator("#japaneseOutputStreak")).toHaveText("1 day");
   await expect(page.locator("#japanesePlannerProgress")).toHaveText("0 / 6");
 
-  await page.getByRole("button", { name: "Create today’s output note" }).click();
-  await page.getByRole("button", { name: "Create this week’s planner" }).click();
+  await createJapaneseNoteFromMenu(page, "Create today’s output note");
+  await createJapaneseNoteFromMenu(page, "Create this week’s planner");
   await expect(page.locator("#noteCount")).toHaveText("6 notes");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(5);
 
@@ -174,6 +178,7 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
   expect(enrollment.noteIds).toHaveLength(5);
   expect(enrollment.types).toEqual(["grammar", "kanji", "output", "planner", "vocabulary"]);
 
+  await openJapaneseReviewSubview(page);
   await page.getByRole("button", { name: "Start review" }).click();
   await page.getByRole("button", { name: "Reveal review content" }).click();
   await page.keyboard.press("Escape");
@@ -206,7 +211,7 @@ test("populated v1 upgrade preserves exact note bytes and never enrolls existing
   await openJapaneseWorkspace(page);
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(0);
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect(page.locator("#noteCount")).toHaveText("2 notes");
 
   snapshot = await readDatabaseSnapshot(page, existing.id);
@@ -225,6 +230,7 @@ test("valid orphan review remains durable and appears as bounded repair state", 
 
   await page.goto("/");
   await openJapaneseWorkspace(page);
+  await openJapaneseReviewSubview(page);
   const repair = page.getByRole("region", { name: "Needs repair" });
   await expect(repair).toContainText("orphan-review");
   await expect(repair).toContainText("×1");
@@ -247,11 +253,11 @@ test("invalid persisted review keeps Notes operational and exposes bounded Japan
   await page.goto("/");
   await expect(page.locator("#titleInput")).toHaveValue("Existing ordinary note");
   await openJapaneseWorkspace(page);
+  await openJapaneseReviewSubview(page);
   await expect(page.getByRole("region", { name: "Needs repair" })).toContainText("study-data-unavailable");
   await expect(page.getByRole("button", { name: "Start review" })).toBeDisabled();
-  for (const button of await page.getByRole("group", { name: "Japanese quick create" }).getByRole("button").all()) {
-    await expect(button).toBeDisabled();
-  }
+  await page.getByRole("button", { name: "Japanese Notes", exact: true }).click();
+  await expect(page.getByRole("button", { name: "New Japanese note" })).toBeDisabled();
 
   const snapshot = await readDatabaseSnapshot(page, existing.id);
   expect(snapshot.note).toEqual(existing);
@@ -264,7 +270,7 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
 
   await page.goto("/");
   await openJapaneseWorkspace(page);
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect.poll(async () => page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
     const state = getActiveStore().getState();
@@ -319,12 +325,18 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await page.keyboard.press("Enter");
   await expect(japaneseButton).toHaveAttribute("aria-pressed", "true");
 
-  await page.getByRole("button", { name: "Create vocabulary note" }).focus();
+  const createTrigger = page.getByRole("button", { name: "New Japanese note" });
+  await createTrigger.focus();
+  await page.keyboard.press("Enter");
+  const vocabularyAction = page.getByRole("group", { name: "New Japanese note" })
+    .getByRole("button", { name: "Create vocabulary note" });
+  await expect(vocabularyAction).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#japaneseDueCount")).toHaveText("1");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#titleInput")).toBeFocused();
 
+  await openJapaneseReviewSubview(page);
   const startButton = page.getByRole("button", { name: "Start review" });
   await startButton.focus();
   await page.keyboard.press("Enter");

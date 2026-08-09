@@ -11,6 +11,11 @@
 .workspace-switcher button,
 .japanese-actions button,
 .japanese-filters button,
+.japanese-filter-toolbar button,
+.japanese-filter-chips button,
+.japanese-subview-navigation button,
+.japanese-notes-summary button,
+.japanese-create-menu button,
 .review-dialog button {
   min-height: var(--mn-control-sm);
   border: 1px solid var(--mn-border-default);
@@ -32,26 +37,146 @@
 .workspace-switcher button:hover,
 .japanese-actions button:hover,
 .japanese-filters button:hover,
+.japanese-filter-toolbar button:hover,
+.japanese-filter-chips button:hover,
+.japanese-subview-navigation button:hover,
+.japanese-notes-summary button:hover,
+.japanese-create-menu button:hover,
 .review-dialog button:hover {
   border-color: var(--mn-border-strong);
   color: var(--mn-text-primary);
   background: var(--mn-surface-hover);
 }
 
+.japanese-filter-tools,
 .japanese-filters,
 .japanese-dashboard,
+.japanese-review-overview,
 .review-dialog,
 .review-content,
 .review-note-title {
   font-family: var(--mn-font-japanese);
 }
 
+.japanese-create {
+  position: relative;
+}
+
+.japanese-create[hidden],
+.japanese-create-menu[hidden],
+.search-box[hidden],
+.japanese-subview-navigation[hidden],
+.japanese-notes-summary[hidden],
+.japanese-filter-tools[hidden],
+.japanese-review-overview[hidden],
+.repair-region[hidden] {
+  display: none;
+}
+
+.japanese-create-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + var(--mn-space-1));
+  right: 0;
+  width: min(280px, calc(100vw - 24px));
+  display: grid;
+  gap: var(--mn-space-1);
+  padding: var(--mn-space-2);
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-overlay);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.japanese-create-menu button {
+  width: 100%;
+  text-align: left;
+}
+
+.japanese-subview-navigation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--mn-space-1);
+  margin: 0 10px 10px;
+  padding: var(--mn-space-1);
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-base);
+}
+
+.japanese-subview-navigation button[aria-pressed="true"] {
+  border-color: var(--mn-border-strong);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-selected);
+  font-weight: 600;
+}
+
+.japanese-subview-navigation span {
+  color: var(--mn-text-muted);
+  font-size: 0.78rem;
+}
+
+.japanese-notes-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mn-space-2);
+  margin: 0 10px 10px;
+  padding: 10px;
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-raised);
+}
+
+.japanese-notes-summary div {
+  display: grid;
+  gap: 2px;
+  color: var(--mn-text-muted);
+  font-size: 0.8rem;
+}
+
+.japanese-notes-summary strong {
+  color: var(--mn-text-primary);
+  font-size: 1.15rem;
+}
+
+.japanese-filter-tools {
+  display: grid;
+  gap: var(--mn-space-2);
+  margin: 0 10px 10px;
+}
+
+.japanese-filter-tools[aria-busy="true"] {
+  cursor: progress;
+}
+
+.japanese-filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mn-space-2);
+}
+
+.japanese-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mn-space-1);
+}
+
+.japanese-filter-chips:empty {
+  display: none;
+}
+
+.japanese-filter-chip {
+  min-height: var(--mn-control-sm);
+  font-size: 0.78rem;
+}
+
 .japanese-filters {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: 1fr;
   align-items: end;
   gap: var(--mn-space-2);
-  margin-bottom: var(--mn-space-3);
   padding: 10px;
   border: 1px solid var(--mn-border-subtle);
   border-radius: var(--mn-radius-lg);
@@ -60,10 +185,6 @@
 
 .japanese-filters[hidden] {
   display: none;
-}
-
-.japanese-filters[aria-busy="true"] {
-  cursor: progress;
 }
 
 .japanese-filter-field {
@@ -116,6 +237,7 @@
 }
 
 #noteNavigationRegion .japanese-filters {
+  margin: 0;
   grid-template-columns: 1fr;
 }
 
@@ -209,6 +331,31 @@
   border: 1px dashed var(--mn-border-default);
   border-radius: var(--mn-radius-md);
   background: var(--mn-surface-base);
+}
+
+.japanese-review-overview {
+  margin: auto;
+  width: min(620px, 100%);
+  padding: clamp(var(--mn-space-4), 6vw, 64px);
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-xl);
+  background: var(--mn-surface-raised);
+  text-align: center;
+}
+
+.japanese-review-overview h2 {
+  margin: 0;
+  color: var(--mn-text-primary);
+}
+
+.japanese-review-overview p:not(.eyebrow) {
+  margin: var(--mn-space-2) auto var(--mn-space-4);
+  max-width: 46ch;
+  color: var(--mn-text-muted);
+}
+
+body[data-workspace="japanese"][data-japanese-subview="review"] #editorRegion > :not(#japaneseReviewOverview) {
+  display: none;
 }
 
 .repair-list {
@@ -332,6 +479,18 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
 }
 
 .japanese-filters button:disabled {
+  border-style: dashed;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.japanese-create-menu button:disabled {
+  border-style: dashed;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.japanese-review-overview button:disabled {
   border-style: dashed;
   cursor: not-allowed;
   opacity: 0.55;

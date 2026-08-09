@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createJapaneseNoteFromMenu } from "./japanese-helpers.mjs";
 
 const VIEWPORTS = [
   { width: 1440, height: 900 },
@@ -110,7 +111,7 @@ test("search shortcut and ordinary create remain truthful to the active workspac
 
   await page.locator("#japaneseWorkspaceButton").click();
   await expect(page.locator("#newNoteButton")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Create vocabulary note" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Japanese note" })).toBeVisible();
 
   await page.locator("#notesWorkspaceButton").click();
   await expect(page.locator("#newNoteButton")).toBeVisible();
@@ -176,7 +177,7 @@ test("shell controls remain functional through refresh, save, selection, search,
 
   await page.locator("#japaneseWorkspaceButton").click();
   await expect(page.locator("#japaneseWorkspaceButton")).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Create vocabulary note" }).click();
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#titleInput")).toBeFocused();
 });
