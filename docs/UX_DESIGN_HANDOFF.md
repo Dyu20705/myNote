@@ -79,7 +79,18 @@ If direct design context is unavailable, do not infer details from this document
 | Rating failed `1280×720` | `51:1128` |
 | Review complete `1024×768` | `51:1201` |
 
-### Kanji Input
+### Kanji saved-grid (current authority)
+
+Issue #69 owns the accepted saved-grid direction. Runtime implementation uses node `43:343` for the accepted desktop dialog and node `120:313` for its accepted interaction/presentation specification.
+
+| State | Node | Lifecycle |
+|---|---|---|
+| Saved-grid dialog | `43:343` | Accepted |
+| Saved-grid interaction specification | `120:313` | Accepted |
+
+Recognition, OCR, candidates, Unicode confirmation, and remote services are excluded from the V2 write path. The route records below are retained only as a superseded historical reference and are not implementation authority.
+
+### Superseded Kanji recognition routes (historical only)
 
 | State | Node |
 |---|---|
@@ -128,8 +139,8 @@ These findings were verified directly in the current Figma source.
 1. Review at `1024×768` contains nested overflow:
    - metrics parent `240px`, metric child `300px`;
    - task parent `724px`, revealed content `860px`.
-2. Kanji discard confirmation uses two simultaneous dialog contexts.
-3. No stale-candidate state invalidates a selected character after drawing changes.
+2. The superseded Kanji recognition candidate used two simultaneous dialog contexts for discard confirmation.
+3. The superseded recognition flow did not invalidate a stale selected character after drawing changes.
 4. Ordinary Notes no-results replaces the active editor instead of preserving the open draft.
 5. Prototype navigation is attached to annotation controls rather than product controls.
 6. Major route frames do not expose a complete Candidate/Accepted/Implemented/Verified lifecycle.
@@ -165,31 +176,27 @@ The rating was not saved. This item has not advanced.
 Retry Good | Choose another rating
 ```
 
-### Kanji integrity
+### Kanji saved-grid integrity
 
-Required presentation states:
+The recognition-era state machine below is superseded historical context. Current V2 implementation authority is issue #69 plus accepted nodes `43:343` and `120:313`.
+
+Current required presentation states:
 
 ```text
 Empty
 Drawn
-Recognizing
-Results
-Selected
-Stale
-NoResult
-RecognitionFailed
 Saving
 SaveFailed
 ConfirmDiscard
 ```
 
-A drawing mutation after recognition invalidates the selected candidate and disables Save until recognition runs again.
+Save requires a non-empty, bounded drawing. Canonical persistence completes before success presentation. Save failure retains the exact draft and retry intent. Dirty close uses one same-dialog confirmation, and clean close returns focus to the logical opener.
 
 ```js
-selectionIsValid = selectedCharacter !== null && recognizedRevision === strokeRevision;
+saveIsAvailable = strokes.length > 0 && validationError === null;
 ```
 
-ConfirmDiscard replaces the current Kanji dialog content with a compact same-dialog confirmation. It does not open a second modal.
+V1 recognition-era entries remain readable and searchable by their already-confirmed character. V2 entries contain no guessed character and contribute no recognized text to search or review/mastery evidence.
 
 ### Many handwriting entries
 
@@ -197,7 +204,7 @@ Keep prose dominant. The editor exposes a compact count/disclosure. The complete
 
 ### Prototype
 
-Primary reactions must be attached to real product controls: Details, Filters, Review navigation, Reveal, ratings, Add Kanji handwriting, Recognize, candidate selection, Save, Undo, and Retry. Annotation controls may remain only as subordinate debug navigation.
+Primary reactions must be attached to real product controls: Details, Filters, Review navigation, Reveal, ratings, Add Kanji handwriting, Pen/Marker/Eraser, Save drawing, Undo, Redo, Clear, Close, discard confirmation, and Retry. Annotation controls may remain only as subordinate debug navigation.
 
 Add two required flows:
 
@@ -206,7 +213,7 @@ First run → create → edit → autosave pending → save failure → retry �
 ```
 
 ```text
-Draw → recognize → select → modify strokes → stale → recognize again → select → save
+Draw → save → persistence failure → retain exact draft → retry → saved drawing → reload → edit
 ```
 
 ## Acceptance boundary
@@ -217,10 +224,10 @@ A frame may move from Candidate to Accepted only when:
 - every intentional overflow has an explicit scroll/overlay owner;
 - Notes no-results preserves active editor and draft;
 - Review task mode and rating retry are unambiguous;
-- Kanji stale selection and same-dialog discard are represented;
+- Kanji saved-grid tools, persist-before-success lifecycle, bounded disclosure, and same-dialog discard are represented;
 - prototype primary paths use product controls;
 - primitive publishing is hidden and semantic status/ink roles are separated;
 - handoff language does not claim implementation or runtime verification;
 - issue #65 records the exact accepted decisions and evidence.
 
-Static Figma evidence cannot certify persistence, IME behavior, live resize state preservation, recognizer quality, Windows support, forced-colors behavior, or production accessibility. Those require runtime tests and recorded manual evidence.
+Static Figma evidence cannot certify persistence, IME behavior, live resize state preservation, native browser zoom, OS display scaling, physical Windows pen behavior, forced-colors behavior, or production accessibility. Those require runtime tests and recorded manual evidence. The automated 720×450 CSS viewport is equivalent responsive-layout evidence only; it is not native 200% browser-zoom evidence.

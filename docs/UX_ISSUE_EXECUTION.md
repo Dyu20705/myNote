@@ -24,13 +24,13 @@ Issue #69 branches after #68 and remains independently reviewable:
 
 ```text
 #68
-→ #69 recognizer decision
-→ #69 domain and storage
-→ #69 interaction UI
+→ #69 saved-grid owner decision
+→ #69 V1 compatibility and V2 domain/storage
+→ #69 saved-grid interaction UI
 → #69 lifecycle, search, export, and evidence
 ```
 
-The final #73 gate may depend on both the core UX chain and the complete #69 vertical slice. Core readiness should be recorded independently so recognizer adoption risk does not hide core UX progress.
+The final #73 gate may depend on both the core UX chain and the complete #69 vertical slice. Core readiness should be recorded independently so saved-grid delivery does not hide core UX progress. Recognition adoption is a superseded historical direction and is not a dependency of the current V2 path.
 
 ## Stage 0: Design acceptance and issue #65
 
@@ -45,7 +45,7 @@ Use `docs/UX_DESIGN_HANDOFF.md` and fix only verified Candidate defects:
 - Review `1024×768` geometry;
 - Notes no-results editor preservation;
 - bounded palette and inspector behavior;
-- Kanji stale state and same-dialog discard;
+- Kanji saved-grid persist-before-success lifecycle and same-dialog discard;
 - rating failure pending intent;
 - bounded handwriting disclosure;
 - product-control prototype wiring;
@@ -194,63 +194,54 @@ Do not change scheduler or dashboard semantics.
 
 Keep issue #69 as the parent outcome, but deliver it as four rollback-safe packages.
 
-### Package 1: Recognizer adoption decision
+Current presentation authority is issue #69 plus accepted Figma nodes `43:343` and `120:313`. The earlier recognizer-adoption and candidate-selection package plan is retained here only as a superseded historical decision; it must not drive V2 implementation.
 
-- compare approved local candidates and no-recognizer fallback;
-- pin source and data revisions;
-- audit source and data licenses separately;
-- verify no network, telemetry, dynamic loading, or unsafe DOM writes;
-- create deterministic fixtures and measure top-1/top-8 behavior;
-- record adopt/adapt/reject decision.
+### Package 1: V1 compatibility and V2 domain/storage
 
-No schema or UI change.
-
-### Package 2: Domain and storage
-
-- define `KanjiInkEntry` and bounded vector validation;
-- implement stroke revision integrity;
+- preserve exact readable/exportable V1 recognition-era records without rewriting them;
+- define the exact V2 saved-grid `KanjiInkEntry` and bounded vector validation;
 - add additive IndexedDB store and migration tests;
 - preserve existing notes and study reviews;
 - implement atomic note/entry lifecycle and rollback compatibility.
 
-No recognizer UI.
+No recognition, OCR, candidate, Unicode-confirmation, or remote-service UI.
 
-### Package 3: Drawing and recognition interaction
+### Package 2: Saved-grid drawing interaction
 
-Implement the accepted state machine:
+Implement the accepted bounded interaction:
 
 ```text
 Empty
 Drawn
-Recognizing
-Results
-Selected
-Stale
-NoResult
-RecognitionFailed
 Saving
 SaveFailed
 ConfirmDiscard
 ```
 
-Required invariant:
+Required invariants:
 
 ```js
-selectionIsValid = selectedCharacter !== null && recognizedRevision === strokeRevision;
+saveIsAvailable = strokes.length > 0 && validationError === null;
+successIsVisible = canonicalPersistenceCompleted === true;
 ```
 
-Drawing changes invalidate prior selection. Save requires a non-empty drawing and a selected character for the current revision.
+Pen, Marker, Eraser, bounded Undo/Redo, Clear, pointer cancellation, retry, and same-dialog discard preserve the exact draft until persistence succeeds or discard is confirmed.
 
-### Package 4: Note integration and evidence
+### Package 3: Note integration and lifecycle
 
-- bounded Details disclosure;
+- newest-first bounded Details disclosure with explicit older-entry pagination;
 - edit/delete lifecycle;
-- character search projection without mutating Markdown;
+- V1-only confirmed-character search projection without mutating Markdown; V2 contributes no guessed text;
 - JSON and human-readable export/restore;
-- invalid stored-entry degradation;
+- invalid stored-entry degradation and atomic note-dependent delete/restore.
+
+### Package 4: Evidence and rollback
+
 - repeated open/close resource checks;
-- Windows Chrome/Edge mouse validation;
-- complete fixture and latency report.
+- bounded maximum-shape validation/serialization, note-context reload, and 64-preview evidence;
+- desktop viewport, equivalent responsive-layout, focus, overflow, and recovery evidence;
+- physical Windows pen, native browser zoom, and OS scaling remain explicit unknowns until manually validated;
+- rollback preserves V1 and V2 records without rewrite or downgrade.
 
 ## Stage 6: Issue #71 — Desktop resize and zoom
 
@@ -261,6 +252,8 @@ Drawing changes invalidate prior selection. Save requires a non-empty drawing an
 - `1440×900`
 - live resize among supported widths
 - 200% browser zoom
+
+Automated coverage may use a 720×450 CSS viewport as equivalent responsive-layout evidence for a 1440×900 desktop at 200% zoom. That emulation is not native browser zoom. Native 200% browser zoom and OS-level display scaling require recorded manual evidence and otherwise remain `UNKNOWN — REQUIRES VALIDATION`.
 
 Preserve:
 
@@ -313,8 +306,8 @@ Pass only when:
 - each category is at least 80%;
 - no unresolved P0/P1 remains;
 - all full-suite commands pass on target main;
-- all three desktop viewports, live resize, 200% zoom, keyboard, mouse, and reduced motion pass;
-- #69 source/data license, no-network, lifecycle, search, export, and Windows evidence pass;
+- all three desktop viewports, live resize, keyboard, mouse, and reduced motion pass, with native 200% zoom separately evidenced or explicitly left unknown;
+- #69 no-network, lifecycle, V1-only search, mixed export, bounded-resource, and Windows evidence pass to the supported boundary;
 - unsupported environments remain explicit unknowns.
 
 Do not award points from design screenshots alone.
@@ -333,9 +326,9 @@ ux/70-japanese-disclosure
 ux/71-desktop-resilience
 ux/72-state-recovery
 ux/73-release-gate
-kanji/69-recognizer-decision
+kanji/69-saved-grid-contract
 kanji/69-domain-storage
-kanji/69-interaction
+kanji/69-saved-grid-interaction
 kanji/69-integration-evidence
 ```
 

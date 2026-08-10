@@ -14,6 +14,18 @@ This document defines the performance constraints used to prevent unmeasured lat
 
 These values are baseline targets, not unsupported guarantees. Benchmark reports must record environment, build mode, dataset shape, warm-up, sample count, statistic, and raw result location.
 
+## Kanji saved-grid regression budgets
+
+Issue #69 owns the current saved-grid direction. These are conservative automated regression tripwires for bounded work, not cross-device product guarantees.
+
+| Operation | Deterministic fixture | Threshold |
+| --- | --- | ---: |
+| Validate and codec-serialize one maximum-capacity V2 drawing | 32 strokes, 128 points each, 4,096 total points; 1 warm-up plus 5 measured samples | each sample `< 1,000 ms`; canonical entry `≤ 262,144 bytes`; codec envelope `≤ 8 MiB` |
+| Load and reload one note context | 65 valid minimal V2 entries; 2 synchronization calls | each call `< 2,000 ms` |
+| Render the initial saved-drawing window | the same 65-entry note with Details open | exactly 64 previews and `< 5,000 ms`; older-entry disclosure visible |
+
+The canonical entry and tagged codec envelope are different representations and therefore have different byte limits. The 2026-08-10 focused Chromium run passed these thresholds; its maximum-capacity fixture measured `202,740` canonical bytes and `478,349` codec-envelope bytes. A same-machine Node reference run of the five validation-plus-serialization samples had a maximum of `249.49 ms`. Timing results from materially different machines are not directly comparable.
+
 ## Runtime constraints
 
 - Heavy search and indexing work runs in a worker.
@@ -56,3 +68,4 @@ Additional benchmark work should separate main-thread time, worker time, persist
 - Fixed-row virtualization may be inaccurate for highly variable row heights.
 - `performance.memory` is browser-specific and may be unavailable.
 - A checked-in benchmark suite is still required before these targets can become enforced release thresholds.
+- The Playwright 720×450 CSS viewport is equivalent responsive-layout evidence only. Native browser 200% zoom, OS-level display scaling, and physical Windows pen input remain `UNKNOWN — REQUIRES VALIDATION`.

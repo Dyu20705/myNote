@@ -4,19 +4,19 @@ Issue: #69
 
 Scope: M2 desktop-first mouse/pen saved-grid drawing
 
-Presentation authority: accepted Figma node `43:343`
+Presentation authority: issue #69 and accepted Figma nodes `43:343` and `120:313`
 
 The 2026-08-09 owner decision replaced runtime handwriting recognition with a saved-grid vector canvas. Recognition, OCR, candidates, Unicode confirmation, and remote services are not part of the current write path.
 
 ## User flow
 
 1. Open **More actions → Add Kanji handwriting** for the active note.
-2. Draw on the grid with Pen or Marker; Eraser removes intersecting strokes.
+2. Draw on the repeated horizontal ruled paper with Pen or Marker; Eraser removes intersecting strokes.
 3. Use bounded Undo, Redo, or Clear as needed.
 4. Save a non-empty valid drawing only after IndexedDB persistence succeeds.
 5. Reload, edit a V2 drawing, delete/undo, or export it from the supplementary entry surface.
 
-The accepted desktop dialog is a viewport-bounded `900 × 594` surface with an `860 × 430` grid canvas, icon-first tools with accessible names and tooltips, Pen selected by default, and a concise live failure state. It has no recognition or candidate region. Mobile/touch redesign remains out of scope.
+The accepted desktop dialog is a viewport-bounded `900 × 594` surface with an `860 × 430` ruled canvas, icon-first tools with accessible names and tooltips, Pen selected by default, and a concise live failure state. The persisted `paperStyle: "grid"` value is retained as the V2 compatibility discriminator; presentation uses the one canonical repeated horizontal-rule pattern shared by Canvas2D and SVG. The dialog has no recognition or candidate region. Mobile/touch redesign remains out of scope.
 
 ## Module boundaries
 
@@ -103,10 +103,22 @@ New `myNote-kanji-export.json` bundles use schema `4` and preserve mixed V1/V2 e
 
 `myNote-kanji-export.md` renders grid-backed SVG from normalized vectors. V1 may show its stored character and historical attribution. V2 is labelled `Kanji drawing` and never invents a character. Canonical note bodies are not duplicated in this supplementary report.
 
+## Bounded resource evidence
+
+The checked-in Chromium resource test uses bounded fixtures and conservative regression thresholds. On 2026-08-10, `npx --no-install playwright test tests/e2e/kanji-resource.spec.mjs --project=chromium` passed all four tests.
+
+| Operation | Fixture and method | Enforced threshold | Recorded result |
+| --- | --- | ---: | --- |
+| V2 validation plus codec serialization | 5 samples of one entry with 32 strokes and 4,096 total points after one warm-up validation | each sample `< 1,000 ms`; canonical entry `≤ 262,144 bytes`; codec envelope `≤ 8 MiB` | PASS; canonical entry `202,740 bytes`, codec envelope `478,349 bytes`; Node reference maximum `249.49 ms` |
+| Note-context load/reload | 65 valid minimal V2 entries; call the UI synchronization boundary twice | 2 loads; maximum `< 2,000 ms` | PASS |
+| Bounded preview render | Open Details for the same 65-entry note and wait for rendered-paper markers | exactly 64 previews; maximum `< 5,000 ms`; older-entry disclosure remains visible | PASS |
+
+The timing limits are regression tripwires, not device-wide latency guarantees. Deterministic counts and byte limits are the primary evidence. The 720×450 Playwright case is only equivalent responsive-layout evidence; setting a CSS viewport does not exercise native browser zoom.
+
 ## Verification and rollback
 
-Automated coverage owns strict V1/V2 validation, V1 unknown-field preservation, mixed-record CRUD/delete/restore/import/export, V1-only search projection, Pen/Marker/Eraser/history behavior, empty-save and failed-save retry, database v2→v3 migration, atomic lifecycle failure, and the browser draw/save/reload/edit/delete/export path. Runtime evidence must also cover focus return, resize/DPR, required desktop viewports, 200% browser zoom, no horizontal document overflow, repeated-open resource cleanup, and no recognizer call path.
+Automated coverage owns strict V1/V2 validation, V1 unknown-field preservation, mixed-record CRUD/delete/restore/import/export, V1-only search projection, Pen/Marker/Eraser/history behavior, empty-save and failed-save retry, database v2→v3 migration, atomic lifecycle failure, and the browser draw/save/reload/edit/delete/export path. It also covers focus return, resize/DPR behavior, required desktop viewports, equivalent responsive layout at a 720×450 CSS viewport, no horizontal document overflow, repeated-open resource cleanup, and no recognizer call path. Native browser 200% zoom requires separate recorded manual evidence.
 
-Physical Windows 11 mouse/pen usability and OS-level 200% display scaling remain `UNKNOWN — REQUIRES VALIDATION` until recorded manual evidence exists.
+Physical Windows 11 pen usability, native browser 200% zoom, and OS-level 200% display scaling remain `UNKNOWN — REQUIRES VALIDATION` until recorded manual evidence exists. Automated CSS viewport emulation does not close any of those unknowns.
 
 Rollback is code-only and must remain database-v3 aware. It must preserve both V1 and V2 records without deletion, rewrite, or downgrade. A rollback client may expose V2 as an unsupported preserved entry; it must not claim a save succeeded when persistence failed.

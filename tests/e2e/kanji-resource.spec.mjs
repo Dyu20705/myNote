@@ -1,5 +1,15 @@
 import { expect, test } from "@playwright/test";
 
+const KANJI_RESOURCE_BUDGET = Object.freeze({
+  codecSamples: 5,
+  maxCodecSampleMs: 1_000,
+  maxCanonicalEntryBytes: 262_144,
+  maxCodecEnvelopeBytes: 8 * 1024 * 1024,
+  maxNoteContextLoadMs: 2_000,
+  maxPreviewWindowRenderMs: 5_000,
+  previewWindowEntries: 64,
+});
+
 async function expectNoHorizontalOverflow(page) {
   expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth === globalThis.document.documentElement.clientWidth)).toBe(true);
 }
@@ -45,7 +55,8 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
   await expect(page.getByRole("menuitem", { name: /Add Kanji handwriting/ })).toHaveCount(1);
 
   await page.keyboard.press("Escape");
-  // A 1440×900 desktop at 200% browser zoom exposes a 720×450 CSS viewport.
+  // Equivalent responsive-layout evidence only; Playwright viewport emulation
+  // does not exercise native browser zoom, OS display scaling, or physical input.
   await page.setViewportSize({ width: 720, height: 450 });
   await page.locator("#noteActionsButton").click();
   await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
@@ -73,6 +84,116 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("#noteActionsButton")).toBeFocused();
+});
+
+test("bounded drawing evidence validates maximum V2 shape, reloads note context, and renders 64 previews", async ({ page }) => {
+  await page.goto("/");
+
+  const codecEvidence = await page.evaluate(({ sampleCount }) => {
+    return import("/core/kanjiInkEntry.js").then(({ serializeKanjiInkEntry, validateKanjiInkEntryV2 }) => {
+      const strokes = Array.from({ length: 32 }, (_, strokeIndex) => ({
+        tool: "pen",
+        width: 0.008,
+        points: Array.from({ length: 128 }, (_, pointIndex) => ({
+          x: (strokeIndex * 128 + pointIndex) / 4096,
+          y: 0.123456789012345,
+          t: pointIndex,
+        })),
+      }));
+      const entry = {
+        id: "resource-max-shape",
+        noteId: "resource-note",
+        strokes,
+        paperStyle: "grid",
+        createdAt: "2026-08-10T00:00:00.000Z",
+        updatedAt: "2026-08-10T00:00:00.000Z",
+        schemaVersion: 2,
+      };
+      const validated = validateKanjiInkEntryV2(entry);
+      const durations = [];
+      let serialized = "";
+      for (let sample = 0; sample < sampleCount; sample += 1) {
+        const startedAt = globalThis.performance.now();
+        serialized = serializeKanjiInkEntry(validateKanjiInkEntryV2(entry));
+        durations.push(globalThis.performance.now() - startedAt);
+      }
+      return {
+        sampleCount: durations.length,
+        maxDurationMs: Math.max(...durations),
+        canonicalEntryBytes: new TextEncoder().encode(JSON.stringify(validated)).length,
+        codecEnvelopeBytes: new TextEncoder().encode(serialized).length,
+        strokes: entry.strokes.length,
+        points: entry.strokes.reduce((total, stroke) => total + stroke.points.length, 0),
+      };
+    });
+  }, { sampleCount: KANJI_RESOURCE_BUDGET.codecSamples });
+
+  expect(codecEvidence).toMatchObject({
+    sampleCount: KANJI_RESOURCE_BUDGET.codecSamples,
+    strokes: 32,
+    points: 4_096,
+  });
+  expect(codecEvidence.canonicalEntryBytes).toBeLessThanOrEqual(KANJI_RESOURCE_BUDGET.maxCanonicalEntryBytes);
+  expect(codecEvidence.codecEnvelopeBytes).toBeLessThanOrEqual(KANJI_RESOURCE_BUDGET.maxCodecEnvelopeBytes);
+  expect(codecEvidence.maxDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxCodecSampleMs);
+
+  await page.locator("#titleInput").fill("Bounded drawing evidence");
+  await page.locator("#contentInput").fill("64-preview resource fixture.");
+  await page.locator("#contentInput").press("Control+Enter");
+  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
+  await page.evaluate(async ({ noteId: id, entryCount }) => {
+    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const database = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction("kanjiInkEntries", "readwrite");
+    for (let index = 0; index < entryCount; index += 1) {
+      const timestamp = new Date(Date.UTC(2026, 7, 10) + index * 1_000).toISOString();
+      transaction.objectStore("kanjiInkEntries").put({
+        id: `resource-entry-${String(index).padStart(3, "0")}`,
+        noteId: id,
+        strokes: [{
+          tool: "pen",
+          width: 0.008,
+          points: [{ x: 0.2, y: 0.2, t: 0 }, { x: 0.8, y: 0.8, t: 1 }],
+        }],
+        paperStyle: "grid",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        schemaVersion: 2,
+      });
+    }
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  }, { noteId, entryCount: KANJI_RESOURCE_BUDGET.previewWindowEntries + 1 });
+
+  const contextEvidence = await page.evaluate(async () => {
+    const { kanjiInkApp } = await import("/ui/kanjiInkView.js");
+    const durations = [];
+    for (let load = 0; load < 2; load += 1) {
+      const startedAt = globalThis.performance.now();
+      await kanjiInkApp.synchronize();
+      durations.push(globalThis.performance.now() - startedAt);
+    }
+    return { loadCount: durations.length, maxDurationMs: Math.max(...durations) };
+  });
+  expect(contextEvidence.loadCount).toBe(2);
+  expect(contextEvidence.maxDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxNoteContextLoadMs);
+  await expect(page.locator("#kanjiInkCount")).toHaveText("65 entries");
+  await expect(page.locator(".kanji-entry")).toHaveCount(KANJI_RESOURCE_BUDGET.previewWindowEntries);
+
+  const previewStartedAt = Date.now();
+  await page.locator("#detailsButton").click();
+  await expect(page.locator(".kanji-entry-preview[data-paper-rendered='true']")).toHaveCount(
+    KANJI_RESOURCE_BUDGET.previewWindowEntries,
+  );
+  expect(Date.now() - previewStartedAt).toBeLessThan(KANJI_RESOURCE_BUDGET.maxPreviewWindowRenderMs);
+  await expect(page.getByRole("button", { name: "Show older drawings" })).toBeVisible();
 });
 
 test("capture fallback finishes outside releases and leaves no temporary document listeners", async ({ page }) => {
