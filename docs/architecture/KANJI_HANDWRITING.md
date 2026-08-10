@@ -4,7 +4,7 @@ Issue: #69
 
 Scope: M2 desktop-first mouse/pen saved-grid drawing
 
-Presentation authority: issue #69 and accepted Figma nodes `43:343` and `120:313`
+Presentation authority: issue #69 owns behavior and persistence; accepted Figma node `43:343` owns the dialog hierarchy `Header → Toolbar → Canvas → Footer`; accepted node `120:313` owns only the repeated horizontal paper rules.
 
 The 2026-08-09 owner decision replaced runtime handwriting recognition with a saved-grid vector canvas. Recognition, OCR, candidates, Unicode confirmation, and remote services are not part of the current write path.
 
@@ -109,11 +109,11 @@ The checked-in Chromium resource test uses bounded fixtures and conservative reg
 
 | Operation | Fixture and method | Enforced threshold | Recorded result |
 | --- | --- | ---: | --- |
-| V2 validation plus codec serialization | 5 samples of one entry with 32 strokes and 4,096 total points after one warm-up validation | each sample `< 1,000 ms`; canonical entry `≤ 262,144 bytes`; codec envelope `≤ 8 MiB` | PASS; canonical entry `202,740 bytes`, codec envelope `478,349 bytes`; Node reference maximum `249.49 ms` |
+| V2 validation plus codec serialization | One exact combined-operation warm-up, then 5 samples of one entry with 32 strokes, one 256-point stroke, and 4,096 total points | each sample `< 1,000 ms`; canonical entry `≤ 262,144 bytes`; codec envelope `≤ 8 MiB` | PASS; canonical entry and codec-envelope byte assertions passed |
 | Note-context load/reload | 65 valid minimal V2 entries; call the UI synchronization boundary twice | 2 loads; maximum `< 2,000 ms` | PASS |
 | Bounded preview render | Open Details for the same 65-entry note and wait for rendered-paper markers | exactly 64 previews; maximum `< 5,000 ms`; older-entry disclosure remains visible | PASS |
 
-The timing limits are regression tripwires, not device-wide latency guarantees. Deterministic counts and byte limits are the primary evidence. The 720×450 Playwright case is only equivalent responsive-layout evidence; setting a CSS viewport does not exercise native browser zoom.
+The timing limits are regression tripwires, not device-wide latency guarantees. Deterministic counts and byte limits are the primary evidence. The exact command is `npx --no-install playwright test tests/e2e/kanji-resource.spec.mjs --project=chromium`; it runs the Playwright Chromium project against the repository's static source server. The resource test records its bounded raw duration arrays in the `kanji-resource-evidence` test annotation and command output, making each run its own audit trail without promoting machine-specific timings into normative history. The 2026-08-10 run was on Windows; CI hardware and native browser builds remain environment-specific. The 720×450 Playwright case is only equivalent responsive-layout evidence; setting a CSS viewport does not exercise native browser zoom.
 
 ## Verification and rollback
 

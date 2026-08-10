@@ -194,7 +194,7 @@ Do not change scheduler or dashboard semantics.
 
 Keep issue #69 as the parent outcome, but deliver it as four rollback-safe packages.
 
-Current presentation authority is issue #69 plus accepted Figma nodes `43:343` and `120:313`. The earlier recognizer-adoption and candidate-selection package plan is retained here only as a superseded historical decision; it must not drive V2 implementation.
+Current behavior and persistence authority is issue #69. Accepted Figma node `43:343` owns the dialog hierarchy `Header → Toolbar → Canvas → Footer`; node `120:313` owns only the repeated horizontal paper rules. The earlier recognizer-adoption and candidate-selection package plan is retained here only as a superseded historical decision; it must not drive V2 implementation.
 
 ### Package 1: V1 compatibility and V2 domain/storage
 

@@ -86,20 +86,26 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
   await expect(page.locator("#noteActionsButton")).toBeFocused();
 });
 
-test("bounded drawing evidence validates maximum V2 shape, reloads note context, and renders 64 previews", async ({ page }) => {
+test("bounded drawing evidence validates maximum V2 shape, reloads note context, and renders 64 previews", async ({ page }, testInfo) => {
   await page.goto("/");
 
   const codecEvidence = await page.evaluate(({ sampleCount }) => {
     return import("/core/kanjiInkEntry.js").then(({ serializeKanjiInkEntry, validateKanjiInkEntryV2 }) => {
-      const strokes = Array.from({ length: 32 }, (_, strokeIndex) => ({
-        tool: "pen",
-        width: 0.008,
-        points: Array.from({ length: 128 }, (_, pointIndex) => ({
-          x: (strokeIndex * 128 + pointIndex) / 4096,
-          y: 0.123456789012345,
-          t: pointIndex,
-        })),
-      }));
+      const strokeLengths = [256, ...Array(27).fill(124), ...Array(4).fill(123)];
+      let pointOffset = 0;
+      const strokes = strokeLengths.map((pointCount) => {
+        const strokeOffset = pointOffset;
+        pointOffset += pointCount;
+        return {
+          tool: "pen",
+          width: 0.008,
+          points: Array.from({ length: pointCount }, (_, pointIndex) => ({
+            x: (strokeOffset + pointIndex) / 4096,
+            y: 0.123456789012345,
+            t: pointIndex,
+          })),
+        };
+      });
       const entry = {
         id: "resource-max-shape",
         noteId: "resource-note",
@@ -110,18 +116,24 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
         schemaVersion: 2,
       };
       const validated = validateKanjiInkEntryV2(entry);
+      let warmupOperations = 0;
+      serializeKanjiInkEntry(validateKanjiInkEntryV2(entry));
+      warmupOperations += 1;
       const durations = [];
       let serialized = "";
       for (let sample = 0; sample < sampleCount; sample += 1) {
         const startedAt = globalThis.performance.now();
         serialized = serializeKanjiInkEntry(validateKanjiInkEntryV2(entry));
-        durations.push(globalThis.performance.now() - startedAt);
+        durations.push(Number((globalThis.performance.now() - startedAt).toFixed(3)));
       }
       return {
         sampleCount: durations.length,
+        warmupOperations,
+        durationsMs: durations,
         maxDurationMs: Math.max(...durations),
         canonicalEntryBytes: new TextEncoder().encode(JSON.stringify(validated)).length,
         codecEnvelopeBytes: new TextEncoder().encode(serialized).length,
+        maxPointsPerStroke: Math.max(...entry.strokes.map((stroke) => stroke.points.length)),
         strokes: entry.strokes.length,
         points: entry.strokes.reduce((total, stroke) => total + stroke.points.length, 0),
       };
@@ -130,6 +142,8 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
 
   expect(codecEvidence).toMatchObject({
     sampleCount: KANJI_RESOURCE_BUDGET.codecSamples,
+    warmupOperations: 1,
+    maxPointsPerStroke: 256,
     strokes: 32,
     points: 4_096,
   });
@@ -178,9 +192,9 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
     for (let load = 0; load < 2; load += 1) {
       const startedAt = globalThis.performance.now();
       await kanjiInkApp.synchronize();
-      durations.push(globalThis.performance.now() - startedAt);
+      durations.push(Number((globalThis.performance.now() - startedAt).toFixed(3)));
     }
-    return { loadCount: durations.length, maxDurationMs: Math.max(...durations) };
+    return { durationsMs: durations, loadCount: durations.length, maxDurationMs: Math.max(...durations) };
   });
   expect(contextEvidence.loadCount).toBe(2);
   expect(contextEvidence.maxDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxNoteContextLoadMs);
@@ -192,8 +206,20 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
   await expect(page.locator(".kanji-entry-preview[data-paper-rendered='true']")).toHaveCount(
     KANJI_RESOURCE_BUDGET.previewWindowEntries,
   );
-  expect(Date.now() - previewStartedAt).toBeLessThan(KANJI_RESOURCE_BUDGET.maxPreviewWindowRenderMs);
+  const previewDurationMs = Date.now() - previewStartedAt;
+  expect(previewDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxPreviewWindowRenderMs);
   await expect(page.getByRole("button", { name: "Show older drawings" })).toBeVisible();
+  const rawEvidence = {
+    chromiumProject: testInfo.project.name,
+    codecDurationsMs: codecEvidence.durationsMs,
+    contextDurationsMs: contextEvidence.durationsMs,
+    previewDurationMs,
+  };
+  testInfo.annotations.push({
+    type: "kanji-resource-evidence",
+    description: JSON.stringify(rawEvidence),
+  });
+  console.info(`[kanji-resource-evidence] ${JSON.stringify(rawEvidence)}`);
 });
 
 test("capture fallback finishes outside releases and leaves no temporary document listeners", async ({ page }) => {

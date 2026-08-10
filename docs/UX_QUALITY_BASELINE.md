@@ -38,7 +38,7 @@ Evidence terms are strict:
 - **Verified**: proven by the required automated and recorded manual evidence at that implementation SHA.
 - **Unknown**: `UNKNOWN — REQUIRES VALIDATION`; it receives no implementation or score credit.
 
-Figma remains design evidence. It cannot prove persistence, browser behavior, accessibility-tree output, recognizer correctness, scheduling correctness, or data durability.
+Figma remains design evidence. It cannot prove persistence, browser behavior, accessibility-tree output, saved-grid correctness, scheduling correctness, or data durability.
 
 ## 2. Product boundary and non-goals
 
@@ -65,7 +65,7 @@ The following are outside this baseline unless a later issue explicitly authoriz
 - Japanese V2 learning evidence;
 - speculative feature parity with Google Keep.
 
-Issue #65 changes no runtime HTML, CSS, JavaScript, dependencies, schema, persistence, search, review scheduling, recognizer code, or user data.
+Issue #65 changes no runtime HTML, CSS, JavaScript, dependencies, schema, persistence, search, review scheduling, Kanji code, or user data.
 
 ## 3. Google Keep benchmark boundary
 
@@ -165,8 +165,8 @@ List/grid is presentation-only session state, scoped to Ordinary results and def
 | Start Review | Start/Resume action | Exclusive task mode; unrelated shell commands are unavailable | #70, #74 |
 | Reveal and rate | Reveal then `1`–`4` | Rating unavailable before reveal; IME wins; success advances once | #70, #72, #74 |
 | Recover rating failure | Persistence failure | Preserve exact pending rating and current item; retry is idempotent | #70, #72 |
-| Add Kanji handwriting | Future note action | Bounded drawing, local recognition, explicit candidate confirmation | #69 after #68 |
-| Re-recognize stale strokes | Accepted design flow | Stroke changes invalidate candidate and Save | #69 |
+| Add Kanji handwriting | Note action | Bounded saved-grid drawing; persist before success; no recognition or candidate step | #69 after #68 |
+| Retry or edit a saved drawing | Saved-grid task or Details entry | Preserve exact V2 strokes across retry/reload; V1 remains read-only historical data | #69 |
 | View saved handwriting | Compact projection | Details owns complete bounded entry list | #69, #70 |
 
 ## 6. Surface and command inventory
@@ -186,7 +186,7 @@ List/grid is presentation-only session state, scoped to Ordinary results and def
 | Japanese dashboard | Understand study state | Japanese Notes | Dashboard selectors; disclosure #70 |
 | Japanese filters | Narrow enrolled notes | Japanese Notes | Filter controller; #70 |
 | Review | Reveal/rate/resume/complete | Exclusive task | Review controller; #70/#72/#74 |
-| Kanji task | Draw/recognize/select/save/discard | Exclusive task | #69 only |
+| Kanji task | Draw/save/retry/discard; edit V2 | Exclusive task | #69 only |
 | Delete/Undo feedback | Remove/restore exact note | Active note and feedback | Lifecycle/history; #68/#72/#74 |
 | Recovery reset | Repair unusable local state | Exclusive recovery | Storage owner; #72/#74 |
 | Empty/no-result/degraded | Explain absent/partial capability | Owning region | State mapper #72 |
@@ -222,7 +222,7 @@ Direct list navigation, editor focus, explicit flush, Review rating, and boundar
 | --- | --- | --- | --- |
 | Ordinary notes | IndexedDB `notes` via storage | Persistent | Persistence precedes memory/history success |
 | Study reviews | IndexedDB `studyReviews` | Persistent | Successful rating writes exactly once |
-| Future Kanji entries | #69 additive store/model | Persistent | Stale recognition cannot save as current |
+| Kanji entries | #69 additive store/model | Persistent | V2 contains bounded vectors and no guessed Unicode; V1 remains historical compatibility data |
 | Active draft | Editor/controller | Session until save | One draft owner; transition requires flush |
 | Dirty flag/revision | Save coordinator | Session | Clear only after latest canonical save |
 | Save status | Derived save outcome | Session | Pending, canonical failure, and derived degradation remain distinct |
@@ -239,7 +239,7 @@ Direct list navigation, editor focus, explicit flush, Review rating, and boundar
 | Command definition | Central registry | Static runtime | One ID, scope, availability, reason, runner |
 | Modal/task | Modal coordinator | Ephemeral | One top layer; background inert |
 | Review session/pending rating | Review controller | Session/ephemeral | Failure preserves item and exact intent |
-| Kanji strokes/candidates | #69 task controller | Ephemeral until save | Candidate keyed to current stroke revision |
+| Kanji V2 draft strokes | #69 task controller | Ephemeral until save | Persist-before-success; failed save retains the exact draft and retry intent |
 | Delete Undo entry | Undo coordinator | Bounded session | Created only after successful persistence |
 | Feedback/error | State mapper | Severity-bounded | Blocking failure remains visible and actionable |
 | Appearance token | #67 registry | Render-only in M2 | Unknown token falls back without data write |
@@ -492,9 +492,9 @@ A future M3 issue may allow only:
 - input-modality enum;
 - application version.
 
-Prohibited fields include note content or IDs, search text, labels/tags, Japanese content, Kanji characters/strokes/candidates, media, clipboard, URLs, raw keystrokes, cursor/selection text, free-text errors, stacks, database records, fingerprints, account IDs, and network transmission.
+Prohibited fields include note content or IDs, search text, labels/tags, Japanese content, Kanji drawing vectors or historical V1 character/recognizer data, media, clipboard, URLs, raw keystrokes, cursor/selection text, free-text errors, stacks, database records, fingerprints, account IDs, and network transmission.
 
-Hard bounds are 5,000 events and 30 days with FIFO deletion, visible Reset, local Export, no remote endpoint, and failure isolation from note/review/delete/recognizer workflows.
+Hard bounds are 5,000 events and 30 days with FIFO deletion, visible Reset, local Export, no remote endpoint, and failure isolation from note/review/delete/Kanji workflows.
 
 ## 18. Downstream responsibility and rollback
 
@@ -504,8 +504,8 @@ Hard bounds are 5,000 events and 30 days with FIFO deletion, visible Reset, loca
 | #67 | Scoped semantic tokens and ten-token rendering | Persisted color/schema, commands, external UI library | Revert CSS/registry/tests |
 | #74 | Command registry, scope, reasons, IME/browser precedence | Schema and business semantics | Revert registry adapters/handlers |
 | #68 | List/grid parity, spotlight editor, Details, actions, flush/delete/Undo | New schema, Japanese scheduler, Kanji package | Revert presentation/actions/tests |
-| #69 | Local single-Kanji recognizer decision, additive domain/storage, task UI, integration evidence | Ordinary IA, scheduler, network, telemetry, Markdown vector payload | Disable writers/presentation; retain user handwriting data |
-| #70 | Japanese Notes/Review disclosure and task mode | Scheduler algorithm, Japanese V2, recognizer internals | Revert Japanese presentation/controllers |
+| #69 | Saved-grid V2 domain/storage, task UI, mixed V1/V2 lifecycle, bounded integration evidence | Ordinary IA, scheduler, network, telemetry, guessed Unicode/search/review evidence, Markdown vector payload | Disable writers/presentation; retain V1 and V2 handwriting data |
+| #70 | Japanese Notes/Review disclosure and task mode | Scheduler algorithm, Japanese V2, Kanji drawing internals | Revert Japanese presentation/controllers |
 | #71 | Supported desktop resize/zoom behavior | Mobile navigation, state/persistence semantics | Revert layout/tests |
 | #72 | Accessible state-to-presentation mapping | Persistence outcomes, schema, scheduling | Revert mapping/components/tests |
 | #73 | Final scorecard and bounded fixes tied to failed measures | Broad feature expansion or unsupported claims | Revert gate evidence/fixes independently |
@@ -528,20 +528,22 @@ A definition contains:
 
 Context is read-only and bounded to active note ID, workspace, current revision/dirty state, and declared capabilities. `run` calls the owning domain transaction; it does not mutate DOM, IndexedDB, search projections, or canonical collections directly.
 
-#69 registers `Add Kanji handwriting` only after #68. It remains sole owner of recognition, `KanjiInkEntry`, storage, search/export projection, and lifecycle.
+#69 registers `Add Kanji handwriting` only after #68. It remains sole owner of `KanjiInkEntry`, storage, V1-only confirmed-character search projection, mixed V1/V2 export, and lifecycle. V1 recognition metadata is historical compatibility data. V2 has no recognition path, guessed Unicode, or search/review/mastery contribution.
 
 ## 19. Design acceptance manifest
 
 `Accepted` is a repository lifecycle state. A Figma node is marked Accepted when its exact node ID appears in this merged manifest. Canvas lifecycle labels are mirrors; they are not a second independent authority and cannot override a merged repository decision.
 
-The following design roots and their route/state children listed in `docs/UX_DESIGN_HANDOFF.md` are accepted as design-to-code input after PR #78 merges:
+The original design roots below were accepted as design-to-code input after PR #78 merged. The superseded Kanji recognition root is historical only; issue #69's later accepted saved-grid nodes are listed in its place:
 
 - Foundations `13:2`;
 - Components `18:2`;
 - Patterns `39:2`;
 - Notes routes `50:2`;
 - Japanese routes `51:351`;
-- Kanji routes `52:2`;
+- saved-grid dialog hierarchy `43:343` (`Header → Toolbar → Canvas → Footer`);
+- repeated horizontal paper rules `120:313` (paper pattern only, not broad interaction authority);
+- superseded recognition-route root `52:2` is retained as historical design evidence only;
 - States and recovery `53:2`;
 - Responsive documentation `55:2`;
 - Prototype index `65:2`;
@@ -554,7 +556,7 @@ Acceptance is limited to the hardened contracts recorded in this document and `d
 - no-result editor preservation;
 - Review task mode and pending-rating failure intent;
 - same-dialog Kanji discard;
-- stroke-revision candidate invalidation;
+- persist-before-success saved-grid lifecycle with exact draft retention on failure;
 - compact saved-handwriting disclosure with complete Details owner;
 - product-control prototype paths;
 - supported desktop overflow ownership;
@@ -580,14 +582,14 @@ Remaining unknowns:
 - live runtime IME precedence across all surfaces;
 - runtime list/grid, spotlight editor, appearance tokens, state mapper, and command registry;
 - runtime 200% zoom and live resize behavior;
-- recognizer quality, source/data licensing, and latency;
+- native Windows pen behavior and machine-specific saved-grid latency outside the checked-in regression tripwires;
 - persisted note appearance and future lifecycle owners.
 
 Unknowns cannot be claimed as passed and receive no score.
 
 ## 21. Migration, rollback, and Stage 0 exit
 
-This PR adds one Markdown file. It has no runtime or data migration. Reverting its commit removes the baseline without touching dependencies, HTML, CSS, JavaScript, IndexedDB, search, scheduling, recognition, or user data.
+This PR adds one Markdown file. It has no runtime or data migration. Reverting its commit removes the baseline without touching dependencies, HTML, CSS, JavaScript, IndexedDB, search, scheduling, Kanji data, or user data.
 
 Figma has independent version history and is not reverted by Git. Future schema work must remain additive and preserve unknown newer fields.
 
@@ -637,4 +639,4 @@ These are deferred ownership boundaries, not failed #66 acceptance claims.
 
 Issue #66 supports the repository's automated Chromium desktop baseline at 1024×768, 1280×720, and 1440×900. A 200% zoom check is a smoke test only until #71 and #73 complete. Viewports below 1024 CSS pixels at 100% zoom, mobile/tablet/touch navigation, light theme, native wrappers, and untested browser/assistive-technology combinations remain unsupported or unknown.
 
-The shell adds no dependency, schema, migration, persistence, search-ranking, scheduling, recognizer, or user-data change. Rollback is one pull-request revert of the Issue #66 HTML/CSS/composition wiring, focused tests, and this section. Canonical notes, `studyReviews`, current IndexedDB schema, search/history/backlinks ownership, export, migration, and command behavior remain intact.
+The shell adds no dependency, schema, migration, persistence, search-ranking, scheduling, Kanji, or user-data change. Rollback is one pull-request revert of the Issue #66 HTML/CSS/composition wiring, focused tests, and this section. Canonical notes, `studyReviews`, current IndexedDB schema, search/history/backlinks ownership, export, migration, and command behavior remain intact.

@@ -81,12 +81,12 @@ If direct design context is unavailable, do not infer details from this document
 
 ### Kanji saved-grid (current authority)
 
-Issue #69 owns the accepted saved-grid direction. Runtime implementation uses node `43:343` for the accepted desktop dialog and node `120:313` for its accepted interaction/presentation specification.
+Issue #69 owns the accepted saved-grid direction. Node `43:343` owns the dialog hierarchy `Header → Toolbar → Canvas → Footer`. Node `120:313` owns only the repeated horizontal paper-rule specification; it is not broad interaction authority.
 
 | State | Node | Lifecycle |
 |---|---|---|
-| Saved-grid dialog | `43:343` | Accepted |
-| Saved-grid interaction specification | `120:313` | Accepted |
+| Saved-grid dialog hierarchy (`Header → Toolbar → Canvas → Footer`) | `43:343` | Accepted |
+| Repeated horizontal paper rules only | `120:313` | Accepted |
 
 Recognition, OCR, candidates, Unicode confirmation, and remote services are excluded from the V2 write path. The route records below are retained only as a superseded historical reference and are not implementation authority.
 
@@ -178,7 +178,7 @@ Retry Good | Choose another rating
 
 ### Kanji saved-grid integrity
 
-The recognition-era state machine below is superseded historical context. Current V2 implementation authority is issue #69 plus accepted nodes `43:343` and `120:313`.
+The recognition-era state machine below is superseded historical context. Current V2 behavior is owned by issue #69. Node `43:343` specifies the dialog hierarchy; node `120:313` specifies only the repeated horizontal paper rules.
 
 Current required presentation states:
 

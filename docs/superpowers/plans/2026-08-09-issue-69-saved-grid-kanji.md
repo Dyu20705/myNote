@@ -18,7 +18,7 @@
 - New V2 writes contain no recognized character, recognizer provenance, candidate data, vector/base64 Markdown, or parser metadata.
 - Exact bounds: 32 strokes, 256 points per stroke, 4,096 total points, 262,144 serialized bytes, 600,000 ms per stroke, 100 undo states, 64 rendered entries.
 - Exact V2 widths: Pen `0.008`; Marker `0.024`; paper style `grid`.
-- Accepted Figma implementation node: `43:343`; supported desktop checks: `1024x768`, `1280x720`, `1440x900`, and 200% browser zoom.
+- Accepted Figma implementation node `43:343` owns the dialog hierarchy; node `120:313` owns only the repeated horizontal paper rules. Automated desktop checks cover `1024x768`, `1280x720`, `1440x900`, plus equivalent responsive layout at a `720x450` CSS viewport. Native 200% browser zoom remains `UNKNOWN — REQUIRES VALIDATION` until recorded manual evidence exists.
 - One issue, one branch, one PR; maximum eight commits; no unrelated refactor.
 
 ---
@@ -243,7 +243,7 @@ Match the Figma hierarchy using existing CSS variables: bounded 900x594 dialog, 
 
 - [ ] **Step 5: Run browser GREEN and viewport checks**
 
-Run the command from Step 3, then run the same file at `1024x768`, `1280x720`, `1440x900`, and browser zoom 200% using the existing Playwright viewport helpers. Assert `document.documentElement.scrollWidth === document.documentElement.clientWidth` and logical focus return.
+Run the command from Step 3, then run the same file at `1024x768`, `1280x720`, and `1440x900` using the existing Playwright viewport helpers. Use a `720x450` CSS viewport only as equivalent responsive-layout evidence; it is not native browser-zoom testing. Assert `document.documentElement.scrollWidth === document.documentElement.clientWidth` and logical focus return. Keep native 200% browser zoom and OS display scaling `UNKNOWN — REQUIRES VALIDATION` until recorded manual evidence exists.
 
 - [ ] **Step 6: Commit UI and browser evidence**
 
