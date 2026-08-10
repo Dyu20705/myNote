@@ -10,6 +10,17 @@ const KANJI_RESOURCE_BUDGET = Object.freeze({
   previewWindowEntries: 64,
 });
 
+function recordResourceEvidence(testInfo, phase, measurement) {
+  const rawEvidence = {
+    phase,
+    chromiumProject: testInfo.project.name,
+    ...measurement,
+  };
+  const serialized = JSON.stringify(rawEvidence);
+  testInfo.annotations.push({ type: "kanji-resource-evidence", description: serialized });
+  console.info(`[kanji-resource-evidence] ${serialized}`);
+}
+
 async function expectNoHorizontalOverflow(page) {
   expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth === globalThis.document.documentElement.clientWidth)).toBe(true);
 }
@@ -140,6 +151,7 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
     });
   }, { sampleCount: KANJI_RESOURCE_BUDGET.codecSamples });
 
+  recordResourceEvidence(testInfo, "codec", { durationsMs: codecEvidence.durationsMs });
   expect(codecEvidence).toMatchObject({
     sampleCount: KANJI_RESOURCE_BUDGET.codecSamples,
     warmupOperations: 1,
@@ -196,6 +208,7 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
     }
     return { durationsMs: durations, loadCount: durations.length, maxDurationMs: Math.max(...durations) };
   });
+  recordResourceEvidence(testInfo, "context", { durationsMs: contextEvidence.durationsMs });
   expect(contextEvidence.loadCount).toBe(2);
   expect(contextEvidence.maxDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxNoteContextLoadMs);
   await expect(page.locator("#kanjiInkCount")).toHaveText("65 entries");
@@ -207,19 +220,9 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
     KANJI_RESOURCE_BUDGET.previewWindowEntries,
   );
   const previewDurationMs = Date.now() - previewStartedAt;
+  recordResourceEvidence(testInfo, "preview", { durationMs: previewDurationMs });
   expect(previewDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxPreviewWindowRenderMs);
   await expect(page.getByRole("button", { name: "Show older drawings" })).toBeVisible();
-  const rawEvidence = {
-    chromiumProject: testInfo.project.name,
-    codecDurationsMs: codecEvidence.durationsMs,
-    contextDurationsMs: contextEvidence.durationsMs,
-    previewDurationMs,
-  };
-  testInfo.annotations.push({
-    type: "kanji-resource-evidence",
-    description: JSON.stringify(rawEvidence),
-  });
-  console.info(`[kanji-resource-evidence] ${JSON.stringify(rawEvidence)}`);
 });
 
 test("capture fallback finishes outside releases and leaves no temporary document listeners", async ({ page }) => {
