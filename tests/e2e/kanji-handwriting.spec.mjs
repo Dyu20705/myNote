@@ -182,6 +182,56 @@ test("the stroke limit preserves recovery controls and a valid save", async ({ p
   expect(entries[0].strokes).toHaveLength(32);
 });
 
+test("total point capacity rejects a new stroke before silently dropping its gesture", async ({ page }) => {
+  await createNote(page, "Bounded points");
+  const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
+  await page.evaluate(async ({ noteId: id }) => {
+    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const database = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const strokes = Array.from({ length: 16 }, (_, strokeIndex) => ({
+      tool: "pen",
+      width: 0.008,
+      points: Array.from({ length: strokeIndex === 15 ? 255 : 256 }, (_, pointIndex) => ({
+        x: pointIndex / 255,
+        y: strokeIndex / 16,
+        t: pointIndex,
+      })),
+    }));
+    const transaction = database.transaction("kanjiInkEntries", "readwrite");
+    transaction.objectStore("kanjiInkEntries").put({
+      id: "near-total-point-limit",
+      noteId: id,
+      strokes,
+      paperStyle: "grid",
+      createdAt: "2026-08-10T00:00:00.000Z",
+      updatedAt: "2026-08-10T00:00:00.000Z",
+      schemaVersion: 2,
+    });
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  }, { noteId });
+
+  await page.reload();
+  await openDetails(page);
+  await page.getByRole("button", { name: "Edit Kanji drawing" }).click();
+  await drawStroke(page, [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }]);
+  await expect(page.locator("#kanjiInkStatus")).toHaveText("Drawing limit reached. Undo, erase, clear, or save to continue.");
+
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await drawStroke(page, [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }]);
+  await page.getByRole("button", { name: "Save drawing", exact: true }).click();
+  const entries = await storedEntries(page);
+  const saved = entries.find((entry) => entry.id === "near-total-point-limit");
+  expect(saved.strokes).toHaveLength(1);
+  expect(saved.strokes.reduce((total, stroke) => total + stroke.points.length, 0)).toBe(5);
+});
+
 test("Escape finalizes an active gesture before keeping and saving the draft", async ({ page }) => {
   await createNote(page, "Active gesture close");
   await openKanjiDialog(page);

@@ -265,8 +265,12 @@ function pointFromPointer(event, first = false) {
   };
 }
 
+function committedPointCount(snapshot) {
+  return snapshot.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
+}
+
 function totalPointCount(snapshot) {
-  return snapshot.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0) + (liveStroke?.points.length ?? 0);
+  return committedPointCount(snapshot) + (liveStroke?.points.length ?? 0);
 }
 
 function appendPointerPoint(event) {
@@ -317,7 +321,10 @@ function beginPointerStroke(event) {
   if (!controller || activePointerId !== null || event.button !== 0 || controller.snapshot().status === "saving") return;
   event.preventDefault();
   const snapshot = controller.snapshot();
-  if (["pen", "marker"].includes(snapshot.tool) && snapshot.strokes.length >= KANJI_INK_LIMITS.maxStrokes) {
+  if (["pen", "marker"].includes(snapshot.tool) && (
+    snapshot.strokes.length >= KANJI_INK_LIMITS.maxStrokes
+    || committedPointCount(snapshot) >= KANJI_INK_LIMITS.maxTotalPoints - 1
+  )) {
     showPointerLimit();
     renderController();
     return;
