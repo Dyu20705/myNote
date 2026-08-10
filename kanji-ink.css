@@ -212,6 +212,10 @@
   gap: 8px;
 }
 
+.kanji-ink-load-more {
+  justify-self: start;
+}
+
 .kanji-ink-recovery {
   gap: 12px;
   padding: 12px;

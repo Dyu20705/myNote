@@ -73,6 +73,12 @@ function createSupplementaryRegion() {
   const entries = document.createElement("div");
   entries.id = "kanjiInkEntries";
   entries.className = "kanji-ink-entries";
+  const loadMore = document.createElement("button");
+  loadMore.id = "showOlderKanjiEntriesButton";
+  loadMore.type = "button";
+  loadMore.className = "secondary-button kanji-ink-load-more";
+  loadMore.textContent = "Show older drawings";
+  loadMore.hidden = true;
   const status = document.createElement("p");
   status.id = "kanjiInkRegionStatus";
   status.className = "hint";
@@ -91,8 +97,8 @@ function createSupplementaryRegion() {
   undo.setAttribute("aria-label", "Undo handwriting deletion");
   undo.textContent = "Undo delete";
   recovery.append(recoveryText, undo);
-  region.append(header, entries, status, recovery);
-  return { region, count, entries, status, recovery, undo };
+  region.append(header, entries, loadMore, status, recovery);
+  return { region, count, entries, loadMore, status, recovery, undo };
 }
 
 ensureStylesheet();
@@ -132,6 +138,9 @@ let pointerLimitMessage = "";
 let lastDeletedEntry = null;
 let syncSequence = 0;
 let syncScheduled = false;
+let visibleEntryNoteId = null;
+let visibleEntryCount = MAX_RENDERED_ENTRIES;
+let pendingEntryFocus = null;
 
 function activeNoteButton() {
   return document.querySelector(".note-item[aria-current='true']");
@@ -448,6 +457,39 @@ function detachSupplementaryRegion() {
   supplementaryContainer.hidden = supplementaryHost.querySelector("[data-supplementary-entity]") === null;
 }
 
+function newestFirstEntries(entries) {
+  return [...entries].sort((left, right) => (
+    right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id)
+  ));
+}
+
+function visibleEntriesForNote(noteId, entries) {
+  if (visibleEntryNoteId !== noteId) {
+    visibleEntryNoteId = noteId;
+    visibleEntryCount = MAX_RENDERED_ENTRIES;
+    pendingEntryFocus = null;
+  } else {
+    visibleEntryCount = Math.max(visibleEntryCount, Math.min(entries.length, MAX_RENDERED_ENTRIES));
+  }
+  return entries.slice(0, visibleEntryCount);
+}
+
+function restoreEntryFocus(noteId) {
+  if (!pendingEntryFocus) return;
+  const focus = pendingEntryFocus;
+  pendingEntryFocus = null;
+  if (focus.noteId !== noteId) return;
+  if (focus.target === "load-more" && !supplementary.loadMore.hidden) {
+    supplementary.loadMore.focus();
+    return;
+  }
+  const card = focus.target === "load-more"
+    ? supplementary.entries.lastElementChild
+    : [...supplementary.entries.children].find((candidate) => candidate.dataset.kanjiEntryId === focus.target);
+  const control = card?.querySelector('button[aria-label="Edit Kanji drawing"], button[aria-label^="Delete handwriting"], button[aria-label="Delete Kanji drawing"]');
+  if (control instanceof HTMLElement) control.focus();
+}
+
 function makeEntryCard(entry) {
   const legacy = entry.schemaVersion === 1;
   const label = legacy ? entry.character : "Kanji drawing";
@@ -498,20 +540,28 @@ function makeEntryCard(entry) {
 async function synchronizeActiveNote() {
   const sequence = ++syncSequence;
   const noteId = activeNoteId();
-  if (!noteId) return detachSupplementaryRegion();
+  if (!noteId) {
+    visibleEntryNoteId = null;
+    visibleEntryCount = MAX_RENDERED_ENTRIES;
+    return detachSupplementaryRegion();
+  }
   const result = await kanjiInkApplication.loadNoteContext(noteId);
   if (sequence !== syncSequence || noteId !== activeNoteId()) return;
   const hasRecovery = lastDeletedEntry?.noteId === noteId;
   if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) return detachSupplementaryRegion();
   if (!supplementary.region.isConnected) supplementaryHost.append(supplementary.region);
   supplementaryContainer.hidden = false;
-  supplementary.entries.replaceChildren(...result.entries.slice(0, MAX_RENDERED_ENTRIES).map(makeEntryCard));
+  const sortedEntries = newestFirstEntries(result.entries);
+  const visibleEntries = visibleEntriesForNote(noteId, sortedEntries);
+  supplementary.entries.replaceChildren(...visibleEntries.map(makeEntryCard));
   supplementary.count.textContent = `${result.entries.length} entr${result.entries.length === 1 ? "y" : "ies"}`;
   const messages = [];
-  if (result.entries.length > MAX_RENDERED_ENTRIES) messages.push(`Showing the first ${MAX_RENDERED_ENTRIES} entries.`);
+  supplementary.loadMore.hidden = visibleEntries.length >= sortedEntries.length;
+  if (!supplementary.loadMore.hidden) messages.push(`Showing newest ${visibleEntries.length} of ${sortedEntries.length} entries.`);
   if (result.invalidCount > 0) messages.push(`${result.invalidCount} invalid stored entr${result.invalidCount === 1 ? "y was" : "ies were"} isolated.`);
   supplementary.status.textContent = messages.join(" ");
   supplementary.recovery.hidden = !hasRecovery;
+  restoreEntryFocus(noteId);
 }
 
 function scheduleSynchronization() {
@@ -524,6 +574,12 @@ supplementary.undo.addEventListener("click", async () => {
   if (!lastDeletedEntry) return;
   await kanjiInkApplication.restoreEntry(lastDeletedEntry);
   lastDeletedEntry = null;
+  await synchronizeActiveNote();
+});
+
+supplementary.loadMore.addEventListener("click", async () => {
+  visibleEntryCount += MAX_RENDERED_ENTRIES;
+  pendingEntryFocus = { noteId: activeNoteId(), target: "load-more" };
   await synchronizeActiveNote();
 });
 
