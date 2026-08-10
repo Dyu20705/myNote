@@ -221,9 +221,13 @@ test("SVG export derives bounded paths without embedding executable markup", () 
   assert.equal(svg.includes("onload="), false);
 });
 
-test("V2 SVG renders its grid and persisted tool widths", () => {
+test("V2 SVG renders repeated horizontal rules and persisted tool widths", () => {
   const svg = renderKanjiEntrySvg(makeCanvasEntry(), { size: 160 });
   assert.match(svg, /data-paper-style="grid"/);
+  assert.equal((svg.match(/data-paper-rule=/g) || []).length, 7);
+  assert.match(svg, /x1="0" y1="20" x2="160" y2="20"/);
+  assert.match(svg, /x1="0" y1="140" x2="160" y2="140"/);
+  assert.doesNotMatch(svg, /<pattern|kanji-grid|x1="80" y1="0" x2="80" y2="160"/);
   assert.match(svg, /data-tool="pen"/);
   assert.match(svg, /data-tool="marker"/);
   assert.match(svg, /stroke-width="1\.28"/);

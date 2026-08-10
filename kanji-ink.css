@@ -18,15 +18,16 @@
 
 .kanji-ink-shell {
   box-sizing: border-box;
+  position: relative;
   display: grid;
-  grid-template-rows: 36px minmax(0, 430px) 40px minmax(0, auto);
-  gap: 12px;
+  grid-template-rows: 36px 36px minmax(0, 430px) 40px;
+  gap: 4px;
   height: 100%;
   padding: 16px 19px;
 }
 
 .kanji-ink-header,
-.kanji-ink-bottom-row,
+.kanji-ink-footer,
 .kanji-ink-toolbar,
 .kanji-entry-header,
 .kanji-entry-actions,
@@ -36,7 +37,7 @@
 }
 
 .kanji-ink-header,
-.kanji-ink-bottom-row,
+.kanji-ink-footer,
 .kanji-entry-header,
 .kanji-ink-recovery {
   justify-content: space-between;
@@ -77,6 +78,10 @@
 
 .kanji-ink-toolbar {
   gap: 6px;
+}
+
+.kanji-ink-footer {
+  justify-content: flex-end;
 }
 
 .kanji-toolbar-divider {
@@ -148,8 +153,12 @@
 }
 
 .kanji-ink-status {
+  position: absolute;
+  right: 68px;
+  bottom: 11px;
+  left: 19px;
   min-height: 18px;
-  margin: -6px 0 0;
+  margin: 0;
   color: #aab4c2;
   font-size: 12px;
   line-height: 18px;

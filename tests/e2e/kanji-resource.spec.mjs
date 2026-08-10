@@ -8,6 +8,17 @@ async function openAndClose(page) {
   await page.locator("#noteActionsButton").click();
   await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
   await expect(page.locator("#kanjiInkDialog")).toBeVisible();
+  expect(await page.locator(".kanji-ink-shell").evaluate((shell) => (
+    [...shell.children].slice(0, 5).map((child) => child.className)
+  ))).toEqual([
+    "kanji-ink-header",
+    "kanji-ink-toolbar",
+    "kanji-canvas-frame",
+    "kanji-ink-footer",
+    "kanji-ink-status",
+  ]);
+  await expect(page.locator("#kanjiInkCanvas")).toHaveAttribute("data-paper-pattern", "ruled-horizontal");
+  await expect(page.locator("#kanjiInkCanvas")).toHaveAttribute("data-paper-rule-count", "7");
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("#kanjiInkDialog")).not.toBeVisible();

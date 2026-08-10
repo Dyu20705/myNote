@@ -164,6 +164,8 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   });
 
   await openKanjiDialog(page);
+  await expect(page.locator("#kanjiInkCanvas")).toHaveAttribute("data-paper-pattern", "ruled-horizontal");
+  await expect(page.locator("#kanjiInkCanvas")).toHaveAttribute("data-paper-rule-count", "7");
   await expect(page.locator("#recognizeKanjiButton, #kanjiCandidateList, #kanjiSelectedCharacter")).toHaveCount(0);
   const controls = ["Close", "Pen", "Marker", "Eraser", "Undo", "Redo", "Clear", "Save drawing"];
   for (const name of controls) {
@@ -195,6 +197,8 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   await expect(page.locator("#kanjiInkDialog")).not.toBeVisible();
   await openDetails(page);
   await expect(page.getByText("Kanji drawing", { exact: true })).toBeVisible();
+  await expect(page.locator(".kanji-entry-preview")).toHaveAttribute("data-paper-pattern", "ruled-horizontal");
+  await expect(page.locator(".kanji-entry-preview")).toHaveAttribute("data-paper-rule-count", "7");
 
   const first = await storedEntries(page);
   expect(first).toHaveLength(1);

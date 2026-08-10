@@ -5,6 +5,7 @@ import {
   validateKanjiInkEntry,
 } from "./kanjiInkEntry.js";
 import { normalizeNote } from "./model.js";
+import { KANJI_PAPER_PATTERN, createKanjiPaperGeometry } from "./kanjiPaper.js";
 
 const MAX_PROJECTED_ENTRIES = 128;
 const MAX_EXPORT_NOTES = 50_000;
@@ -271,9 +272,9 @@ export function renderKanjiEntrySvg(entry, options = {}) {
     ? Math.max(64, Math.min(1024, Math.round(options.size)))
     : 160;
   const isCanvas = safeEntry.schemaVersion === 2;
-  const gridSize = coordinate(0.125, size);
+  const paper = createKanjiPaperGeometry(size, size);
   const background = isCanvas
-    ? `<defs><pattern id="kanji-grid" width="${gridSize}" height="${gridSize}" patternUnits="userSpaceOnUse"><path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="#d1d5db" stroke-width="1" /></pattern></defs><rect data-paper-style="grid" width="${size}" height="${size}" fill="url(#kanji-grid)" />`
+    ? `<rect data-paper-style="grid" data-paper-pattern="${KANJI_PAPER_PATTERN.semanticName}" width="${size}" height="${size}" fill="${KANJI_PAPER_PATTERN.backgroundColor}" />${paper.rules.map((rule, index) => `<line data-paper-rule="${index + 1}" x1="${rule.x1}" y1="${rule.y1}" x2="${rule.x2}" y2="${rule.y2}" stroke="${KANJI_PAPER_PATTERN.ruleColor}" stroke-width="${KANJI_PAPER_PATTERN.ruleWidth}" />`).join("")}`
     : `<rect width="${size}" height="${size}" fill="white" />`;
   const paths = isCanvas
     ? safeEntry.strokes.map((stroke) => `<path data-tool="${stroke.tool}" d="${pathForPoints(stroke.points, size)}" fill="none" stroke="currentColor" stroke-width="${coordinate(stroke.width, size)}" stroke-linecap="round" stroke-linejoin="round" />`).join("")

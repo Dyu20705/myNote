@@ -1,6 +1,7 @@
 import { commandRuntime } from "../app.js";
 import { kanjiInkApplication } from "../core/kanjiInkApplication.js";
 import { KANJI_INK_LIMITS, KANJI_INK_WIDTHS } from "../core/kanjiInkEntry.js";
+import { KANJI_PAPER_PATTERN, createKanjiPaperGeometry } from "../core/kanjiPaper.js";
 
 const MAX_RENDERED_ENTRIES = 64;
 const MIN_POINT_DISTANCE = 0.002;
@@ -30,21 +31,21 @@ function createDialog() {
         <h2 id="kanjiInkDialogTitle">Draw Kanji</h2>
         ${iconButton("closeKanjiDialogButton", "Close", "kanji-close.svg")}
       </header>
+      <div class="kanji-ink-toolbar" role="toolbar" aria-label="Drawing tools">
+        ${iconButton("kanjiPenButton", "Pen", "kanji-pen.svg", "kanji-icon-button kanji-tool-button")}
+        ${iconButton("kanjiMarkerButton", "Marker", "kanji-marker.svg", "kanji-icon-button kanji-tool-button")}
+        ${iconButton("kanjiEraserButton", "Eraser", "kanji-eraser.svg", "kanji-icon-button kanji-tool-button")}
+        <span class="kanji-toolbar-divider" aria-hidden="true"></span>
+        ${iconButton("undoKanjiStrokeButton", "Undo", "kanji-undo.svg")}
+        ${iconButton("redoKanjiStrokeButton", "Redo", "kanji-redo.svg")}
+        ${iconButton("clearKanjiButton", "Clear", "kanji-clear.svg")}
+      </div>
       <div class="kanji-canvas-frame">
-        <canvas id="kanjiInkCanvas" tabindex="0" aria-label="Kanji drawing canvas"></canvas>
+        <canvas id="kanjiInkCanvas" tabindex="0" aria-label="Kanji drawing canvas" data-paper-pattern="${KANJI_PAPER_PATTERN.semanticName}" data-paper-rule-count="${KANJI_PAPER_PATTERN.ruleCount}"></canvas>
       </div>
-      <div class="kanji-ink-bottom-row">
-        <div class="kanji-ink-toolbar" role="toolbar" aria-label="Drawing tools">
-          ${iconButton("kanjiPenButton", "Pen", "kanji-pen.svg", "kanji-icon-button kanji-tool-button")}
-          ${iconButton("kanjiMarkerButton", "Marker", "kanji-marker.svg", "kanji-icon-button kanji-tool-button")}
-          ${iconButton("kanjiEraserButton", "Eraser", "kanji-eraser.svg", "kanji-icon-button kanji-tool-button")}
-          <span class="kanji-toolbar-divider" aria-hidden="true"></span>
-          ${iconButton("undoKanjiStrokeButton", "Undo", "kanji-undo.svg")}
-          ${iconButton("redoKanjiStrokeButton", "Redo", "kanji-redo.svg")}
-          ${iconButton("clearKanjiButton", "Clear", "kanji-clear.svg")}
-        </div>
+      <footer class="kanji-ink-footer">
         ${iconButton("saveKanjiButton", "Save drawing", "kanji-save.svg", "kanji-icon-button kanji-save-button")}
-      </div>
+      </footer>
       <p id="kanjiInkStatus" class="kanji-ink-status" role="status" aria-live="polite"></p>
       <section id="kanjiDiscardConfirmation" class="kanji-discard-confirmation" aria-label="Discard handwriting draft" hidden>
         <strong>Discard this unsaved drawing?</strong>
@@ -178,20 +179,19 @@ function configureCanvas(canvas = elements.canvas) {
   return { context, width, height };
 }
 
-function drawGrid(context, width, height) {
-  context.fillStyle = "#11151b";
+function drawPaper(context, width, height) {
+  const paper = createKanjiPaperGeometry(width, height);
+  context.fillStyle = KANJI_PAPER_PATTERN.backgroundColor;
   context.fillRect(0, 0, width, height);
   context.save();
-  context.strokeStyle = "#4b5563";
-  context.lineWidth = 1;
-  context.setLineDash([5, 5]);
+  context.strokeStyle = KANJI_PAPER_PATTERN.ruleColor;
+  context.lineWidth = KANJI_PAPER_PATTERN.ruleWidth;
   context.beginPath();
-  context.moveTo(width / 2, 0);
-  context.lineTo(width / 2, height);
-  context.moveTo(0, height / 2);
-  context.lineTo(width, height / 2);
+  for (const rule of paper.rules) {
+    context.moveTo(rule.x1, rule.y1);
+    context.lineTo(rule.x2, rule.y2);
+  }
   context.stroke();
-  context.setLineDash([]);
   context.restore();
 }
 
@@ -221,7 +221,7 @@ function drawStrokes(context, strokes, width, height) {
 
 function renderCanvas() {
   const { context, width, height } = configureCanvas();
-  drawGrid(context, width, height);
+  drawPaper(context, width, height);
   drawStrokes(context, controller?.snapshot().strokes || [], width, height);
   if (liveStroke?.points.length > 1 && liveStroke.tool !== "eraser") {
     drawStrokes(context, [liveStroke], width, height);
@@ -230,7 +230,7 @@ function renderCanvas() {
 
 function drawEntryPreview(canvas, entry) {
   const { context, width, height } = configureCanvas(canvas);
-  drawGrid(context, width, height);
+  drawPaper(context, width, height);
   drawStrokes(context, entry.strokes, width, height);
 }
 
@@ -499,6 +499,8 @@ function makeEntryCard(entry) {
   card.dataset.kanjiSchemaVersion = String(entry.schemaVersion);
   const preview = document.createElement("canvas");
   preview.className = "kanji-entry-preview";
+  preview.dataset.paperPattern = KANJI_PAPER_PATTERN.semanticName;
+  preview.dataset.paperRuleCount = String(KANJI_PAPER_PATTERN.ruleCount);
   preview.setAttribute("role", "img");
   preview.setAttribute("aria-label", legacy ? `Handwriting sample for ${entry.character}` : "Kanji drawing preview");
   const copy = document.createElement("div");
