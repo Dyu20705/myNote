@@ -18,6 +18,7 @@ const rootAssets = new Set([
   "/index.html",
   "/japanese.css",
   "/japaneseApp.js",
+  "/kanji-ink.css",
   "/styles.css",
 ]);
 const mimeTypes = {

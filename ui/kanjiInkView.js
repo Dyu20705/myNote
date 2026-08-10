@@ -1,7 +1,11 @@
 import { commandRuntime } from "../app.js";
 import { kanjiInkApplication } from "../core/kanjiInkApplication.js";
 import { KANJI_INK_LIMITS, KANJI_INK_WIDTHS } from "../core/kanjiInkEntry.js";
-import { KANJI_PAPER_PATTERN, createKanjiPaperGeometry } from "../core/kanjiPaper.js";
+import {
+  KANJI_LEGACY_PAPER_PATTERN,
+  KANJI_PAPER_PATTERN,
+  createKanjiPaperGeometry,
+} from "../core/kanjiPaper.js";
 
 const MAX_RENDERED_ENTRIES = 64;
 const MIN_POINT_DISTANCE = 0.002;
@@ -13,6 +17,10 @@ function ensureStylesheet() {
   link.rel = "stylesheet";
   link.href = new URL("../kanji-ink.css", import.meta.url).href;
   link.dataset.kanjiInkStyles = "true";
+  link.addEventListener("load", () => {
+    if (dialog.open) renderCanvas();
+    scheduleSynchronization();
+  }, { once: true });
   document.head.append(link);
 }
 
@@ -142,6 +150,7 @@ let syncScheduled = false;
 let visibleEntryNoteId = null;
 let visibleEntryCount = MAX_RENDERED_ENTRIES;
 let pendingEntryFocus = null;
+const previewLayoutObservers = new WeakMap();
 
 function activeNoteButton() {
   return document.querySelector(".note-item[aria-current='true']");
@@ -201,12 +210,12 @@ function normalizedStroke(stroke) {
     : stroke;
 }
 
-function drawStrokes(context, strokes, width, height) {
+function drawStrokes(context, strokes, width, height, inkColor = KANJI_PAPER_PATTERN.inkColor) {
   for (const input of strokes) {
     const stroke = normalizedStroke(input);
     if (!stroke?.points || stroke.points.length < 2) continue;
     context.save();
-    context.strokeStyle = "#e7edf5";
+    context.strokeStyle = inkColor;
     context.globalAlpha = stroke.tool === "marker" ? 0.42 : 0.96;
     context.lineWidth = Math.max(1, stroke.width * Math.min(width, height));
     context.lineCap = "round";
@@ -229,9 +238,36 @@ function renderCanvas() {
 }
 
 function drawEntryPreview(canvas, entry) {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width < 2 || rect.height < 2) {
+    if (previewLayoutObservers.has(canvas)) return;
+    const observer = new globalThis.ResizeObserver(() => {
+      if (!canvas.isConnected) {
+        observer.disconnect();
+        previewLayoutObservers.delete(canvas);
+        return;
+      }
+      const nextRect = canvas.getBoundingClientRect();
+      if (nextRect.width < 2 || nextRect.height < 2) return;
+      observer.disconnect();
+      previewLayoutObservers.delete(canvas);
+      drawEntryPreview(canvas, entry);
+    });
+    previewLayoutObservers.set(canvas, observer);
+    observer.observe(canvas);
+    return;
+  }
   const { context, width, height } = configureCanvas(canvas);
-  drawPaper(context, width, height);
-  drawStrokes(context, entry.strokes, width, height);
+  if (entry.schemaVersion === 2) {
+    drawPaper(context, width, height);
+    drawStrokes(context, entry.strokes, width, height);
+    canvas.dataset.paperRendered = "true";
+    return;
+  }
+  context.fillStyle = KANJI_LEGACY_PAPER_PATTERN.backgroundColor;
+  context.fillRect(0, 0, width, height);
+  drawStrokes(context, entry.strokes, width, height, KANJI_LEGACY_PAPER_PATTERN.inkColor);
+  canvas.dataset.paperRendered = "true";
 }
 
 function statusText(snapshot) {
@@ -499,8 +535,10 @@ function makeEntryCard(entry) {
   card.dataset.kanjiSchemaVersion = String(entry.schemaVersion);
   const preview = document.createElement("canvas");
   preview.className = "kanji-entry-preview";
-  preview.dataset.paperPattern = KANJI_PAPER_PATTERN.semanticName;
-  preview.dataset.paperRuleCount = String(KANJI_PAPER_PATTERN.ruleCount);
+  if (!legacy) {
+    preview.dataset.paperPattern = KANJI_PAPER_PATTERN.semanticName;
+    preview.dataset.paperRuleCount = String(KANJI_PAPER_PATTERN.ruleCount);
+  }
   preview.setAttribute("role", "img");
   preview.setAttribute("aria-label", legacy ? `Handwriting sample for ${entry.character}` : "Kanji drawing preview");
   const copy = document.createElement("div");

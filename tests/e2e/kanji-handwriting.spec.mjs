@@ -448,6 +448,14 @@ test("legacy V1 cards remain read-only and losslessly exportable", async ({ page
   const legacy = page.locator('[data-kanji-schema-version="1"]');
   await expect(legacy).toContainText("人");
   await expect(legacy).toContainText("read only");
+  const legacyPreview = legacy.locator(".kanji-entry-preview");
+  await expect(legacyPreview).not.toHaveAttribute("data-paper-pattern", "ruled-horizontal");
+  await expect(legacyPreview).not.toHaveAttribute("data-paper-rule-count", "7");
+  await expect(legacyPreview).toHaveAttribute("data-paper-rendered", "true");
+  expect(await legacyPreview.evaluate((canvas) => {
+    const context = canvas.getContext("2d");
+    return Array.from(context.getImageData(2, 2, 1, 1).data);
+  })).toEqual([255, 255, 255, 255]);
   await expect(legacy.getByRole("button", { name: /Edit/ })).toHaveCount(0);
   const downloadPromise = page.waitForEvent("download");
   await runCommand(page, "Export Kanji data as JSON");

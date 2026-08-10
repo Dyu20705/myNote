@@ -277,7 +277,7 @@ export function renderKanjiEntrySvg(entry, options = {}) {
     ? `<rect data-paper-style="grid" data-paper-pattern="${KANJI_PAPER_PATTERN.semanticName}" width="${size}" height="${size}" fill="${KANJI_PAPER_PATTERN.backgroundColor}" />${paper.rules.map((rule, index) => `<line data-paper-rule="${index + 1}" x1="${rule.x1}" y1="${rule.y1}" x2="${rule.x2}" y2="${rule.y2}" stroke="${KANJI_PAPER_PATTERN.ruleColor}" stroke-width="${KANJI_PAPER_PATTERN.ruleWidth}" />`).join("")}`
     : `<rect width="${size}" height="${size}" fill="white" />`;
   const paths = isCanvas
-    ? safeEntry.strokes.map((stroke) => `<path data-tool="${stroke.tool}" d="${pathForPoints(stroke.points, size)}" fill="none" stroke="currentColor" stroke-width="${coordinate(stroke.width, size)}" stroke-linecap="round" stroke-linejoin="round" />`).join("")
+    ? safeEntry.strokes.map((stroke) => `<path data-tool="${stroke.tool}" d="${pathForPoints(stroke.points, size)}" fill="none" stroke="${KANJI_PAPER_PATTERN.inkColor}" stroke-width="${coordinate(stroke.width, size)}" stroke-linecap="round" stroke-linejoin="round" />`).join("")
     : safeEntry.strokes.map((stroke) => `<path d="${pathForPoints(stroke, size)}" fill="none" stroke="currentColor" stroke-width="${Math.max(2, Math.round(size / 32))}" stroke-linecap="round" stroke-linejoin="round" />`).join("");
   const label = isCanvas ? "Kanji drawing" : `Handwriting sample for ${safeEntry.character}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${label}">${background}${paths}</svg>`;

@@ -7,9 +7,15 @@ export const KANJI_PAPER_PATTERN = Object.freeze({
   orientation: "horizontal",
   backgroundColor: "#0a0b0d",
   ruleColor: "#313743",
+  inkColor: "#f4f6f8",
   ruleWidth: 1,
   ruleCount: RULE_DIVISIONS - 1,
   spacingRatio: 1 / RULE_DIVISIONS,
+});
+
+export const KANJI_LEGACY_PAPER_PATTERN = Object.freeze({
+  backgroundColor: "#ffffff",
+  inkColor: "#111827",
 });
 
 function boundedDimension(value) {

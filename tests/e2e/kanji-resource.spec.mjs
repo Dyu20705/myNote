@@ -8,6 +8,7 @@ async function openAndClose(page) {
   await page.locator("#noteActionsButton").click();
   await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
   await expect(page.locator("#kanjiInkDialog")).toBeVisible();
+  await page.waitForFunction(() => globalThis.document.querySelector('link[data-kanji-ink-styles="true"]')?.sheet?.cssRules.length > 0);
   expect(await page.locator(".kanji-ink-shell").evaluate((shell) => (
     [...shell.children].slice(0, 5).map((child) => child.className)
   ))).toEqual([
@@ -46,7 +47,32 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
   await page.keyboard.press("Escape");
   // A 1440×900 desktop at 200% browser zoom exposes a 720×450 CSS viewport.
   await page.setViewportSize({ width: 720, height: 450 });
-  await openAndClose(page);
+  await page.locator("#noteActionsButton").click();
+  await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
+  await page.waitForFunction(() => globalThis.document.querySelector('link[data-kanji-ink-styles="true"]')?.sheet?.cssRules.length > 0);
+  const dialogBox = await page.locator("#kanjiInkDialog").boundingBox();
+  const canvasBox = await page.locator("#kanjiInkCanvas").boundingBox();
+  const toolbarBox = await page.getByRole("toolbar", { name: "Drawing tools" }).boundingBox();
+  const footerBox = await page.locator(".kanji-ink-footer").boundingBox();
+  for (const box of [dialogBox, canvasBox, toolbarBox, footerBox]) expect(box).not.toBeNull();
+  expect(canvasBox.width / canvasBox.height).toBeCloseTo(2, 2);
+  expect(canvasBox.y).toBeGreaterThanOrEqual(dialogBox.y);
+  expect(canvasBox.y + canvasBox.height).toBeLessThanOrEqual(dialogBox.y + dialogBox.height);
+  expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(dialogBox.y + dialogBox.height);
+  const responsiveMetrics = await page.locator("#kanjiInkDialog").evaluate((dialog) => {
+    const shell = dialog.querySelector(".kanji-ink-shell");
+    return {
+      dialog: { clientHeight: dialog.clientHeight, scrollHeight: dialog.scrollHeight },
+      shell: { clientHeight: shell.clientHeight, scrollHeight: shell.scrollHeight },
+    };
+  });
+  expect(responsiveMetrics.dialog.scrollHeight).toBe(responsiveMetrics.dialog.clientHeight);
+  expect(responsiveMetrics.shell.scrollHeight).toBe(responsiveMetrics.shell.clientHeight);
+  await expect(page.getByRole("toolbar", { name: "Drawing tools" })).toBeInViewport();
+  await expect(page.locator(".kanji-ink-footer")).toBeInViewport();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.locator("#noteActionsButton")).toBeFocused();
 });
 
 test("capture fallback finishes outside releases and leaves no temporary document listeners", async ({ page }) => {

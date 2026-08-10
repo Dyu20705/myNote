@@ -177,6 +177,7 @@ test("static server enforces its application-only security contract", async () =
       "/japanese.css",
       "/command.css",
       "/editor.css",
+      "/kanji-ink.css",
     ]) {
       const response = await request(stylesheet);
       assert.equal(response.statusCode, 200, `${stylesheet} must be served`);

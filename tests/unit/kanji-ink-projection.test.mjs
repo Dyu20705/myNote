@@ -230,6 +230,9 @@ test("V2 SVG renders repeated horizontal rules and persisted tool widths", () =>
   assert.doesNotMatch(svg, /<pattern|kanji-grid|x1="80" y1="0" x2="80" y2="160"/);
   assert.match(svg, /data-tool="pen"/);
   assert.match(svg, /data-tool="marker"/);
+  assert.match(svg, /data-tool="pen"[^>]*stroke="#f4f6f8"/);
+  assert.match(svg, /data-tool="marker"[^>]*stroke="#f4f6f8"/);
+  assert.doesNotMatch(svg, /stroke="currentColor"/);
   assert.match(svg, /stroke-width="1\.28"/);
   assert.match(svg, /stroke-width="3\.84"/);
   assert.match(svg, /data-tool="pen" d="M 16 32 L 32 48"/);
