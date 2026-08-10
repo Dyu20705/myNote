@@ -121,3 +121,127 @@ test("capture fallback finishes outside releases and leaves no temporary documen
 
   expect(await page.evaluate(() => globalThis.kanjiPointerFallbackCounts)).toEqual({ added: 8, removed: 8 });
 });
+
+test("preview layout observer ownership stays bounded across hidden synchronization and teardown", async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeResizeObserver = globalThis.ResizeObserver;
+    const counts = {
+      created: 0, observed: 0, unobserved: 0, disconnected: 0,
+      activeObservers: 0, activeTargets: 0,
+    };
+    globalThis.kanjiPreviewObserverCounts = counts;
+    globalThis.ResizeObserver = class InstrumentedResizeObserver {
+      constructor(callback) {
+        this.targets = new Set();
+        this.active = true;
+        this.native = new NativeResizeObserver((entries) => callback(entries, this));
+        counts.created += 1;
+        counts.activeObservers += 1;
+      }
+
+      observe(target) {
+        if (!this.targets.has(target)) {
+          this.targets.add(target);
+          counts.observed += 1;
+          counts.activeTargets += 1;
+        }
+        this.native.observe(target);
+      }
+
+      unobserve(target) {
+        if (this.targets.delete(target)) {
+          counts.unobserved += 1;
+          counts.activeTargets -= 1;
+        }
+        this.native.unobserve(target);
+      }
+
+      disconnect() {
+        counts.disconnected += 1;
+        counts.activeTargets -= this.targets.size;
+        this.targets.clear();
+        if (this.active) {
+          this.active = false;
+          counts.activeObservers -= 1;
+        }
+        this.native.disconnect();
+      }
+    };
+  });
+
+  await page.goto("/");
+  await page.locator("#titleInput").fill("Observer lifecycle");
+  await page.locator("#contentInput").fill("Hidden inspector observer regression.");
+  await page.locator("#contentInput").press("Control+Enter");
+  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
+  await page.evaluate(async ({ noteId: id }) => {
+    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const database = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction("kanjiInkEntries", "readwrite");
+    for (let index = 0; index < 4; index += 1) {
+      transaction.objectStore("kanjiInkEntries").put({
+        id: `observer-entry-${index}`,
+        noteId: id,
+        strokes: [{ tool: "pen", width: 0.008, points: [{ x: 0.2, y: 0.2, t: 0 }, { x: 0.8, y: 0.8, t: 1 }] }],
+        paperStyle: "grid",
+        createdAt: `2026-08-10T00:00:0${index}.000Z`,
+        updatedAt: `2026-08-10T00:00:0${index}.000Z`,
+        schemaVersion: 2,
+      });
+    }
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  }, { noteId });
+
+  await page.reload();
+  await expect(page.locator("#noteInspector")).toBeHidden();
+  await expect(page.locator("#kanjiInkCount")).toHaveText("4 entries");
+  const hiddenSnapshots = await page.evaluate(async () => {
+    const { kanjiInkApp } = await import("/ui/kanjiInkView.js");
+    const snapshots = [];
+    for (let iteration = 0; iteration < 6; iteration += 1) {
+      await kanjiInkApp.synchronize();
+      snapshots.push({ ...globalThis.kanjiPreviewObserverCounts });
+    }
+    return snapshots;
+  });
+  expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.activeObservers))).toBeLessThanOrEqual(1);
+  expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.activeTargets))).toBeLessThanOrEqual(4);
+
+  await page.locator("#detailsButton").click();
+  await expect(page.locator(".kanji-entry-preview[data-paper-rendered='true']")).toHaveCount(4);
+  await expect.poll(() => page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBe(0);
+  await page.locator("#detailsButton").click();
+  await page.evaluate(async () => (await import("/ui/kanjiInkView.js")).kanjiInkApp.synchronize());
+  expect(await page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBeLessThanOrEqual(4);
+
+  await page.evaluate(async () => {
+    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const database = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction("kanjiInkEntries", "readwrite");
+    transaction.objectStore("kanjiInkEntries").clear();
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+    await (await import("/ui/kanjiInkView.js")).kanjiInkApp.synchronize();
+  });
+  expect(await page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBe(0);
+
+  await page.evaluate(async () => (await import("/ui/kanjiInkView.js")).kanjiInkApp.destroy());
+  expect(await page.evaluate(() => ({
+    observers: globalThis.kanjiPreviewObserverCounts.activeObservers,
+    targets: globalThis.kanjiPreviewObserverCounts.activeTargets,
+  }))).toEqual({ observers: 0, targets: 0 });
+});

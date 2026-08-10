@@ -150,7 +150,35 @@ let syncScheduled = false;
 let visibleEntryNoteId = null;
 let visibleEntryCount = MAX_RENDERED_ENTRIES;
 let pendingEntryFocus = null;
-const previewLayoutObservers = new WeakMap();
+const previewLayoutTargets = new Map();
+let previewLayoutObserver = null;
+
+function ensurePreviewLayoutObserver() {
+  if (previewLayoutObserver) return previewLayoutObserver;
+  previewLayoutObserver = new globalThis.ResizeObserver((observations) => {
+    for (const observation of observations) {
+      const canvas = observation.target;
+      const entry = previewLayoutTargets.get(canvas);
+      if (!entry) continue;
+      if (!canvas.isConnected) {
+        previewLayoutObserver.unobserve(canvas);
+        previewLayoutTargets.delete(canvas);
+        continue;
+      }
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) continue;
+      previewLayoutObserver.unobserve(canvas);
+      previewLayoutTargets.delete(canvas);
+      drawEntryPreview(canvas, entry);
+    }
+  });
+  return previewLayoutObserver;
+}
+
+function clearPreviewLayoutTargets() {
+  for (const canvas of previewLayoutTargets.keys()) previewLayoutObserver?.unobserve(canvas);
+  previewLayoutTargets.clear();
+}
 
 function activeNoteButton() {
   return document.querySelector(".note-item[aria-current='true']");
@@ -240,23 +268,11 @@ function renderCanvas() {
 function drawEntryPreview(canvas, entry) {
   const rect = canvas.getBoundingClientRect();
   if (rect.width < 2 || rect.height < 2) {
-    if (previewLayoutObservers.has(canvas)) return;
-    const observer = new globalThis.ResizeObserver(() => {
-      if (!canvas.isConnected) {
-        observer.disconnect();
-        previewLayoutObservers.delete(canvas);
-        return;
-      }
-      const nextRect = canvas.getBoundingClientRect();
-      if (nextRect.width < 2 || nextRect.height < 2) return;
-      observer.disconnect();
-      previewLayoutObservers.delete(canvas);
-      drawEntryPreview(canvas, entry);
-    });
-    previewLayoutObservers.set(canvas, observer);
-    observer.observe(canvas);
+    if (!previewLayoutTargets.has(canvas)) ensurePreviewLayoutObserver().observe(canvas);
+    previewLayoutTargets.set(canvas, entry);
     return;
   }
+  if (previewLayoutTargets.delete(canvas)) previewLayoutObserver?.unobserve(canvas);
   const { context, width, height } = configureCanvas(canvas);
   if (entry.schemaVersion === 2) {
     drawPaper(context, width, height);
@@ -489,6 +505,7 @@ async function saveEntry() {
 }
 
 function detachSupplementaryRegion() {
+  clearPreviewLayoutTargets();
   supplementary.region.remove();
   supplementaryContainer.hidden = supplementaryHost.querySelector("[data-supplementary-entity]") === null;
 }
@@ -593,6 +610,7 @@ async function synchronizeActiveNote() {
   supplementaryContainer.hidden = false;
   const sortedEntries = newestFirstEntries(result.entries);
   const visibleEntries = visibleEntriesForNote(noteId, sortedEntries);
+  clearPreviewLayoutTargets();
   supplementary.entries.replaceChildren(...visibleEntries.map(makeEntryCard));
   supplementary.count.textContent = `${result.entries.length} entr${result.entries.length === 1 ? "y" : "ies"}`;
   const messages = [];
@@ -689,5 +707,7 @@ export const kanjiInkApp = Object.freeze({
     for (const unregister of unregisterCommands) unregister();
     dialog.remove();
     detachSupplementaryRegion();
+    previewLayoutObserver?.disconnect();
+    previewLayoutObserver = null;
   },
 });
