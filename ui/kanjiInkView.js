@@ -18,6 +18,7 @@ function ensureStylesheet() {
   link.href = new URL("../kanji-ink.css", import.meta.url).href;
   link.dataset.kanjiInkStyles = "true";
   link.addEventListener("load", () => {
+    if (viewDestroyed) return;
     if (dialog.open) renderCanvas();
     scheduleSynchronization();
   }, { once: true });
@@ -151,11 +152,14 @@ let visibleEntryNoteId = null;
 let visibleEntryCount = MAX_RENDERED_ENTRIES;
 let pendingEntryFocus = null;
 const previewLayoutTargets = new Map();
+const previewRenderFrames = new Map();
 let previewLayoutObserver = null;
+let viewDestroyed = false;
 
 function ensurePreviewLayoutObserver() {
   if (previewLayoutObserver) return previewLayoutObserver;
   previewLayoutObserver = new globalThis.ResizeObserver((observations) => {
+    if (viewDestroyed) return;
     for (const observation of observations) {
       const canvas = observation.target;
       const entry = previewLayoutTargets.get(canvas);
@@ -175,9 +179,23 @@ function ensurePreviewLayoutObserver() {
   return previewLayoutObserver;
 }
 
-function clearPreviewLayoutTargets() {
+function clearPreviewRenderingResources() {
+  for (const frameId of previewRenderFrames.values()) cancelAnimationFrame(frameId);
+  previewRenderFrames.clear();
   for (const canvas of previewLayoutTargets.keys()) previewLayoutObserver?.unobserve(canvas);
   previewLayoutTargets.clear();
+}
+
+function scheduleEntryPreview(canvas, entry) {
+  if (viewDestroyed) return;
+  const pendingFrame = previewRenderFrames.get(canvas);
+  if (pendingFrame !== undefined) cancelAnimationFrame(pendingFrame);
+  const frameId = requestAnimationFrame(() => {
+    previewRenderFrames.delete(canvas);
+    if (viewDestroyed || !canvas.isConnected) return;
+    drawEntryPreview(canvas, entry);
+  });
+  previewRenderFrames.set(canvas, frameId);
 }
 
 function activeNoteButton() {
@@ -266,6 +284,10 @@ function renderCanvas() {
 }
 
 function drawEntryPreview(canvas, entry) {
+  if (viewDestroyed || !canvas.isConnected) {
+    if (previewLayoutTargets.delete(canvas)) previewLayoutObserver?.unobserve(canvas);
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   if (rect.width < 2 || rect.height < 2) {
     if (!previewLayoutTargets.has(canvas)) ensurePreviewLayoutObserver().observe(canvas);
@@ -505,7 +527,7 @@ async function saveEntry() {
 }
 
 function detachSupplementaryRegion() {
-  clearPreviewLayoutTargets();
+  clearPreviewRenderingResources();
   supplementary.region.remove();
   supplementaryContainer.hidden = supplementaryHost.querySelector("[data-supplementary-entity]") === null;
 }
@@ -590,11 +612,12 @@ function makeEntryCard(entry) {
   actions.append(remove);
   copy.append(heading, detail, actions);
   card.append(preview, copy);
-  requestAnimationFrame(() => drawEntryPreview(preview, entry));
+  scheduleEntryPreview(preview, entry);
   return card;
 }
 
 async function synchronizeActiveNote() {
+  if (viewDestroyed) return;
   const sequence = ++syncSequence;
   const noteId = activeNoteId();
   if (!noteId) {
@@ -603,6 +626,7 @@ async function synchronizeActiveNote() {
     return detachSupplementaryRegion();
   }
   const result = await kanjiInkApplication.loadNoteContext(noteId);
+  if (viewDestroyed) return;
   if (sequence !== syncSequence || noteId !== activeNoteId()) return;
   const hasRecovery = lastDeletedEntry?.noteId === noteId;
   if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) return detachSupplementaryRegion();
@@ -610,7 +634,7 @@ async function synchronizeActiveNote() {
   supplementaryContainer.hidden = false;
   const sortedEntries = newestFirstEntries(result.entries);
   const visibleEntries = visibleEntriesForNote(noteId, sortedEntries);
-  clearPreviewLayoutTargets();
+  clearPreviewRenderingResources();
   supplementary.entries.replaceChildren(...visibleEntries.map(makeEntryCard));
   supplementary.count.textContent = `${result.entries.length} entr${result.entries.length === 1 ? "y" : "ies"}`;
   const messages = [];
@@ -623,7 +647,7 @@ async function synchronizeActiveNote() {
 }
 
 function scheduleSynchronization() {
-  if (syncScheduled) return;
+  if (viewDestroyed || syncScheduled) return;
   syncScheduled = true;
   queueMicrotask(() => { syncScheduled = false; void synchronizeActiveNote(); });
 }
@@ -701,6 +725,7 @@ export const kanjiInkApp = Object.freeze({
   open: openDialog,
   synchronize: synchronizeActiveNote,
   destroy() {
+    viewDestroyed = true;
     clearPointerSession();
     noteObserver.disconnect();
     saveObserver.disconnect();
