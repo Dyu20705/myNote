@@ -459,7 +459,7 @@ function detachSupplementaryRegion() {
 
 function newestFirstEntries(entries) {
   return [...entries].sort((left, right) => (
-    right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id)
+    Date.parse(right.updatedAt) - Date.parse(left.updatedAt) || left.id.localeCompare(right.id)
   ));
 }
 

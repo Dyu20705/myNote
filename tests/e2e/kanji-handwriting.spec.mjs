@@ -381,6 +381,22 @@ test("newest-first pagination keeps a 65th drawing reachable with edit and delet
   await expect(oldestCard).toHaveCount(0);
 });
 
+test("newest-first ordering compares parsed instants and breaks equal-instant ties by id", async ({ page }) => {
+  await createNote(page, "Offset timestamp ordering");
+  const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
+  await preloadPaginationEntries(page, noteId, [
+    ["offset-newest", "2026-08-01T01:00:00-02:00"],
+    ["offset-equal-a", "2026-08-01T03:00:00+03:00"],
+    ["offset-equal-b", "2026-08-01T00:00:00.000Z"],
+  ]);
+
+  await page.reload();
+  await openDetails(page);
+  expect(await page.locator("#kanjiInkEntries .kanji-entry").evaluateAll((cards) => (
+    cards.map((card) => card.dataset.kanjiEntryId)
+  ))).toEqual(["offset-newest", "offset-equal-a", "offset-equal-b"]);
+});
+
 test("a fresh 65th drawing stays visible while older drawings remain reachable", async ({ page }) => {
   await createNote(page, "Fresh paginated handwriting");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
