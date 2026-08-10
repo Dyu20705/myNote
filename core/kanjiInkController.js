@@ -264,7 +264,7 @@ export function createKanjiInkController({
 
   function requestClose() {
     assertDraftMutable();
-    activeGesture = null;
+    endGesture();
     if (!isDirty()) return { closed: true, focusTarget: "opener" };
     status = "confirm-discard";
     return { closed: false, focusTarget: "keep-drawing" };

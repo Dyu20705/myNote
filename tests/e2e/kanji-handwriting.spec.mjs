@@ -160,6 +160,57 @@ test("pointer cancellation and DPR resize leave normalized geometry usable", asy
   expect(entries[0].strokes.every((stroke) => stroke.points.every((point) => point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1))).toBe(true);
 });
 
+test("the stroke limit preserves recovery controls and a valid save", async ({ page }) => {
+  await createNote(page, "Bounded strokes");
+  await openKanjiDialog(page);
+
+  for (let index = 0; index < 32; index += 1) {
+    const y = 0.05 + index * 0.028;
+    await drawStroke(page, [{ x: 0.1, y }, { x: 0.85, y }]);
+  }
+  await expect(page.locator("#kanjiInkStatus")).toHaveText("32 strokes");
+  await drawStroke(page, [{ x: 0.2, y: 0.1 }, { x: 0.8, y: 0.2 }]);
+  await expect(page.locator("#kanjiInkStatus")).toHaveText("Drawing limit reached. Undo, erase, clear, or save to continue.");
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator("#kanjiInkStatus")).toHaveText("31 strokes");
+  await drawStroke(page, [{ x: 0.2, y: 0.1 }, { x: 0.8, y: 0.2 }]);
+  await page.getByRole("button", { name: "Save drawing", exact: true }).click();
+
+  const entries = await storedEntries(page);
+  expect(entries).toHaveLength(1);
+  expect(entries[0].strokes).toHaveLength(32);
+});
+
+test("Escape finalizes an active gesture before keeping and saving the draft", async ({ page }) => {
+  await createNote(page, "Active gesture close");
+  await openKanjiDialog(page);
+  const box = await page.locator("#kanjiInkCanvas").boundingBox();
+  if (!box) throw new Error("Kanji canvas is not visible");
+  const activePointer = 712;
+  await page.locator("#kanjiInkCanvas").dispatchEvent("pointerdown", {
+    pointerId: activePointer,
+    button: 0,
+    clientX: box.x + box.width * 0.2,
+    clientY: box.y + box.height * 0.2,
+  });
+  await page.locator("#kanjiInkCanvas").dispatchEvent("pointermove", {
+    pointerId: activePointer,
+    button: 0,
+    clientX: box.x + box.width * 0.8,
+    clientY: box.y + box.height * 0.8,
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("region", { name: "Discard handwriting draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Keep drawing" }).click();
+  await drawStroke(page, [{ x: 0.2, y: 0.8 }, { x: 0.8, y: 0.2 }]);
+  await page.getByRole("button", { name: "Save drawing", exact: true }).click();
+
+  const entries = await storedEntries(page);
+  expect(entries).toHaveLength(1);
+  expect(entries[0].strokes).toHaveLength(2);
+});
+
 test("legacy V1 cards remain read-only and losslessly exportable", async ({ page }) => {
   await createNote(page, "Legacy handwriting");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");

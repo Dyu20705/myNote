@@ -172,6 +172,26 @@ test("An untouched V2 edit is clean and closes without discard", async () => {
   });
 });
 
+test("Requesting close commits a meaningful active gesture before confirming discard", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const controller = createKanjiInkController();
+
+  controller.beginGesture(penPoints[0]);
+  controller.appendGesture(penPoints[1]);
+
+  assert.deepEqual(controller.requestClose(), {
+    closed: false,
+    focusTarget: "keep-drawing",
+  });
+  assert.deepEqual(controller.snapshot().strokes, [{
+    tool: "pen",
+    width: 0.008,
+    points: penPoints,
+  }]);
+  controller.keepDrawing();
+  assert.equal(controller.snapshot().status, "drawing");
+});
+
 test("V1 initial entries are rejected rather than reinterpreted as V2 canvases", async () => {
   const { createKanjiInkController } = await loadModule();
   assert.throws(() => createKanjiInkController({
@@ -236,6 +256,38 @@ test("Gesture boundaries reject excess strokes, points, total points, and elapse
   assert.throws(() => durationBound.appendGesture({ x: 0.2, y: 0.2, t: 600001 }), {
     code: "KANJI_INK_POINT_INVALID",
   });
+});
+
+test("A rejected thirty-third stroke leaves the bounded draft recoverable", async () => {
+  const { createKanjiInkController } = await loadModule();
+  const persisted = [];
+  const controller = createKanjiInkController({
+    persist: async (entry) => {
+      persisted.push(entry);
+      return entry;
+    },
+    createId: () => "ink-after-limit",
+    now: () => "2026-08-10T00:00:00.000Z",
+  });
+
+  for (let index = 0; index < 32; index += 1) assert.equal(draw(controller, penPoints), true);
+  controller.beginGesture(penPoints[0]);
+  controller.appendGesture(penPoints[1]);
+  assert.throws(() => controller.endGesture(), { code: "KANJI_INK_ENTRY_LIMIT" });
+
+  assert.equal(controller.undo(), true);
+  controller.selectTool("eraser");
+  assert.equal(draw(controller, [
+    { x: 0.1, y: 0.9, t: 0 },
+    { x: 0.8, y: 0.9, t: 1 },
+  ]), false);
+  assert.equal(controller.clear(), true);
+  controller.selectTool("pen");
+  assert.equal(draw(controller, penPoints), true);
+  await controller.save({ noteId: "note-1" });
+
+  assert.equal(controller.snapshot().strokes.length, 1);
+  assert.equal(persisted[0].strokes.length, 1);
 });
 
 test("Save rejects an empty canvas", async () => {

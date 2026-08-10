@@ -124,8 +124,11 @@ let controller = null;
 let dialogOpener = null;
 let dialogNoteId = null;
 let activePointerId = null;
+let pointerCaptureActive = false;
+let pointerFallbackAttached = false;
 let strokeStartedAt = 0;
 let liveStroke = null;
+let pointerLimitMessage = "";
 let lastDeletedEntry = null;
 let syncSequence = 0;
 let syncScheduled = false;
@@ -225,6 +228,7 @@ function drawEntryPreview(canvas, entry) {
 function statusText(snapshot) {
   if (snapshot.status === "saving") return "Saving drawing locally…";
   if (snapshot.errorCode === "KANJI_SAVE_FAILED") return "Save failed. Your drawing is preserved; retry save.";
+  if (pointerLimitMessage) return pointerLimitMessage;
   if (snapshot.strokes.length > 0) return `${snapshot.strokes.length} stroke${snapshot.strokes.length === 1 ? "" : "s"}`;
   return "";
 }
@@ -277,26 +281,86 @@ function appendPointerPoint(event) {
   renderCanvas();
 }
 
+function attachPointerFallback() {
+  if (pointerFallbackAttached) return;
+  document.addEventListener("pointerup", finishPointerStroke);
+  document.addEventListener("pointercancel", finishPointerStroke);
+  pointerFallbackAttached = true;
+}
+
+function detachPointerFallback() {
+  if (!pointerFallbackAttached) return;
+  document.removeEventListener("pointerup", finishPointerStroke);
+  document.removeEventListener("pointercancel", finishPointerStroke);
+  pointerFallbackAttached = false;
+}
+
+function clearPointerSession() {
+  const pointerId = activePointerId;
+  try {
+    if (pointerId !== null && pointerCaptureActive) elements.canvas.releasePointerCapture(pointerId);
+  } catch { /* pointer capture may already be released */
+  } finally {
+    activePointerId = null;
+    pointerCaptureActive = false;
+    strokeStartedAt = 0;
+    liveStroke = null;
+    detachPointerFallback();
+  }
+}
+
+function showPointerLimit() {
+  pointerLimitMessage = "Drawing limit reached. Undo, erase, clear, or save to continue.";
+}
+
 function beginPointerStroke(event) {
   if (!controller || activePointerId !== null || event.button !== 0 || controller.snapshot().status === "saving") return;
   event.preventDefault();
+  const snapshot = controller.snapshot();
+  if (["pen", "marker"].includes(snapshot.tool) && snapshot.strokes.length >= KANJI_INK_LIMITS.maxStrokes) {
+    showPointerLimit();
+    renderController();
+    return;
+  }
+  pointerLimitMessage = "";
   activePointerId = event.pointerId;
   strokeStartedAt = event.timeStamp;
-  const snapshot = controller.snapshot();
   const point = pointFromPointer(event, true);
   liveStroke = { tool: snapshot.tool, width: KANJI_INK_WIDTHS[snapshot.tool] ?? KANJI_INK_WIDTHS.pen, points: [point] };
-  controller.beginGesture(point);
-  try { elements.canvas.setPointerCapture(event.pointerId); } catch { /* capture is progressive enhancement */ }
+  try {
+    controller.beginGesture(point);
+    try {
+      elements.canvas.setPointerCapture(event.pointerId);
+      pointerCaptureActive = true;
+    } catch {
+      attachPointerFallback();
+    }
+  } catch (error) {
+    clearPointerSession();
+    if (error?.code === "KANJI_INK_ENTRY_LIMIT") {
+      showPointerLimit();
+      renderController();
+      return;
+    }
+    throw error;
+  }
   renderCanvas();
 }
 
 function finishPointerStroke(event) {
   if (!controller || event.pointerId !== activePointerId) return;
-  if (event.type === "pointerup") appendPointerPoint(event);
-  controller.endGesture();
-  activePointerId = null;
-  liveStroke = null;
-  renderController();
+  let unexpectedError = null;
+  try {
+    if (event.type === "pointerup") appendPointerPoint(event);
+    controller.endGesture();
+  } catch (error) {
+    if (error?.code === "KANJI_INK_ENTRY_LIMIT") showPointerLimit();
+    else unexpectedError = error;
+  } finally {
+    clearPointerSession();
+    renderController();
+  }
+  if (unexpectedError) throw unexpectedError;
 }
 
 function restoreDialogFocus() {
@@ -309,15 +373,26 @@ function closeDialogCleanly() {
   if (dialog.open) dialog.close();
   controller = null;
   dialogNoteId = null;
-  activePointerId = null;
-  liveStroke = null;
+  clearPointerSession();
+  pointerLimitMessage = "";
   restoreDialogFocus();
 }
 
 function requestDialogClose() {
   if (controller?.snapshot().status === "saving") return;
   if (!controller) return closeDialogCleanly();
-  const outcome = controller.requestClose();
+  let outcome;
+  let unexpectedError = null;
+  try {
+    outcome = controller.requestClose();
+  } catch (error) {
+    if (error?.code === "KANJI_INK_ENTRY_LIMIT") showPointerLimit();
+    else unexpectedError = error;
+  } finally {
+    clearPointerSession();
+  }
+  if (unexpectedError) throw unexpectedError;
+  if (!outcome) return renderController();
   if (outcome.closed) return closeDialogCleanly();
   renderController();
   elements.keepDrawing.focus();
@@ -451,11 +526,11 @@ elements.canvas.addEventListener("pointerup", finishPointerStroke);
 elements.canvas.addEventListener("pointercancel", finishPointerStroke);
 elements.canvas.addEventListener("lostpointercapture", finishPointerStroke);
 for (const [tool, button] of [["pen", elements.pen], ["marker", elements.marker], ["eraser", elements.eraser]]) {
-  button.addEventListener("click", () => { controller?.selectTool(tool); renderController(); });
+  button.addEventListener("click", () => { pointerLimitMessage = ""; controller?.selectTool(tool); renderController(); });
 }
-elements.undo.addEventListener("click", () => { controller?.undo(); renderController(); });
-elements.redo.addEventListener("click", () => { controller?.redo(); renderController(); });
-elements.clear.addEventListener("click", () => { controller?.clear(); renderController(); });
+elements.undo.addEventListener("click", () => { pointerLimitMessage = ""; controller?.undo(); renderController(); });
+elements.redo.addEventListener("click", () => { pointerLimitMessage = ""; controller?.redo(); renderController(); });
+elements.clear.addEventListener("click", () => { pointerLimitMessage = ""; controller?.clear(); renderController(); });
 elements.save.addEventListener("click", () => void saveEntry());
 elements.close.addEventListener("click", requestDialogClose);
 elements.keepDrawing.addEventListener("click", () => { controller?.keepDrawing(); renderController(); elements.canvas.focus(); });
@@ -505,6 +580,7 @@ export const kanjiInkApp = Object.freeze({
   open: openDialog,
   synchronize: synchronizeActiveNote,
   destroy() {
+    clearPointerSession();
     noteObserver.disconnect();
     saveObserver.disconnect();
     for (const unregister of unregisterCommands) unregister();
