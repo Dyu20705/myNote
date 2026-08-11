@@ -1,40 +1,45 @@
 .kanji-ink-dialog {
-  width: min(760px, calc(100vw - 2rem));
-  max-height: min(860px, calc(100vh - 2rem));
+  width: min(900px, calc(100vw - 32px));
+  height: min(594px, calc(100vh - 32px));
+  max-width: 900px;
+  max-height: 594px;
   padding: 0;
-  border: 1px solid var(--border, #d7d7d7);
-  border-radius: 16px;
-  background: var(--surface, #fff);
-  color: var(--text, #181818);
-  box-shadow: 0 24px 72px rgb(0 0 0 / 22%);
-  overflow: auto;
+  border: 1px solid #4b5563;
+  border-radius: 12px;
+  background: #171a20;
+  color: #e7edf5;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 45%);
+  overflow: hidden;
 }
 
 .kanji-ink-dialog::backdrop {
-  background: rgb(12 14 18 / 52%);
+  background: rgb(3 7 12 / 72%);
 }
 
 .kanji-ink-shell {
+  box-sizing: border-box;
+  position: relative;
   display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
+  grid-template-rows: 36px 36px minmax(0, 430px) 40px;
+  gap: 4px;
+  height: 100%;
+  padding: 16px 19px;
 }
 
 .kanji-ink-header,
-.kanji-ink-toolbar,
 .kanji-ink-footer,
-.kanji-ink-preview,
+.kanji-ink-toolbar,
 .kanji-entry-header,
 .kanji-entry-actions,
 .kanji-ink-recovery {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
 }
 
 .kanji-ink-header,
 .kanji-ink-footer,
-.kanji-entry-header {
+.kanji-entry-header,
+.kanji-ink-recovery {
   justify-content: space-between;
 }
 
@@ -43,51 +48,25 @@
   margin: 0;
 }
 
-.kanji-ink-candidate-region {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.kanji-candidate-list {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(44px, 1fr));
-  gap: 0.5rem;
-  min-height: 48px;
-}
-
-.kanji-candidate-list button {
-  min-height: 44px;
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: 10px;
-  background: var(--surface, #fff);
-  font-size: 1.45rem;
-  cursor: pointer;
-}
-
-.kanji-candidate-list button[aria-pressed="true"] {
-  border-color: currentColor;
-  outline: 2px solid currentColor;
-  outline-offset: 1px;
-}
-
-.kanji-candidate-list button:focus-visible,
-.kanji-ink-dialog button:focus-visible,
-.kanji-entry button:focus-visible {
-  outline: 3px solid currentColor;
-  outline-offset: 3px;
+.kanji-ink-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 36px;
 }
 
 .kanji-canvas-frame {
-  width: min(420px, 100%);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 860px;
+  height: 100%;
+  max-height: 430px;
   margin-inline: auto;
-  aspect-ratio: 1;
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: 12px;
+  aspect-ratio: 2 / 1;
+  border: 0;
+  border-radius: 8px;
   overflow: hidden;
-  background:
-    linear-gradient(to right, transparent calc(50% - 0.5px), #dedede 50%, transparent calc(50% + 0.5px)),
-    linear-gradient(to bottom, transparent calc(50% - 0.5px), #dedede 50%, transparent calc(50% + 0.5px)),
-    #fff;
+  background: #11151b;
+  box-shadow: inset 0 0 0 1px #4b5563;
 }
 
 #kanjiInkCanvas {
@@ -99,104 +78,192 @@
 }
 
 .kanji-ink-toolbar {
-  flex-wrap: wrap;
-  justify-content: center;
+  gap: 6px;
 }
 
-.kanji-ink-preview {
-  min-height: 72px;
-  padding: 0.75rem;
-  border: 1px solid var(--border, #d7d7d7);
-  border-radius: 12px;
+.kanji-ink-footer {
+  justify-content: flex-end;
 }
 
-.kanji-selected-character {
-  min-width: 2ch;
-  font-size: 2.25rem;
-  line-height: 1;
-  user-select: text;
+.kanji-toolbar-divider {
+  width: 1px;
+  height: 22px;
+  margin-inline: 4px;
+  background: #4b5563;
+}
+
+.kanji-icon-button {
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  background: #20252d;
+  color: #e7edf5;
+  cursor: pointer;
+}
+
+.kanji-icon-button img {
+  width: 18px;
+  height: 18px;
+}
+
+.kanji-save-button {
+  width: 40px;
+  height: 40px;
+  border-color: #0ea5e9;
+  background: #0ea5e9;
+}
+
+.kanji-save-button img {
+  width: 20px;
+  height: 20px;
+}
+
+.kanji-tool-button[aria-pressed="true"] {
+  border-color: #0ea5e9;
+  background: #0ea5e9;
+}
+
+.kanji-icon-button:hover:not(:disabled) {
+  border-color: #6b7280;
+  background: #2b323d;
+}
+
+.kanji-tool-button[aria-pressed="true"]:hover:not(:disabled),
+.kanji-save-button:hover:not(:disabled) {
+  border-color: #38bdf8;
+  background: #0284c7;
+}
+
+.kanji-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.36;
+}
+
+.kanji-icon-button:focus-visible,
+.kanji-ink-dialog button:focus-visible,
+.kanji-entry button:focus-visible,
+#kanjiInkCanvas:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
 }
 
 .kanji-ink-status {
-  min-height: 1.5rem;
+  position: absolute;
+  right: 68px;
+  bottom: 11px;
+  left: 19px;
+  min-height: 18px;
   margin: 0;
+  color: #aab4c2;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .kanji-discard-confirmation {
-  padding: 0.75rem;
-  border: 1px solid #b45309;
-  border-radius: 12px;
-  background: #fffbeb;
+  position: absolute;
+  inset: auto 19px 16px;
+  z-index: 1;
+  padding: 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #20252d;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 36%);
 }
 
 .kanji-discard-actions {
   display: flex;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.kanji-ink-region {
+.kanji-ink-region,
+.kanji-ink-entries,
+.kanji-entry-copy {
   display: grid;
-  gap: 0.75rem;
-}
-
-.kanji-ink-entries {
-  display: grid;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .kanji-entry {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 0.85rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border, #d7d7d7);
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border, #4b5563);
   border-radius: 12px;
 }
 
 .kanji-entry-preview {
-  width: 88px;
-  height: 88px;
-  border: 1px solid var(--border, #d7d7d7);
-  border-radius: 8px;
-  background: #fff;
+  display: block;
+  width: 112px;
+  height: 56px;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  background: #11151b;
 }
 
-.kanji-entry-character {
-  font-size: 2rem;
-  line-height: 1;
-  user-select: text;
+.kanji-entry-label {
+  font-size: 16px;
 }
 
 .kanji-entry-copy {
-  display: grid;
-  gap: 0.5rem;
+  align-content: center;
   min-width: 0;
+  gap: 5px;
 }
 
 .kanji-entry-actions {
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kanji-ink-load-more {
+  justify-self: start;
 }
 
 .kanji-ink-recovery {
-  justify-content: space-between;
-  padding: 0.75rem;
-  border: 1px solid var(--border, #d7d7d7);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border, #4b5563);
   border-radius: 10px;
 }
 
+@media (max-height: 625px) {
+  .kanji-ink-dialog {
+    overflow: hidden;
+  }
+
+  .kanji-ink-shell {
+    min-height: 0;
+  }
+
+  .kanji-canvas-frame {
+    width: min(100%, calc((100vh - 190px) * 2));
+    height: auto;
+  }
+}
+
 @media (max-width: 720px) {
-  .kanji-candidate-list {
-    grid-template-columns: repeat(4, minmax(44px, 1fr));
+  .kanji-ink-dialog {
+    width: calc(100vw - 16px);
+  }
+
+  .kanji-ink-shell {
+    padding-inline: 12px;
   }
 
   .kanji-entry {
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 88px minmax(0, 1fr);
   }
 
   .kanji-entry-preview {
-    width: 72px;
-    height: 72px;
+    width: 88px;
+    height: 44px;
   }
 }
 

@@ -51,6 +51,38 @@ function makeEntry(overrides = {}) {
   };
 }
 
+function makeCanvasEntry(overrides = {}) {
+  return {
+    id: "ink-canvas",
+    noteId: "note-ink",
+    strokes: [{
+      tool: "pen",
+      width: 0.008,
+      points: [{ x: 0.1, y: 0.2, t: 0 }, { x: 0.2, y: 0.3, t: 12 }],
+    }],
+    paperStyle: "grid",
+    createdAt: "2026-08-04T00:00:00.000Z",
+    updatedAt: "2026-08-04T00:00:00.000Z",
+    schemaVersion: 2,
+    ...overrides,
+  };
+}
+
+function makeLegacyGraph() {
+  const shared = { raw: "keep" };
+  const graph = { first: shared, second: shared, map: new Map() };
+  graph.self = graph;
+  graph.map.set("self", graph);
+  return graph;
+}
+
+function assertLegacyGraph(entry) {
+  const graph = entry.legacyVendorField.graph;
+  assert.equal(graph.self, graph);
+  assert.equal(graph.first, graph.second);
+  assert.equal(graph.map.get("self"), graph);
+}
+
 function closeAllDatabaseHandles() {
   for (const database of openHandles) database.close();
   openHandles.clear();
@@ -220,14 +252,32 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     assert.deepEqual((await readRawStore(database, "kanjiInkEntries")).length, 2);
   });
 
-  test("note delete and restore capture ink entries atomically", async () => {
+  test("mixed legacy and canvas entries survive list, delete, note-delete, and restore losslessly", async () => {
     const database = await openTestDatabase();
     const note = makeNote();
-    const first = makeEntry();
-    const second = makeEntry({ id: "ink-2", character: "木" });
+    const first = makeEntry({
+      legacyVendorField: {
+        map: new Map([["keep", new Set([1n])]]),
+        bytes: new Uint8Array([7, 8]),
+        missing: undefined,
+        graph: makeLegacyGraph(),
+      },
+    });
+    const second = makeCanvasEntry();
     await putNoteToDb(database, note);
     await addKanjiInkEntryToDb(database, first);
     await addKanjiInkEntryToDb(database, second);
+
+    const initialListing = await listKanjiInkEntriesFromDb(database, note.id);
+    assert.deepEqual(initialListing, {
+      entries: [first, second],
+      invalidCount: 0,
+    });
+    assertLegacyGraph(initialListing.entries[0]);
+    const deleted = await deleteKanjiInkEntryFromDb(database, first.id);
+    assert.deepEqual(deleted, first);
+    assertLegacyGraph(deleted);
+    assert.deepEqual(await addKanjiInkEntryToDb(database, first), first);
 
     const capture = await deleteNoteWithDependentsFromDb(database, note.id);
     assert.deepEqual(capture, {
@@ -235,15 +285,27 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
       review: undefined,
       kanjiInkEntries: [first, second],
     });
+    assertLegacyGraph(capture.kanjiInkEntries[0]);
     assert.deepEqual(await listNotesFromDb(database), []);
     assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);
 
     await restoreNoteWithDependentsToDb(database, capture);
     assert.deepEqual(await listNotesFromDb(database), [note]);
-    assert.deepEqual(await listKanjiInkEntriesFromDb(database, note.id), {
+    const restoredListing = await listKanjiInkEntriesFromDb(database, note.id);
+    assert.deepEqual(restoredListing, {
       entries: [first, second],
       invalidCount: 0,
     });
+    assertLegacyGraph(restoredListing.entries[0]);
+
+    await deleteNoteFromDb(database, note.id);
+    await putNoteToDb(database, note);
+    const undoListing = await listKanjiInkEntriesFromDb(database, note.id);
+    assert.deepEqual(undoListing, {
+      entries: [first, second],
+      invalidCount: 0,
+    });
+    assertLegacyGraph(undoListing.entries[0]);
   });
 
   test("note deletion removes corrupt owner dependents without affecting unrelated data", async () => {

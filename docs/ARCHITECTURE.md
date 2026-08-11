@@ -6,10 +6,11 @@ This document defines the required architecture for the current application. Cha
 
 myNote currently contains these core capabilities:
 
-- **Persistence:** IndexedDB schema v2 with a bounded legacy localStorage migration.
+- **Persistence:** IndexedDB schema v3 with bounded legacy localStorage migration and additive `studyReviews` / `kanjiInkEntries` stores.
 - **Study metadata:** isolated `studyReviews` records linked to notes only by `noteId`.
 - **Japanese study templates:** deterministic note seeds, reserved tags, and enrolled-note duplicate lookup.
 - **Study scheduling:** pure caller-clocked review creation, due checks, and rating transitions.
+- **Kanji supplementary data:** mixed legacy-V1 and saved-grid-V2 vector entries with no runtime recognition path.
 - **Canonical model:** versioned notes with checksums, blocks, tags, links, AST data, and search material.
 - **Parser pipeline:** `parseDocument` and related parser functions own derived note metadata.
 - **Search:** worker-based querying with incremental index updates and bounded result policies.
@@ -91,9 +92,9 @@ Browser composition and UI adapters
 
 ### `core/storage.js`
 
-- Owns IndexedDB schema v2, transactions, migration, and database I/O.
-- Preserves the existing `notes` store and adds `studyReviews` without scanning or rewriting notes.
-- Owns atomic cross-store note/review mutations and terminal transaction settlement.
+- Owns IndexedDB schema v3, transactions, migration, and database I/O.
+- Preserves `notes`; the v2 branch adds `studyReviews` and the v3 branch adds `kanjiInkEntries` without scanning or rewriting existing records.
+- Owns atomic cross-store note/review/handwriting-dependent mutations and terminal transaction settlement.
 - Rejects a blocked schema upgrade deterministically and closes connections on version changes.
 - Never mutates UI or application state directly.
 
@@ -118,6 +119,14 @@ Browser composition and UI adapters
 - Compares timestamps by instant, adds exact 24-hour day intervals, preserves caller timestamp spelling where required, and emits computed review times in UTC.
 - Rejects suspended rating, unsafe interval arithmetic, and computed timestamps outside the persisted four-digit-year contract.
 - Does not persist reviews, orchestrate parsing, mutate caller data, access application state or the DOM, use an ambient clock, or perform network I/O.
+
+### Kanji saved-grid modules
+
+- `core/kanjiInkEntry.js` owns the persisted V1/V2 union, strict saved-grid shape, lossless clone-safe V1 compatibility, and resource bounds.
+- `core/kanjiInkController.js` owns Pen/Marker/Eraser interaction, normalized geometry, at most 100 committed Undo/Redo states, dirty/discard behavior, and single-flight save/retry.
+- `core/kanjiInkApplication.js` owns database-handle lifetime and composes CRUD, note context, search projection, and export/import without injecting or calling a recognizer.
+- `core/kanjiInkProjection.js` projects only confirmed legacy V1 characters into search, emits schema-4 mixed exports, accepts exact historical schema-3 V1 exports, and renders vector-backed SVG without inventing V2 Unicode.
+- `ui/kanjiInkView.js` adapts pointer coordinates/times and renders the accepted node `43:343`; it does not open IndexedDB or own canonical drawing state.
 
 ### `core/commandStack.js`, `core/notePatch.js`, and `core/history.js`
 
@@ -172,7 +181,9 @@ UI event
 
 Canonical persistence failure stops the mutation before in-memory state and history report success. Derived index failure after canonical persistence is treated as a visible, rebuildable degradation.
 
-The schema-v2 persistence package adds no automatic scheduler, parser behavior, state transition, enrollment, or UI. Any operation that changes both a note and its review uses one cross-store transaction. Existing notes remain byte-for-byte untouched during the v1-to-v2 upgrade.
+The schema-v2 study persistence branch adds no automatic scheduler, parser behavior, state transition, enrollment, or UI. Any operation that changes both a note and its review uses one cross-store transaction. Existing notes remain byte-for-byte untouched during the v1-to-v2 upgrade.
+
+The schema-v3 branch adds only `kanjiInkEntries`. Kanji create/update validates the note relationship before writing. Note deletion and restore include valid handwriting dependents in the same atomic transaction as the note and optional review. No database upgrade is required to store saved-grid V2 records in the existing v3 store.
 
 The template and scheduler modules in the current package are preparation boundaries only. They return values to their caller; a later action is responsible for normalization, canonical persistence, state commit, and derived updates.
 
@@ -224,17 +235,34 @@ validated review + rating + explicit nowIso
 | Workspace refresh | O(search results) after worker query | One request-local ID array |
 | Japanese slice synchronization | O(notes + reviews) | Bounded derived state |
 
-## 7. Failure, compatibility, and rollback
+## 7. Kanji saved-grid flow
 
-- Schema v2 is forward-only and additive.
-- A v1 client cannot open a database already upgraded to v2 by requesting version 1.
-- Rollback must deploy code that understands schema v2; it must not delete `studyReviews`, rewrite notes, or attempt an automatic downgrade.
+```text
+pointer intent
+→ bounded normalized Pen/Marker draft or Eraser mutation
+→ Undo/Redo/Clear and strict V2 validation
+→ canonical IndexedDB add/put
+→ saved baseline and success presentation
+```
+
+V2 has the exact fields `id`, `noteId`, `strokes`, `paperStyle`, `createdAt`, `updatedAt`, and `schemaVersion`. Each persisted stroke has `tool`, canonical tool `width`, and `{ x, y, t }` points; `paperStyle` is exactly `grid`. It contains no character, recognizer, candidates, image/base64 data, parser metadata, or Markdown vector payload.
+
+Legacy V1 remains readable, renderable, searchable by its confirmed character, deletable/restorable, and losslessly exportable/importable. Cloneable unknown V1 own fields survive those lifecycles. V1 is read-only in the V2 editor and is never upgraded on read.
+
+Bounds are 32 strokes, 256 points per stroke, 4,096 total points, 600,000 ms per stroke, 262,144 serialized bytes per entry, and 100 committed draft-history states. Failed persistence retains the exact draft, tool, history, and retry intent. Search projects only V1 characters. New structured exports use schema 4 for mixed records; exact historical schema-3 V1 bundles remain importable.
+
+## 8. Failure, compatibility, and rollback
+
+- Schema v3 is forward-only and additive.
+- A client requesting an older version cannot open a database already upgraded to v3.
+- Rollback must deploy code that understands schema v3; it must not delete `studyReviews` or `kanjiInkEntries`, rewrite either V1 or V2 records, rewrite notes, or attempt an automatic downgrade.
 - A blocked upgrade rejects with `DATABASE_UPGRADE_BLOCKED`; the user can close other tabs and retry without data mutation.
 - Invalid persisted study reviews produce bounded `study-data-unavailable` state. Japanese quick-create and review actions remain disabled while ordinary Notes stays operational.
 - Workspace-controller rollback is code-only: restore the prior composition, controller/coordinator modules, tests, and documentation. It performs no migration or data rewrite.
 - Template and scheduler rollback is code-only: revert their modules, tests, and documentation. They perform no migration and leave stored notes and reviews unchanged.
+- Kanji rollback is code-only. A rollback client may render V2 as unsupported preserved data, but it must retain both record versions and never claim success before persistence completes.
 
-## 8. Change gate
+## 9. Change gate
 
 Every material change must answer:
 
@@ -250,3 +278,4 @@ Every material change must answer:
 10. Are template and scheduler calculations explicit, caller-clocked, immutable, and independent of persistence/UI?
 11. Do application-created errors remain bounded and content-free while invalid persisted reviews retain their canonical provenance?
 12. Do tests cover the changed invariant, including asynchronous stale-result and draft-preservation behavior?
+13. Do Kanji changes preserve V1 losslessly, keep V2 recognizer-free, and avoid inventing searchable Unicode?

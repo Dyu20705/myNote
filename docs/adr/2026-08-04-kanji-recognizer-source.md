@@ -4,108 +4,37 @@ Date: 2026-08-04
 
 Issue: #69
 
-Status: Accepted for the M2 handwriting MVP
+Status: Superseded on 2026-08-09 by the owner-approved saved-grid canvas decision
 
-## Context
+## Historical decision
 
-The handwriting workflow requires a real local recognition path, deterministic candidate ordering, no runtime network access, bounded payloads, reproducible fixtures, and clear redistribution rights for every code and data asset.
+The original M2 design selected a project-owned geometric template recognizer for eight disclosed characters. It avoided third-party code, datasets, browser handwriting APIs, network requests, telemetry, and dynamic loading. Recognition required explicit candidate selection and stored recognizer identity plus the selected rank in V1 `kanjiInkEntries` records.
 
-The issue lists third-party recognizers and browser APIs as evaluation candidates. Adopting any external recognizer would require an independent audit of both implementation code and bundled pattern/data provenance. A source-code license alone does not establish that every redistributed reference pattern is compatible with this repository.
+That decision produced historical V1 data and compatibility contracts. It is no longer runtime product behavior.
 
-The first release does not require universal Japanese handwriting coverage. It requires an honest, useful, deterministic path for a disclosed first-release set.
+## Superseding decision
 
-## Decision
+The 2026-08-09 issue-owner decision replaced recognition with the accepted saved-grid canvas at Figma node `43:343`.
 
-Implement a project-owned geometric template recognizer with no third-party code, model, dataset, CDN, telemetry, dynamic loading, or network request.
+- New and edited current-path records are exact schema-V2 saved-grid vectors.
+- V2 stores Pen/Marker geometry and `paperStyle: "grid"`; it stores no character, recognizer, candidate, image, parser metadata, or Markdown payload.
+- The recognizer module, fixtures, metrics, and runtime call path are removed.
+- The current feature has no network path and does not load a model or dataset.
+- Search receives only an already-confirmed character from historical V1 records; V2 contributes no Unicode projection.
 
-The first-release set is:
+## Historical data compatibility
 
-```text
-人 入 八 大 犬 火 木 本
-```
+V1 remains a supported read contract, not a current write contract. Required historical fields are validated, cloneable unknown own fields are preserved, and records are never upgraded on read. V1 remains readable, renderable, searchable by its stored character, deletable/restorable, and losslessly exportable/importable, but it is read-only in the V2 editor.
 
-Why this set:
-
-- it matches the accepted Figma candidate examples;
-- it exercises two through five strokes;
-- it includes visually related distractors;
-- it allows deterministic fixtures and bounded performance measurement;
-- all templates are authored directly in this repository as normalized vector paths.
-
-The adapter returns at most eight unique candidate characters and never persists or auto-selects the highest-ranked result. The user must select one candidate explicitly. The persisted record stores only the selected candidate rank (`selectedRank`, zero-based) alongside recognizer identity; the full transient candidate list is not stored.
-
-The recognizer identifies itself as:
-
-```text
-engineId: mynote-geometric-template
-engineVersion: 1.0.0
-datasetVersion: mynote-kanji-mvp-1
-```
-
-## Adopt / adapt / reject record
-
-| Candidate | Decision | Reason |
-| --- | --- | --- |
-| Project-owned normalized geometric templates | Adopt | Zero external license/provenance ambiguity, deterministic, offline, bounded, testable |
-| Third-party JavaScript recognizer or fork | Reject for M2 | Requires a separate code-and-data provenance audit and increases bundle/supply-chain scope |
-| Evaluation-only incomplete recognizer/data | Reject for M2 | Coverage and redistribution obligations would become release blockers |
-| Browser handwriting API | Reject as dependency | Model availability and browser/platform behavior are not deterministic repository-controlled contracts |
-| No-recognizer fallback | Retain | UI exposes an explicit recoverable unsupported/error state without losing strokes |
-
-This ADR does not claim that external candidates are unsafe or incorrectly licensed. It records that they are unnecessary for the bounded M2 outcome and therefore are not imported.
-
-## Algorithm boundary
-
-1. Validate and defensively clone normalized strokes.
-2. Normalize the complete drawing to its own bounding box.
-3. Resample every stroke to 12 evenly spaced path points.
-4. Compare corresponding resampled points in stroke order with Euclidean path distance.
-5. Add explicit penalties for unmatched stroke count.
-6. Convert distance to a bounded score, sort by descending score, then stable Japanese character order.
-7. Reject a drawing when the top score is below the disclosed confidence floor.
-8. Return at most eight plain `{ character, score }` records.
-
-The implementation does **not** claim learned OCR, stroke-order grading, centroid features, or a universal handwriting model. Recognition runs asynchronously through the controller so stale results can be rejected by request token even though the current implementation is CPU-local.
-
-## Coverage statement
-
-The M2 recognizer supports only the eight disclosed characters. It is not Japanese OCR, a handwriting grader, stroke-order tutor, or general Kanji recognition engine. Drawings outside the set may produce low-confidence candidates or no result. The UI and documentation must state this boundary.
-
-A future expansion requires a new ADR covering template provenance, fixture capture, measured quality, bundle cost, and migration compatibility.
+`myNoteDB` remains version `3`, and `kanjiInkEntries` continues to store both versions. New JSON exports use bundle schema `4` for mixed V1/V2 records. Exact historical schema-3 recognition bundles remain importable. Compatibility attribution in those bundle envelopes does not authorize or imply recognition for V2.
 
 ## Consequences
 
-Positive:
-
-- no external dependency or attribution file is required;
-- no runtime request can be made by the recognizer;
-- deterministic fixtures can be committed safely;
-- recognition cost and memory are bounded;
-- rollback does not strand third-party assets.
-
-Negative:
-
-- character coverage is deliberately narrow;
-- geometric matching cannot provide universal handwriting accuracy;
-- expanding coverage requires authored templates and new fixtures;
-- physical Windows mouse validation remains a release-gate activity.
-
-## Verification
-
-The repository includes automated checks for:
-
-- every supported template returning itself in top-1 for its canonical fixture;
-- stable top-8 ordering for identical input;
-- visually related distractors;
-- malformed and oversized stroke rejection;
-- no-result behavior;
-- request-token stale suppression;
-- zero network activity during browser recognition;
-- recognition latency and template payload bounds;
-- explicit candidate selection and persisted selected-rank provenance.
-
-Physical Windows 11 mouse validation is intentionally not represented as automated evidence and remains a manual review item before merge.
+- Recognition quality, candidate ordering, supported-character coverage, and recognition latency are no longer release contracts.
+- Saved-grid geometry, strict bounds, persist-before-success behavior, retry preservation, mixed-version durability, and no invented Unicode are release contracts.
+- No third-party recognizer license or dataset provenance is required for the current runtime.
+- Removing the dead recognizer does not permit deleting or rewriting V1 records.
 
 ## Rollback
 
-Reverting the feature removes recognizer use but retains IndexedDB v3 awareness so existing `kanjiInkEntries` records are preserved and ignored rather than deleted or downgraded.
+Rollback is code-only and must remain IndexedDB-v3 aware. It must preserve both V1 and V2 `kanjiInkEntries` without deletion, rewrite, or downgrade. A rollback client may treat V2 as an unsupported preserved record, but it must not reinterpret V2 as recognition-era data.

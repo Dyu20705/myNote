@@ -49,8 +49,9 @@ npm run test:e2e
 - One New Japanese note disclosure backed by the same five command-registry actions exposed in the palette.
 - Reveal-first, keyboard-operable review sessions with durable ratings, close/resume, deterministic skips, and explicit retry state.
 - Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
-- Additive schema-v2 compatibility that preserves existing schema-v1 note records and never enrolls them automatically.
+- IndexedDB schema-v3 compatibility with additive `studyReviews` and `kanjiInkEntries` stores; existing notes are preserved and never enrolled automatically.
 - Japanese note export with review scheduling metadata retained separately in `studyReviews`.
+- Saved-grid Kanji drawings with Pen/Marker/Eraser, bounded Undo/Redo, persist-before-success retry, and mixed legacy-V1/current-V2 preservation.
 - Safe-mode local database reset.
 
 ## Documentation
@@ -65,6 +66,7 @@ npm run test:e2e
 - [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
 - [Japanese study workspace interaction contract](docs/JAPANESE_STUDY_WORKSPACE.md)
 - [Japanese workspace release gate](docs/JAPANESE_RELEASE_GATE.md)
+- [Kanji saved-grid architecture](docs/architecture/KANJI_HANDWRITING.md)
 - [Governance](docs/GOVERNANCE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
@@ -98,7 +100,7 @@ Text editing and IME composition suppress navigation, sequence, create, delete, 
 
 - `app.js`: ordinary Notes bootstrap, orchestration, registry composition, and action wiring.
 - `japaneseApp.js`: thin Japanese workspace UI bridge into the shared runtime and lifecycle actions.
-- `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, and Japanese study state/action derivation.
+- `core/`: canonical model, parser, persistence, search, backlinks, autosave, patches, history, Japanese study derivation, and Kanji saved-grid domain/application services.
 - `ui/commandRegistry.js`: bounded command metadata, availability, scope, dispatch, sequence, and cleanup owner.
 - `ui/palette.js`: command rendering, filtering, invocation-by-ID, and focus-return adapter.
 - `ui/notePresentation.js`: bounded presentation-only note-card projection.

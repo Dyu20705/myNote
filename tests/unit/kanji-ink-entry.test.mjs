@@ -28,6 +28,23 @@ function validEntry(overrides = {}) {
   };
 }
 
+function canvasV2(overrides = {}) {
+  return {
+    id: "ink-v2",
+    noteId: "note-1",
+    strokes: [{
+      tool: "pen",
+      width: 0.008,
+      points: [{ x: 0.1, y: 0.2, t: 0 }, { x: 0.2, y: 0.3, t: 12 }],
+    }],
+    paperStyle: "grid",
+    createdAt: "2026-08-09T00:00:00.000Z",
+    updatedAt: "2026-08-09T00:00:00.000Z",
+    schemaVersion: 2,
+    ...overrides,
+  };
+}
+
 test("valid entry is defensively cloned with exact versioned shape", async () => {
   const { validateKanjiInkEntry } = await loadModule();
   const source = validEntry();
@@ -70,6 +87,185 @@ test("legacy schema-v1 records without selectedRank remain readable", async () =
   assert.deepEqual(validateKanjiInkEntry(legacy), legacy);
 });
 
+test("V1 preserves unknown own data fields through a defensive clone", async () => {
+  const { validateKanjiInkEntry, validateKanjiInkEntryV1 } = await loadModule();
+  const legacy = validEntry({ legacyVendorField: { raw: "keep" } });
+
+  const validated = validateKanjiInkEntry(legacy);
+  assert.deepEqual(validated, legacy);
+  assert.deepEqual(validateKanjiInkEntryV1(legacy), legacy);
+  assert.notEqual(validated.legacyVendorField, legacy.legacyVendorField);
+  legacy.legacyVendorField.raw = "mutated";
+  assert.equal(validated.legacyVendorField.raw, "keep");
+});
+
+test("V1 preserves an own __proto__ data field without prototype pollution", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const legacy = validEntry();
+  Object.defineProperty(legacy, "__proto__", {
+    enumerable: true,
+    value: { raw: "keep" },
+  });
+
+  const validated = validateKanjiInkEntry(legacy);
+  assert.equal(Object.hasOwn(validated, "__proto__"), true);
+  assert.deepEqual(validated.__proto__, { raw: "keep" });
+  assert.equal(Object.getPrototypeOf(validated), Object.prototype);
+  legacy.__proto__.raw = "mutated";
+  assert.equal(validated.__proto__.raw, "keep");
+});
+
+test("V1 preserves supported structured-cloneable unknown values", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const capturedAt = new Date("2026-08-09T00:00:00.000Z");
+  const legacy = validEntry({
+    legacyVendorField: {
+      capturedAt,
+      metadata: new Map([["raw", { keep: true }]]),
+      flags: new Set(["keep"]),
+      missing: undefined,
+    },
+  });
+
+  const validated = validateKanjiInkEntry(legacy);
+  const field = validated.legacyVendorField;
+  assert.equal(field.capturedAt.getTime(), capturedAt.getTime());
+  assert.notEqual(field.capturedAt, capturedAt);
+  assert.deepEqual([...field.metadata], [["raw", { keep: true }]]);
+  assert.notEqual(field.metadata, legacy.legacyVendorField.metadata);
+  assert.deepEqual([...field.flags], ["keep"]);
+  assert.equal(Object.hasOwn(field, "missing"), true);
+  assert.equal(field.missing, undefined);
+  legacy.legacyVendorField.metadata.get("raw").keep = false;
+  assert.equal(field.metadata.get("raw").keep, true);
+});
+
+test("V1 defensively clones cycles and shared alias topology", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const shared = { raw: "keep" };
+  const cyclic = { first: shared, second: shared };
+  cyclic.self = cyclic;
+  cyclic.map = new Map([["self", cyclic]]);
+
+  const validated = validateKanjiInkEntry(validEntry({ legacyVendorField: cyclic }));
+  const field = validated.legacyVendorField;
+  assert.notEqual(field, cyclic);
+  assert.equal(field.self, field);
+  assert.equal(field.first, field.second);
+  assert.notEqual(field.first, shared);
+  assert.equal(field.map.get("self"), field);
+  shared.raw = "mutated";
+  assert.equal(field.first.raw, "keep");
+});
+
+test("V1 rejects hostile and unsupported unknown values content-free", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const hostile = Object.create({ inherited: true });
+  const symbolArray = [];
+  symbolArray[Symbol("hidden")] = "unsupported";
+  for (const legacyVendorField of [hostile, symbolArray, () => "unsupported"]) {
+    assert.throws(() => validateKanjiInkEntry(validEntry({ legacyVendorField })), (error) => (
+      error.code === "KANJI_INK_ENTRY_INVALID"
+      && error.message === "KANJI_INK_ENTRY_INVALID"
+    ));
+  }
+});
+
+test("V2 accepts only the exact bounded saved-grid canvas shape", async () => {
+  const {
+    KANJI_INK_WIDTHS,
+    createKanjiInkEntryV2,
+    validateKanjiInkEntry,
+    validateKanjiInkEntryV2,
+  } = await loadModule();
+  const source = canvasV2();
+  const validated = validateKanjiInkEntry(source);
+
+  assert.deepEqual(KANJI_INK_WIDTHS, { pen: 0.008, marker: 0.024 });
+  assert.deepEqual(validated, source);
+  assert.deepEqual(validateKanjiInkEntryV2(source), source);
+  assert.notEqual(validated.strokes, source.strokes);
+  source.strokes[0].points[0].x = 0.9;
+  assert.equal(validated.strokes[0].points[0].x, 0.1);
+  assert.deepEqual(createKanjiInkEntryV2({
+    id: "ink-v2-created",
+    noteId: "note-1",
+    strokes: canvasV2().strokes,
+    timestamp: "2026-08-09T00:00:00.000Z",
+  }), canvasV2({ id: "ink-v2-created" }));
+});
+
+test("V2 rejects invalid tools, timings, exact-shape violations, and size bounds", async () => {
+  const { KANJI_INK_LIMITS, validateKanjiInkEntry } = await loadModule();
+  const invalid = [
+    canvasV2({ strokes: [{ ...canvasV2().strokes[0], tool: "eraser" }] }),
+    canvasV2({ strokes: [{ ...canvasV2().strokes[0], width: 0.01 }] }),
+    canvasV2({ strokes: [{ ...canvasV2().strokes[0], points: [{ x: 0.1, y: 0.2, t: -1 }, { x: 0.2, y: 0.3, t: 12 }] }] }),
+    canvasV2({ strokes: [{ ...canvasV2().strokes[0], points: [{ x: 0.1, y: 0.2, t: 0 }, { x: 0.2, y: 0.3, t: 600001 }] }] }),
+    canvasV2({ strokes: [{ ...canvasV2().strokes[0], points: [{ x: 0.1, y: 0.2, t: 0 }, { x: 0.2, y: 0.3, t: 11 }, { x: 0.3, y: 0.4, t: 10 }] }] }),
+    canvasV2({ extra: true }),
+    canvasV2({ strokes: [] }),
+  ];
+  for (const entry of invalid) {
+    assert.throws(() => validateKanjiInkEntry(entry), { code: "KANJI_INK_ENTRY_INVALID" });
+  }
+
+  const pointLimited = Array.from({ length: 257 }, (_, index) => ({
+    x: index / 256,
+    y: index / 256,
+    t: index,
+  }));
+  const strokeLimited = Array.from({ length: 33 }, () => canvasV2().strokes[0]);
+  const totalLimited = Array.from({ length: 32 }, () => ({
+    tool: "pen",
+    width: 0.008,
+    points: Array.from({ length: 129 }, (_, index) => ({ x: 0.1, y: 0.2, t: index })),
+  }));
+  const bytesLimited = validEntry({
+    legacyVendorField: { raw: "x".repeat(KANJI_INK_LIMITS.maxSerializedBytes) },
+  });
+  for (const entry of [
+    canvasV2({ strokes: [{ ...canvasV2().strokes[0], points: pointLimited }] }),
+    canvasV2({ strokes: strokeLimited }),
+    canvasV2({ strokes: totalLimited }),
+    bytesLimited,
+  ]) {
+    assert.throws(() => validateKanjiInkEntry(entry), { code: "KANJI_INK_ENTRY_LIMIT" });
+  }
+});
+
+test("V2 accepts the exact 4,096-point capacity under canonical JSON size measurement", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const strokes = Array.from({ length: 32 }, (_, strokeIndex) => ({
+    tool: "pen",
+    width: 0.008,
+    points: Array.from({ length: 128 }, (_, pointIndex) => ({
+      x: (strokeIndex * 128 + pointIndex) / 4096,
+      y: 0.123456789012345,
+      t: pointIndex,
+    })),
+  }));
+  const validated = validateKanjiInkEntry(canvasV2({ strokes }));
+  assert.equal(validated.strokes.length, 32);
+  assert.equal(validated.strokes.flatMap((stroke) => stroke.points).length, 4096);
+});
+
+test("V1 unknown fields reject hostile getters without leaking caller content", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const legacy = validEntry({ legacyVendorField: { raw: "keep" } });
+  Object.defineProperty(legacy, "legacyVendorField", {
+    enumerable: true,
+    get() {
+      throw new Error("secret caller content");
+    },
+  });
+  assert.throws(() => validateKanjiInkEntry(legacy), (error) => (
+    error.code === "KANJI_INK_ENTRY_INVALID"
+    && error.message === "KANJI_INK_ENTRY_INVALID"
+    && !error.message.includes("secret")
+  ));
+});
+
 test("literal stroke and point bounds reject oversized records", async () => {
   const {
     KANJI_INK_LIMITS,
@@ -81,6 +277,7 @@ test("literal stroke and point bounds reject oversized records", async () => {
     maxPointsPerStroke: 256,
     maxTotalPoints: 4096,
     maxSerializedBytes: 262144,
+    maxStrokeDurationMs: 600000,
   });
 
   const stroke = Array.from({ length: 257 }, (_, index) => ({
@@ -124,6 +321,7 @@ test("hostile prototypes and getters become content-free errors", async () => {
 test("create and serialize preserve exact normalized vectors without base64", async () => {
   const {
     createKanjiInkEntry,
+    parseKanjiInkEntry,
     serializeKanjiInkEntry,
   } = await loadModule();
 
@@ -136,7 +334,7 @@ test("create and serialize preserve exact normalized vectors without base64", as
     timestamp: "2026-08-04T01:02:03.000Z",
   });
   const serialized = serializeKanjiInkEntry(entry);
-  const parsed = JSON.parse(serialized);
+  const parsed = parseKanjiInkEntry(serialized);
 
   assert.equal(entry.schemaVersion, 1);
   assert.equal(entry.revision, 1);
@@ -144,6 +342,125 @@ test("create and serialize preserve exact normalized vectors without base64", as
   assert.equal(entry.createdAt, "2026-08-04T01:02:03.000Z");
   assert.deepEqual(parsed, entry);
   assert.doesNotMatch(serialized, /data:image|base64/i);
+});
+
+test("tagged entry JSON round-trips every supported V1 unknown value without tag collisions", async () => {
+  const { parseKanjiInkEntry, serializeKanjiInkEntry } = await loadModule();
+  const buffer = new ArrayBuffer(4);
+  new Uint8Array(buffer).set([1, 2, 3, 4]);
+  const expression = /keep/gi;
+  expression.lastIndex = 2;
+  const shared = { raw: "shared" };
+  const cyclic = { first: shared, second: shared };
+  cyclic.self = cyclic;
+  const legacy = validEntry({
+    legacyVendorField: {
+      map: new Map([["keep", new Set(["set"])]]),
+      missing: undefined,
+      count: 42n,
+      expression,
+      buffer,
+      view: new DataView(buffer, 1, 2),
+      bytes: new Uint8Array([5, 6, 7]),
+      cyclic,
+      ordinaryTagLikeData: { type: "map", entries: "ordinary user data" },
+    },
+  });
+  Object.defineProperty(legacy, "__proto__", {
+    enumerable: true,
+    value: { raw: "keep" },
+  });
+
+  const parsed = parseKanjiInkEntry(serializeKanjiInkEntry(legacy));
+  const field = parsed.legacyVendorField;
+  assert.deepEqual([...field.map], [["keep", new Set(["set"])]]);
+  assert.equal(field.missing, undefined);
+  assert.equal(field.count, 42n);
+  assert.equal(field.expression.source, "keep");
+  assert.equal(field.expression.flags, "gi");
+  assert.equal(field.expression.lastIndex, 2);
+  assert.deepEqual([...new Uint8Array(field.buffer)], [1, 2, 3, 4]);
+  assert.deepEqual([field.view.getUint8(0), field.view.getUint8(1)], [2, 3]);
+  assert.equal(field.view.buffer, field.buffer);
+  assert.deepEqual([...field.bytes], [5, 6, 7]);
+  assert.equal(field.cyclic.self, field.cyclic);
+  assert.equal(field.cyclic.first, field.cyclic.second);
+  assert.deepEqual(field.ordinaryTagLikeData, { type: "map", entries: "ordinary user data" });
+  assert.equal(Object.hasOwn(parsed, "__proto__"), true);
+  assert.deepEqual(parsed.__proto__, { raw: "keep" });
+  assert.deepEqual(parseKanjiInkEntry(serializeKanjiInkEntry(canvasV2())), canvasV2());
+});
+
+test("parser retains compatibility with the acyclic tagged envelope version 1", async () => {
+  const { parseKanjiInkJson } = await loadModule();
+  const serialized = JSON.stringify([
+    "kanji-ink-json",
+    1,
+    ["object", false, [["raw", ["string", "keep"]]]],
+  ]);
+  assert.deepEqual(parseKanjiInkJson(serialized), { raw: "keep" });
+});
+
+test("V1 graph depth and node exhaustion are bounded as entry limits", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  let deep = { raw: "keep" };
+  for (let index = 0; index < 256; index += 1) deep = { child: deep };
+  const shared = { raw: "keep" };
+  const wide = Array.from({ length: 70_000 }, () => shared);
+
+  for (const legacyVendorField of [deep, wide]) {
+    assert.throws(() => validateKanjiInkEntry(validEntry({ legacyVendorField })), {
+      code: "KANJI_INK_ENTRY_LIMIT",
+      message: "KANJI_INK_ENTRY_LIMIT",
+    });
+  }
+});
+
+test("V1 retains the exact tagged-v1 serialized byte boundary", async () => {
+  const { validateKanjiInkEntry } = await loadModule();
+  const boundaryEntry = (paddingLength) => ({
+    id: "ink-1",
+    noteId: "note-1",
+    schemaVersion: 1,
+    revision: 1,
+    character: "人",
+    strokes: [[{ x: 0, y: 0 }, { x: 1, y: 1 }]],
+    recognizer: { engineId: "e", engineVersion: "1", datasetVersion: "d" },
+    createdAt: "2026-08-09T00:00:00.000Z",
+    updatedAt: "2026-08-09T00:00:00.000Z",
+    extra: "yyyy",
+    padding: "x".repeat(paddingLength),
+  });
+
+  assert.equal(validateKanjiInkEntry(boundaryEntry(261_511)).padding.length, 261_511);
+  assert.throws(() => validateKanjiInkEntry(boundaryEntry(261_512)), {
+    code: "KANJI_INK_ENTRY_LIMIT",
+    message: "KANJI_INK_ENTRY_LIMIT",
+  });
+});
+
+test("cyclic V1 uses its bounded graph metric before legacy alias expansion", async () => {
+  const { serializeKanjiInkJson, validateKanjiInkEntry } = await loadModule();
+  const shared = { raw: "x".repeat(139_991) };
+  const graph = { first: shared, second: shared };
+  graph.self = graph;
+  const entry = {
+    id: "ink-1",
+    noteId: "note-1",
+    schemaVersion: 1,
+    revision: 1,
+    character: "人",
+    strokes: [[{ x: 0, y: 0 }, { x: 1, y: 1 }]],
+    recognizer: { engineId: "e", engineVersion: "1", datasetVersion: "d" },
+    createdAt: "2026-08-09T00:00:00.000Z",
+    updatedAt: "2026-08-09T00:00:00.000Z",
+    legacyVendorField: graph,
+  };
+
+  assert.equal(new TextEncoder().encode(serializeKanjiInkJson(entry)).length, 140_718);
+  const validated = validateKanjiInkEntry(entry);
+  assert.equal(validated.legacyVendorField.self, validated.legacyVendorField);
+  assert.equal(validated.legacyVendorField.first, validated.legacyVendorField.second);
 });
 
 test("versioned import bundle validates every entry atomically", async () => {

@@ -96,9 +96,9 @@ Required:
 - Migration never returns or logs raw source data, note data, identifiers, titles, content, tags, links, checksums, or database dumps.
 - Legacy migration owns only the existing `notes` store and indexes. It does not create, update, delete, or inspect `studyReviews`.
 
-### Japanese study persistence: schema v2
+### Japanese study persistence: store introduced by schema v2
 
-- `myNoteDB` version 2 is a forward-only additive upgrade.
+- `myNoteDB` is currently version 3; its `studyReviews` store was introduced by the forward-only additive v2 branch.
 - The `oldVersion < 2` upgrade branch creates only `studyReviews`; it never enumerates, reads, normalizes, writes, copies, or rewrites a record in `notes`.
 - `notes` retains store name `notes`, key path `id`, indexes `updatedAt`, `pinned`, and `archived`, and all existing record bytes.
 - Bootstrap and upgrade do not automatically enroll existing notes or create review records.
@@ -120,7 +120,25 @@ Required:
 - Restore uses `add` for both records and aborts instead of overwriting either existing key.
 - A blocked version upgrade rejects with `DATABASE_UPGRADE_BLOCKED`; a connection that succeeds after that rejection is immediately closed.
 - Every opened database connection closes itself on `versionchange` so a newer deployment is not indefinitely blocked by this client.
-- There is no automatic schema downgrade from v2 to v1. Rollback code must understand v2 and must not delete review data or rewrite notes.
+- There is no automatic schema downgrade. Rollback code must understand database v3 and must not delete review data or rewrite notes.
+
+### Kanji saved-grid persistence: schema v3
+
+- The `oldVersion < 3` upgrade branch creates only `kanjiInkEntries` with key path `id` and indexes `noteId` and `updatedAt`; it does not enumerate, read, normalize, write, copy, or rewrite existing `notes` or `studyReviews` records.
+- `kanjiInkEntries` accepts only the validated union of historical V1 and saved-grid V2 records. Validation dispatches by the own data property `schemaVersion`.
+- V1 is read-only compatibility data. Its required recognition-era fields remain validated; cloneable unknown own fields are preserved across read, delete/restore, structured export, and import. It is never upgraded or rewritten on read.
+- V1 remains searchable only by its already-confirmed `character`. V2 contributes no character, recognizer, candidate, or other guessed text to canonical search material.
+- V2 has exactly `id`, `noteId`, `strokes`, `paperStyle`, `createdAt`, `updatedAt`, and `schemaVersion`. `paperStyle` is `grid`; a stroke has exactly `tool`, `width`, and `points`; a point has exactly `x`, `y`, and `t`.
+- V2 persisted tools are only `pen` and `marker`, with canonical normalized widths `0.008` and `0.024`. Eraser is interaction-only and removes intersecting canonical strokes.
+- V2 coordinates are finite and normalized to `[0, 1]`. Each stroke starts at `t: 0`; times are monotonic integers no greater than `600000` ms.
+- An entry is bounded to 32 strokes, 256 points per stroke, 4,096 total points, and 262,144 serialized bytes. Controller Undo/Redo retains at most 100 committed draft states.
+- Save requires a non-empty valid draft, is single-flight, and reports success only after canonical persistence. Failure preserves the exact draft, selected tool, Undo/Redo state, and retry intent.
+- Create and update validate the owning note in the same transaction. Deleting/restoring a note includes its valid handwriting dependents in the same transaction as the note and optional review; collisions or request failure roll back the complete transaction.
+- Invalid persisted handwriting is isolated and reported without repair. Handwriting delete/restore and mixed-record import use add-not-overwrite semantics where collision safety is required.
+- New structured exports use exact bundle schema 4 and preserve mixed V1/V2 records. Exact historical schema-3 bundles remain importable and may contain only V1 entries.
+- Human-readable export derives SVG from normalized vectors. V1 may expose its stored character and historical attribution; V2 is labelled `Kanji drawing` and never invents a character.
+- The Kanji path performs no network request and loads no remote recognizer, model, dataset, or telemetry.
+- Rollback is code-only and database-v3 aware. It must preserve both V1 and V2 records without deletion, rewrite, or downgrade; unsupported V2 may be presented only as preserved data.
 
 ### Japanese templates and deterministic scheduling
 

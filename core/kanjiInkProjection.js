@@ -1,5 +1,11 @@
-import { validateKanjiInkEntry } from "./kanjiInkEntry.js";
+import {
+  parseKanjiInkJson,
+  parseKanjiInkJsonEnvelope,
+  serializeKanjiInkJson,
+  validateKanjiInkEntry,
+} from "./kanjiInkEntry.js";
 import { normalizeNote } from "./model.js";
+import { KANJI_PAPER_PATTERN, createKanjiPaperGeometry } from "./kanjiPaper.js";
 
 const MAX_PROJECTED_ENTRIES = 128;
 const MAX_EXPORT_NOTES = 50_000;
@@ -134,6 +140,7 @@ export function buildKanjiSearchProjection(entries) {
   const seen = new Set();
   const characters = [];
   for (const entry of safeEntries) {
+    if (entry.schemaVersion !== 1) continue;
     if (seen.has(entry.character)) continue;
     seen.add(entry.character);
     characters.push(entry.character);
@@ -186,7 +193,7 @@ export function createKanjiExportBundle(notes, entries, options = {}) {
   validatedRelations(clonedNotes, safeEntries, "KANJI_EXPORT_INVALID");
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     exportedAt: normalizedTimestamp(options.exportedAt),
     notes: clonedNotes,
     kanjiInkEntries: structuredClone(safeEntries),
@@ -199,7 +206,7 @@ export function validateKanjiExportBundle(input) {
     if (
       !isPlainObject(input)
       || !hasExactOwnKeys(input, BUNDLE_KEYS)
-      || input.schemaVersion !== 3
+      || ![3, 4].includes(input.schemaVersion)
       || !Array.isArray(input.notes)
       || input.notes.length > MAX_EXPORT_NOTES
       || !isPlainObject(input.recognizerAttribution)
@@ -213,9 +220,12 @@ export function validateKanjiExportBundle(input) {
       validateCanonicalNote(note, "KANJI_IMPORT_INVALID")
     ));
     const entries = validatedEntries(input.kanjiInkEntries, "KANJI_IMPORT_INVALID");
+    if (input.schemaVersion === 3 && entries.some((entry) => entry.schemaVersion !== 1)) {
+      throw codedError("KANJI_IMPORT_INVALID");
+    }
     validatedRelations(notes, entries, "KANJI_IMPORT_INVALID");
     return {
-      schemaVersion: 3,
+      schemaVersion: input.schemaVersion,
       exportedAt: normalizedTimestamp(input.exportedAt, "KANJI_IMPORT_INVALID"),
       notes,
       kanjiInkEntries: structuredClone(entries),
@@ -230,10 +240,30 @@ function coordinate(value, size) {
   return String(Number((value * size).toFixed(2)));
 }
 
-function pathForStroke(stroke, size) {
-  return stroke.map((point, index) => (
+function pathForPoints(points, size) {
+  return points.map((point, index) => (
     `${index === 0 ? "M" : "L"} ${coordinate(point.x, size)} ${coordinate(point.y, size)}`
   )).join(" ");
+}
+
+export function serializeKanjiExportBundle(bundle) {
+  return serializeKanjiInkJson(validateKanjiExportBundle(bundle));
+}
+
+export function parseKanjiExportBundle(serialized) {
+  try {
+    return validateKanjiExportBundle(parseKanjiInkJson(serialized));
+  } catch {
+    throw codedError("KANJI_IMPORT_INVALID");
+  }
+}
+
+export function parseKanjiExportBundleEnvelope(envelope) {
+  try {
+    return validateKanjiExportBundle(parseKanjiInkJsonEnvelope(envelope));
+  } catch {
+    throw codedError("KANJI_IMPORT_INVALID");
+  }
 }
 
 export function renderKanjiEntrySvg(entry, options = {}) {
@@ -241,11 +271,16 @@ export function renderKanjiEntrySvg(entry, options = {}) {
   const size = Number.isFinite(options.size)
     ? Math.max(64, Math.min(1024, Math.round(options.size)))
     : 160;
-  const strokeWidth = Math.max(2, Math.round(size / 32));
-  const paths = safeEntry.strokes
-    .map((stroke) => `<path d="${pathForStroke(stroke, size)}" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" />`)
-    .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Handwriting sample for ${safeEntry.character}"><rect width="${size}" height="${size}" fill="white" />${paths}</svg>`;
+  const isCanvas = safeEntry.schemaVersion === 2;
+  const paper = createKanjiPaperGeometry(size, size);
+  const background = isCanvas
+    ? `<rect data-paper-style="grid" data-paper-pattern="${KANJI_PAPER_PATTERN.semanticName}" width="${size}" height="${size}" fill="${KANJI_PAPER_PATTERN.backgroundColor}" />${paper.rules.map((rule, index) => `<line data-paper-rule="${index + 1}" x1="${rule.x1}" y1="${rule.y1}" x2="${rule.x2}" y2="${rule.y2}" stroke="${KANJI_PAPER_PATTERN.ruleColor}" stroke-width="${KANJI_PAPER_PATTERN.ruleWidth}" />`).join("")}`
+    : `<rect width="${size}" height="${size}" fill="white" />`;
+  const paths = isCanvas
+    ? safeEntry.strokes.map((stroke) => `<path data-tool="${stroke.tool}" d="${pathForPoints(stroke.points, size)}" fill="none" stroke="${KANJI_PAPER_PATTERN.inkColor}" stroke-width="${coordinate(stroke.width, size)}" stroke-linecap="round" stroke-linejoin="round" />`).join("")
+    : safeEntry.strokes.map((stroke) => `<path d="${pathForPoints(stroke, size)}" fill="none" stroke="currentColor" stroke-width="${Math.max(2, Math.round(size / 32))}" stroke-linecap="round" stroke-linejoin="round" />`).join("");
+  const label = isCanvas ? "Kanji drawing" : `Handwriting sample for ${safeEntry.character}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${label}">${background}${paths}</svg>`;
 }
 
 function markdownText(value) {
@@ -262,22 +297,27 @@ export function createKanjiHumanReadableExport(notes, entries) {
     byNote.get(entry.noteId).push(entry);
   }
 
-  const sections = [
-    "# Kanji handwriting export",
-    "",
-    `Recognizer: ${ATTRIBUTION.engineId} ${ATTRIBUTION.engineVersion}`,
-    `Dataset: ${ATTRIBUTION.datasetVersion}`,
-    `Source: ${ATTRIBUTION.source}`,
-  ];
+  const sections = ["# Kanji handwriting export"];
+  if (bundle.kanjiInkEntries.some((entry) => entry.schemaVersion === 1)) {
+    sections.push(
+      "",
+      `Recognizer: ${ATTRIBUTION.engineId} ${ATTRIBUTION.engineVersion}`,
+      `Dataset: ${ATTRIBUTION.datasetVersion}`,
+      `Source: ${ATTRIBUTION.source}`,
+    );
+  }
 
   for (const note of bundle.notes) {
     const noteEntries = byNote.get(note.id) || [];
     if (noteEntries.length === 0) continue;
     sections.push("", `## ${markdownText(note.title || "Untitled")}`, "", `Note ID: \`${note.id}\``);
     for (const entry of noteEntries) {
+      const heading = entry.schemaVersion === 1
+        ? `### Character: ${entry.character}`
+        : "### Kanji drawing";
       sections.push(
         "",
-        `### Character: ${entry.character}`,
+        heading,
         "",
         `Entry ID: \`${entry.id}\``,
         "",
