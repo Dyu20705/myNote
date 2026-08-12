@@ -68,7 +68,7 @@ Browser composition and UI adapters
 
 - Exports `createJapaneseApp({ runtime, document })` as an injected browser adapter.
 - Creates Japanese lifecycle persistence adapters and registers the Japanese search-result policy.
-- Binds the Japanese Notes/Review presentation, filter disclosure, registry-backed quick-create action group, dashboard, and review controls to coordinator/action APIs.
+- Binds the Japanese board, instant/advanced filter presentation, registry-backed quick-create action group, optional study details, and direct Review entry to coordinator/action APIs.
 - Renders state but does not own workspace refresh sequencing.
 - Does not retrieve active runtime singletons or create a second store, command stack, search worker, history, or backlink index.
 
@@ -136,6 +136,9 @@ Browser composition and UI adapters
 ### `ui/`
 
 - Owns rendering and local interaction behavior only.
+- `notePresentation.js` preserves upstream result order while projecting visible IDs into `PINNED` and `NOTES` board sections.
+- `noteEditorOverlay.js` owns only native-dialog presentation, board-scroll snapshots, asynchronous close serialization, and deterministic focus return.
+- `kanjiInkView.js` consumes the #69 application service and projects valid note-linked drawings into the shared overlay's bounded `noteDrawingRegion`; it does not copy vector data into notes or open IndexedDB.
 - Command providers own their own availability rules.
 - Does not parse canonical metadata, call storage directly, retrieve active application singletons, or trigger workspace refresh through synthetic DOM events.
 
@@ -152,7 +155,7 @@ UI intent
 → render intent
 ```
 
-A same-active-note refresh updates the search field, list, counts, and metrics without rewriting editor fields. An active-note transition flushes the current draft first. Derived-index refresh is suppressed while that flush is nested inside a controller refresh; the controller performs the authoritative post-flush query instead.
+A same-active-note refresh updates the search field, board, counts, and metrics without rewriting an open overlay draft. An active-note transition flushes the current draft first. Derived-index refresh is suppressed while that flush is nested inside a controller refresh; the controller performs the authoritative post-flush query instead.
 
 Japanese switching uses the same lifecycle:
 

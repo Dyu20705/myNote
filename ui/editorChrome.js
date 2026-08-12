@@ -7,6 +7,10 @@ const elements = {
   contentInput: document.getElementById("contentInput"),
   saveState: document.getElementById("saveState"),
   noteList: document.getElementById("noteList"),
+  editorOverlay: document.getElementById("noteEditorOverlay"),
+  closeEditorButton: document.getElementById("closeNoteEditorButton"),
+  pinButton: document.getElementById("pinNoteButton"),
+  newNoteButton: document.getElementById("newNoteButton"),
   detailsButton: document.getElementById("detailsButton"),
   closeDetailsButton: document.getElementById("closeDetailsButton"),
   inspector: document.getElementById("noteInspector"),
@@ -29,8 +33,6 @@ if (required.length > 0) {
 
 const actionRegistry = createNoteActionRegistry();
 const unregisterActions = [
-  actionRegistry.register({ commandId: "editor.save", order: 10 }),
-  actionRegistry.register({ commandId: "notes.pin", order: 30 }),
   actionRegistry.register({ commandId: "notes.archive", order: 40 }),
   actionRegistry.register({ commandId: "notes.kanji-ink", order: 50 }),
   actionRegistry.register({ commandId: "notes.delete", tone: "danger", order: 90 }),
@@ -95,7 +97,7 @@ function restoreFocus(opener) {
     opener.focus();
     return;
   }
-  const fallback = activeCard() || elements.titleInput;
+  const fallback = activeCard() || elements.newNoteButton;
   fallback.focus();
 }
 
@@ -171,8 +173,11 @@ function renderActions() {
       });
       closeActions({ restore: false });
       if (wasDelete && outcome?.executed) {
-        elements.undoNotice.hidden = false;
-        elements.undoDeleteButton.focus();
+        elements.editorOverlay.addEventListener("close", () => {
+          elements.undoNotice.hidden = false;
+          elements.undoDeleteButton.focus();
+        }, { once: true });
+        elements.closeEditorButton.click();
       } else {
         restoreFocus(actionsOpener || elements.actionsButton);
       }
@@ -201,9 +206,20 @@ async function undoDelete() {
     elements.undoNotice.hidden = true;
     queueMicrotask(() => {
       synchronizeInspector();
-      restoreFocus(activeCard() || elements.titleInput);
+      restoreFocus(activeCard() || elements.newNoteButton);
     });
   }
+}
+
+async function togglePin() {
+  const outcome = await commandRuntime.execute("notes.pin", {
+    source: "note-toolbar",
+    target: elements.pinButton,
+  });
+  if (outcome?.executed) {
+    queueMicrotask(synchronizeInspector);
+  }
+  elements.pinButton.focus();
 }
 
 function scheduleInspectorSync() {
@@ -257,8 +273,15 @@ elements.actionsButton.addEventListener("click", () => {
   }
 });
 elements.closeActionsButton.addEventListener("click", () => closeActions());
+elements.pinButton.addEventListener("click", () => {
+  togglePin().catch(() => undefined);
+});
 elements.undoDeleteButton.addEventListener("click", () => {
   void undoDelete();
+});
+elements.editorOverlay.addEventListener("close", () => {
+  closeActions({ restore: false });
+  closeDetails({ restore: false });
 });
 elements.noteList.addEventListener("click", scheduleInspectorSync);
 elements.titleInput.addEventListener("blur", scheduleInspectorSync);

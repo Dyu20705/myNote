@@ -1,24 +1,30 @@
 import { expect, test } from "@playwright/test";
 import {
   createJapaneseNoteFromMenu,
-  openJapaneseReviewSubview,
+  openJapaneseReview,
 } from "./japanese-helpers.mjs";
 
 async function openApplication(page) {
   await page.goto("/");
   await expect(page.locator("#noteCount")).toHaveText("1 note");
-  await expect(page.locator("#contentInput")).toBeFocused();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
 }
 
 async function createOrdinaryNote(page, title) {
   await page.locator("#newNoteButton").click();
-  await expect(page.locator("#contentInput")).toBeFocused();
+  await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(`${title} body`);
   await page.locator("#contentInput").focus();
   await page.keyboard.press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
+  await page.getByRole("button", { name: "Close note editor" }).click();
   await expect(page.locator("#noteList .note-item-title")).toContainText([title]);
+}
+
+async function closeNoteEditor(page) {
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
 }
 
 async function openJapaneseWorkspace(page) {
@@ -36,6 +42,7 @@ async function openPalette(page) {
 
 test("application create shortcut yields to an active editor draft", async ({ page }) => {
   await openApplication(page);
+  await page.locator("#noteList .note-item").first().click();
 
   const title = page.locator("#titleInput");
   await title.fill("Draft in progress");
@@ -82,11 +89,12 @@ test("review modal isolates background note-navigation commands", async ({ page 
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
+  await closeNoteEditor(page);
   await createJapaneseNoteFromMenu(page, "Create kanji note");
   await expect(page.locator("#titleInput")).toHaveValue("新しい漢字");
+  await closeNoteEditor(page);
 
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  await openJapaneseReview(page);
   await page.getByRole("button", { name: "Reveal review content" }).click();
   const dialog = page.getByRole("dialog", { name: "Japanese review session" });
   const good = page.getByRole("button", { name: "Good" });
@@ -105,8 +113,8 @@ test("review modal isolates background note-navigation commands", async ({ page 
 test("review numeric shortcut remains owned by the active modal", async ({ page }) => {
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  await closeNoteEditor(page);
+  await openJapaneseReview(page);
   await page.getByRole("button", { name: "Reveal review content" }).click();
 
   await page.getByRole("button", { name: "Good" }).focus();

@@ -7,40 +7,59 @@ const VIEWPORTS = [
   { width: 1024, height: 768 },
 ];
 
-async function expectEditorInInitialViewport(page) {
+async function expectBoardInInitialViewport(page) {
   const geometry = await page.evaluate(() => {
-    const title = globalThis.document.querySelector("#titleInput").getBoundingClientRect();
-    const body = globalThis.document.querySelector("#contentInput").getBoundingClientRect();
     const navigation = globalThis.document.querySelector("#noteNavigationRegion").getBoundingClientRect();
     return {
-      titleTop: title.top,
-      titleBottom: title.bottom,
-      bodyTop: body.top,
-      bodyVisibleHeight: Math.max(0, Math.min(body.bottom, globalThis.innerHeight) - Math.max(body.top, 0)),
+      navigationTop: navigation.top,
       navigationBottom: navigation.bottom,
       documentWidth: globalThis.document.documentElement.scrollWidth,
       viewportWidth: globalThis.document.documentElement.clientWidth,
     };
   });
 
-  expect(geometry.titleTop).toBeGreaterThanOrEqual(0);
-  expect(geometry.titleBottom).toBeLessThanOrEqual(await page.evaluate(() => globalThis.innerHeight));
-  expect(geometry.bodyTop).toBeLessThan(await page.evaluate(() => globalThis.innerHeight));
-  expect(geometry.bodyVisibleHeight).toBeGreaterThanOrEqual(160);
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+  expect(geometry.navigationTop).toBeGreaterThanOrEqual(0);
   expect(geometry.navigationBottom).toBeLessThanOrEqual(await page.evaluate(() => globalThis.innerHeight));
   expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
 }
 
+async function expectOpenOverlayBounded(page) {
+  const geometry = await page.locator("#noteEditorOverlay").evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      left: box.left,
+      top: box.top,
+      right: box.right,
+      bottom: box.bottom,
+      contentHeight: globalThis.document.querySelector("#contentInput").getBoundingClientRect().height,
+      viewportWidth: globalThis.innerWidth,
+      viewportHeight: globalThis.innerHeight,
+    };
+  });
+  expect(geometry.left).toBeGreaterThanOrEqual(0);
+  expect(geometry.top).toBeGreaterThanOrEqual(0);
+  expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight);
+  expect(geometry.contentHeight).toBeGreaterThanOrEqual(160);
+}
+
 for (const viewport of VIEWPORTS) {
-  test(`editor remains above the fold in both workspaces at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  test(`board and centered overlay remain bounded in both workspaces at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/");
     await expect(page.locator("#noteCount")).toHaveText("1 note");
-    await expectEditorInInitialViewport(page);
+    await expectBoardInInitialViewport(page);
+    await page.locator("#noteList .note-item").first().click();
+    await expectOpenOverlayBounded(page);
+    await page.getByRole("button", { name: "Close note editor" }).click();
 
     await page.locator("#japaneseWorkspaceButton").click();
     await expect(page.locator("#japaneseWorkspaceButton")).toHaveAttribute("aria-pressed", "true");
-    await expectEditorInInitialViewport(page);
+    await expectBoardInInitialViewport(page);
+    await createJapaneseNoteFromMenu(page, "Create vocabulary note");
+    await expectOpenOverlayBounded(page);
+    await page.getByRole("button", { name: "Close note editor" }).click();
 
     const boundedSecondaryRegion = await page.locator("#noteNavigationRegion").evaluate((element) => ({
       overflowY: globalThis.getComputedStyle(element).overflowY,
@@ -59,8 +78,13 @@ test("shell exposes coherent application and editor-context landmarks without te
   await expect(page.getByRole("banner")).toHaveCount(1);
   await expect(page.getByRole("navigation", { name: "Workspace" })).toHaveCount(1);
   await expect(page.getByRole("complementary", { name: "Note navigation" })).toHaveCount(1);
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+  const card = page.locator("#noteList .note-item").first();
+  await card.click();
+  await expect(page.getByRole("dialog", { name: "Edit note" })).toBeVisible();
   await expect(page.getByRole("main", { name: "Editor" })).toHaveCount(1);
   await expect(page.locator("#editorContextHeader")).toBeVisible();
+  await page.getByRole("button", { name: "Close note editor" }).click();
 
   const notes = page.locator("#notesWorkspaceButton");
   const japanese = page.locator("#japaneseWorkspaceButton");
@@ -100,10 +124,15 @@ test("search shortcut and ordinary create remain truthful to the active workspac
   await expect(shortcut).toHaveText("/");
   await expect(shortcut).toHaveAttribute("aria-hidden", "true");
 
+  const card = page.locator("#noteList .note-item").first();
+  await card.click();
   await editor.focus();
   await page.keyboard.press("/");
   await expect(editor).toHaveValue("/");
   await expect(search).not.toBeFocused();
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+  await expect(card).toBeFocused();
 
   await page.locator("#notesWorkspaceButton").focus();
   await page.keyboard.press("/");
@@ -119,28 +148,26 @@ test("search shortcut and ordinary create remain truthful to the active workspac
 
 test("keyboard traversal includes editor context actions and reaches the shell deterministically", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#contentInput")).toBeFocused();
-
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.locator("#noteActionsButton")).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.locator("#detailsButton")).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
+  const card = page.locator("#noteList .note-item").first();
+  await card.click();
   await expect(page.locator("#titleInput")).toBeFocused();
 
-  const reverseOrder = [];
-  for (let index = 0; index < 16; index += 1) {
-    await page.keyboard.press("Shift+Tab");
-    const activeId = await page.evaluate(() => globalThis.document.activeElement?.id ?? "");
-    if (activeId) {
-      reverseOrder.push(activeId);
-    }
-    if (activeId === "notesWorkspaceButton") {
-      break;
-    }
-  }
-  expect(reverseOrder.at(-1)).toBe("notesWorkspaceButton");
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#pinNoteButton")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#detailsButton")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#noteActionsButton")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#closeNoteEditorButton")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#contentInput")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+  await expect(card).toBeFocused();
 
+  await page.locator("#notesWorkspaceButton").focus();
+  await expect(page.locator("#notesWorkspaceButton")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.locator("#japaneseWorkspaceButton")).toBeFocused();
   await page.keyboard.press("Tab");
@@ -158,13 +185,14 @@ test("shell controls remain functional through refresh, save, selection, search,
   await page.goto("/");
 
   await page.locator("#newNoteButton").click();
-  await expect(page.locator("#contentInput")).toBeFocused();
+  await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill("Synthetic shell note");
   await page.locator("#contentInput").fill("Repository-safe editor shell evidence.");
-  await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
+  await expect(page.locator("#saveState")).toHaveText("Unsaved");
   await page.locator("#contentInput").focus();
   await page.keyboard.press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
+  await page.getByRole("button", { name: "Close note editor" }).click();
 
   await page.locator("#searchInput").fill("Synthetic shell");
   await expect(page.locator("#noteList .note-item-title")).toContainText(["Synthetic shell note"]);
@@ -185,9 +213,11 @@ test("shell controls remain functional through refresh, save, selection, search,
 test("rapid workspace switching preserves per-workspace query, selection, and the newest draft", async ({ page }) => {
   await page.goto("/");
   await page.locator("#newNoteButton").click();
-  await expect(page.locator("#contentInput")).toBeFocused();
+  await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill("Newest synthetic draft");
   await page.locator("#contentInput").fill("This pending draft must survive rapid workspace transitions.");
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   await page.locator("#searchInput").fill("Newest synthetic");
 
   const notes = page.locator("#notesWorkspaceButton");
@@ -202,10 +232,12 @@ test("rapid workspace switching preserves per-workspace query, selection, and th
   await expect(page.locator("#searchInput")).toHaveValue("Newest synthetic");
   await expect(page.locator("#titleInput")).toHaveValue("Newest synthetic draft");
   await expect(page.locator("#contentInput")).toHaveValue("This pending draft must survive rapid workspace transitions.");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
 
   await japanese.click();
   await expect(page.locator("#searchInput")).toHaveValue("Japanese-only query");
   await notes.click();
+  await page.locator("#noteList .note-item", { hasText: "Newest synthetic draft" }).click();
   await expect(page.locator("#titleInput")).toHaveValue("Newest synthetic draft");
+  await expect(page.locator("#contentInput")).toHaveValue("This pending draft must survive rapid workspace transitions.");
 });

@@ -86,7 +86,6 @@ test("JSON import validates, restores atomically, and becomes searchable after r
   await page.locator("#searchInput").fill("Imported Kanji bundle");
   await expect(page.locator("#noteList .note-item-title")).toHaveText("Imported Kanji bundle");
   await page.locator("#noteList .note-item-title").click();
-  await page.locator("#detailsButton").click();
   await expect(page.locator('#kanjiInkEntries [data-kanji-schema-version="1"]'))
     .toContainText("木");
   await expect(page.locator("#contentInput")).toHaveValue("Imported canonical body");

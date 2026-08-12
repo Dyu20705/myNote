@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { STUDY_NOTEBOOK_TYPES } from "../../core/studyReview.js";
 import {
   JAPANESE_FILTER_ERRORS,
   JapaneseNoteFilter,
   filterJapaneseNoteIds,
+  resolveJapaneseCommonFilter,
 } from "../../core/japaneseFilters.js";
 
 function localIso(year, month, day) {
@@ -38,6 +40,25 @@ const reviews = [
 ];
 
 const enrolledIds = ["vocab", "kanji", "grammar", "broken", "missing"];
+
+test("resolves every canonical M2 Japanese common filter value", () => {
+  const enabled = ["all", ...STUDY_NOTEBOOK_TYPES];
+
+  assert.deepEqual(enabled.map((value) => resolveJapaneseCommonFilter(value)), [
+    "all",
+    "vocabulary",
+    "kanji",
+    "grammar",
+    "output",
+    "planner",
+  ]);
+});
+
+test("rejects unsupported Japanese common filter values", () => {
+  for (const value of [undefined, null, "", "reading", "unknown", {}, []]) {
+    assert.equal(resolveJapaneseCommonFilter(value), null);
+  }
+});
 
 test("returns search order unchanged when no boundary or filters are supplied", () => {
   const ids = ["grammar", "ordinary", "vocab"];

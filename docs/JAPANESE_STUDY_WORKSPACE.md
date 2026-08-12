@@ -2,6 +2,8 @@
 
 This document defines the browser-facing workspace delivered on top of the Japanese lifecycle contract. It does not redefine persistence, scheduling, parser, template, or dashboard semantics.
 
+Issue #90 supersedes the earlier editor-first Notes/Review subview presentation. The current tree is board-first, edits through the shared centered note overlay, exposes Filter A directly, and starts or resumes Review from one compact board action. All lifecycle, search, filter, dashboard, scheduler, and persistence owners remain unchanged.
+
 ## Runtime ownership
 
 The application uses one browser composition root and one shared runtime:
@@ -26,7 +28,7 @@ The search worker remains responsible only for text indexing and ranking. `searc
 - Notes is the default workspace after every bootstrap.
 - The Notes and 日本語 controls are native buttons inside a labelled navigation region and expose their selected state through `aria-pressed`.
 - Each workspace retains its own search query and last active note when switching.
-- The Japanese workspace reuses the shared virtualized list and editor.
+- The Japanese workspace reuses the shared virtualized board and centered note-editor overlay.
 - Switching invokes `JapaneseWorkspaceCoordinator.switchWorkspace`, which restores the target view and calls `NoteWorkspaceController.refresh`.
 - Refresh never dispatches synthetic input events, creates a `MutationObserver`, queries `.note-item` elements, or programmatically clicks a rendered note.
 - Search results are intersected with the validated enrolled-note ID set.
@@ -38,7 +40,13 @@ The note-workspace controller suppresses stale asynchronous query commits. Befor
 
 ## Japanese note filters
 
-Japanese Notes exposes additive filters for creation date and notebook type through a compact disclosure. The controls are collapsed by default and hidden in the ordinary Notes workspace and the Review subview.
+Japanese Notes exposes common Filter A controls directly above the board and keeps the complete structured controls behind `+ Filter`. All controls are hidden in the ordinary Notes workspace.
+
+- `All`, `Vocabulary`, `Grammar`, and `Kanji` update the existing notebook-type filter immediately and expose native `aria-pressed` state.
+- `Reading` is disabled with the explicit reason `Reading filters require the Japanese V2 learning model`. The M2 runtime does not invent a new canonical type or map Reading to an unrelated type.
+- `+ Filter` discloses the complete existing canonical date/type controls. There is no Apply action.
+
+Common controls pass through `resolveJapaneseCommonFilter()` before `JapaneseNoteFilter.update()`. The resolver returns only `all` or an existing canonical M2 notebook type; deferred and unknown values return `null` and cannot mutate filter state.
 
 - Created from and Created to use native date inputs and form an inclusive range.
 - Date comparison uses each note's canonical `createdAt` timestamp converted to the browser's local calendar date.
@@ -46,7 +54,7 @@ Japanese Notes exposes additive filters for creation date and notebook type thro
 - Date, type, enrollment, and text search filters compose by intersection while preserving the search worker's result order.
 - Missing notes, invalid creation timestamps, missing review metadata, invalid review metadata, and conflicting duplicate notebook-type metadata never gain an inferred match.
 - An inverted date range is invalid, marks both date controls with `aria-invalid`, exposes one live validation message, and returns no matches until corrected or cleared.
-- Active filters render as individually removable, validated chips outside the disclosure panel.
+- Active filters render as individually removable, validated chips outside the advanced disclosure panel.
 - `Clear all` is rendered only while at least one structured filter is active.
 - Removing a chip or choosing `Clear all` resets only the date and type controls. Neither action changes the workspace search query.
 - Filter state is session-local and retained while switching workspaces. It is not persisted or exported.
@@ -54,9 +62,17 @@ Japanese Notes exposes additive filters for creation date and notebook type thro
 
 Filtering is read-only. It does not write to IndexedDB, update review scheduling, modify note metadata, or rebuild the search index.
 
-## Dashboard
+## Saved drawing projection
 
-Review renders exactly six cards from `studyDashboard`; Japanese Notes replaces them with one compact due-review summary:
+Ordinary and Japanese notes share `#noteDrawingRegion` inside the centered editor overlay. Valid note-linked #69 entries load through `kanjiInkApplication`, appear directly above title/body, and refresh immediately after durable save. The newest entry is primary; older entries require a bounded internally scrollable disclosure. Zero valid entries consume no overlay space.
+
+V2 Edit/Delete and legacy V1 read-only behavior remain owned by #69. Drawing vectors stay in `kanjiInkEntries`; they are not copied into Japanese note content, parser metadata, review enrollment, scheduling, or learning evidence.
+
+## Review entry and study details
+
+Japanese Notes renders one compact `Review N` action using `studyDashboard.dueCount`. It starts or resumes the existing review dialog in one action. Zero-due and unavailable states are disabled with a programmatically associated reason.
+
+`Study details` is an optional disclosure for the six values already derived by `studyDashboard`:
 
 1. due reviews;
 2. new vocabulary;
@@ -65,9 +81,9 @@ Review renders exactly six cards from `studyDashboard`; Japanese Notes replaces 
 5. output streak;
 6. current planner progress.
 
-The UI does not recompute these values. It only formats the deterministic result produced by `deriveStudyDashboard`.
+The UI does not recompute these values. It only formats the deterministic result produced by `deriveStudyDashboard`. The six-card dashboard is not a mandatory route or a ceremony before Review.
 
-The Needs repair region is absent when there are no entries. Non-empty diagnostics appear in Review, combine bounded dashboard repairs and lifecycle status entries, are deduplicated by code and optional note ID, sorted deterministically, limited to 20 visible rows, and accompanied by the existing omitted count. Diagnostics contain no note title or content.
+The Needs repair region is absent when there are no entries. Non-empty diagnostics appear inside Study details, combine bounded dashboard repairs and lifecycle status entries, are deduplicated by code and optional note ID, sorted deterministically, limited to 20 visible rows, and accompanied by the existing omitted count. Diagnostics contain no note title or content.
 
 ## Quick create and command palette
 
@@ -81,7 +97,7 @@ One `New Japanese note` disclosure group and the command palette expose the same
 
 Each disclosed action carries the same command ID executed by the palette. The command delegates to the lifecycle action boundary. Output and planner creation therefore preserve the canonical duplicate lookup: a valid enrolled current-date/current-week note is selected rather than duplicated.
 
-After durable creation, the coordinator clears the Japanese search query, requests an explicit workspace refresh with the created or existing note as the preferred ID, and the UI restores editor focus. The generic Notes New note path remains unchanged.
+After durable creation, the coordinator clears the Japanese search query, requests an explicit workspace refresh with the created or existing note as the preferred ID, and the UI opens the shared editor overlay with title focus. The generic Notes New note path uses the same overlay without Japanese enrollment.
 
 The registered commands own their availability and unavailable reason. While creation is pending, both UI and palette paths expose `Japanese note creation is already in progress`. When persisted study-review data is unavailable, the disclosure trigger and actions are disabled while the commands remain discoverable in the palette with `Japanese study data is unavailable`; `ui/palette.js` contains no Japanese-specific global state or side-effect import.
 
@@ -97,12 +113,12 @@ Generic list, keyboard, and command-palette deletion all enter the same `deleteA
 
 ## Review session
 
-Japanese Notes is the default editor-first subview. Review is a distinct task subview that hides the editor, note filters, global search, and global create action, shows the full dashboard, and launches the native review-session dialog. Switching subviews does not recreate editor or review state.
+Japanese Notes is the board-first workspace. `Review N` launches the native review-session dialog directly; there is no permanent Review subview, intermediate Review-ready route, or Start button ceremony. Closing and reopening the dialog does not recreate the review queue.
 
 - Content is hidden until the user explicitly reveals it.
 - The current item and progress are derived from immutable review-session state.
 - Again, Hard, Good, and Easy are native buttons; number keys 1–4 are equivalent while the revealed dialog is active.
-- Escape or Close dismisses the dialog without discarding queue position. The dashboard button becomes Resume review and receives restored focus when available.
+- Escape or Close dismisses the dialog without discarding queue position. The same `Review N` board control resumes the session and receives restored focus when available.
 - Successful rating persists the review before state advances.
 - Persistence failure keeps the item visible and revealed, retains retry intent, exposes `Save failed; retry rating`, re-enables all rating controls, and does not advance.
 - A current note that becomes missing or archived is skipped deterministically. The next valid item is retained with `Skipped missing note` or `Skipped archived note` status.
@@ -129,15 +145,15 @@ The shared command palette retains its original API and accepts additive command
 
 ## Accessibility and responsive behavior
 
-- Workspace controls, subview controls, filter disclosure and chips, quick-create action-group buttons, review actions, and ratings use native form elements and buttons.
+- Workspace controls, common filters, advanced filter disclosure and chips, quick-create action-group buttons, Review entry, study-details disclosure, and ratings use native form elements and buttons.
 - The filter region, dashboard, Needs repair region, palette, and review dialog have explicit accessible names.
 - Filter result counts and range validation share one polite status region.
 - Invalid date controls expose `aria-invalid` without silently rewriting user input.
-- Focus enters the modal at Reveal or the first rating and returns to Start/Resume or the 日本語 workspace control after close.
-- Clearing or removing a filter restores focus to the disclosure trigger and leaves text search unchanged.
+- Focus enters Review at Reveal or the first rating and returns to `Review N` or the 日本語 workspace control after close.
+- Clearing all structured filters or removing the type chip restores focus to `All`; removing a date chip restores focus to `+ Filter`. Text search remains unchanged.
 - The native modal dialog prevents interaction with the background while open.
 - Keyboard users can switch workspaces, filter notes, create notes from the command palette, reveal, rate, close, and resume without pointer input.
-- Narrow layouts reduce filter, dashboard, and rating grids to fewer columns and then one column.
+- Narrow layouts wrap Filter A controls and reduce optional dashboard and rating grids to fewer columns and then one column.
 - Reduced-motion preference disables smooth scrolling behavior.
 
 ## Performance and retained resources
@@ -155,7 +171,7 @@ Controller refresh retains one request-local ID array and one monotonically incr
 - Canonical storage failures remain owned by lifecycle actions.
 - Derived search/backlink failures retain durable success and surface bounded degradation.
 - Invalid filter metadata is excluded rather than repaired or inferred.
-- Invalid persisted study reviews are converted by the coordinator into bounded `study-data-unavailable` state. The 日本語 workspace remains accessible, Review exposes the non-empty diagnostics, Japanese quick-create/review mutations remain disabled, and ordinary Notes remains operational.
+- Invalid persisted study reviews are converted by the coordinator into bounded `study-data-unavailable` state. The 日本語 workspace remains accessible, Study details exposes the non-empty diagnostics, Japanese quick-create/Review mutations remain disabled with reasons, and ordinary Notes remains operational.
 - Rating failure is explicit and retryable; there is no automatic retry.
 - The ordinary safe-mode reset remains available and requires confirmation.
 

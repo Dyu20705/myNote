@@ -2,12 +2,18 @@
 
 ## Status
 
-The current Figma source is a **Candidate Specification**. It is mature enough for issue #65 refinement and acceptance work, but it must not be treated as implemented or verified runtime behavior.
+The Figma file contains mixed lifecycle material. The issue #90 nodes listed below are **Accepted** implementation authority for the board-first Notes/Japanese surfaces and centered note editor. Older route tables and the original issue #65 audit remain Candidate or historical unless explicitly marked Accepted. Static Figma evidence is not runtime verification.
 
 Repository baseline:
 
 ```text
 6261eac6a7864ef243bb24a0ed68aca881949a6c
+```
+
+Issue #90 implementation base:
+
+```text
+be84fc89180b3874506e7c87aa8339a5c187cab8
 ```
 
 Figma file:
@@ -21,6 +27,24 @@ File key:
 ```text
 mzhDU5IwWbd3n3P7oRf88q
 ```
+
+## Issue #90 accepted authority
+
+| Surface | Node | Lifecycle |
+|---|---|---|
+| Ordinary Notes board/overlay root | `124:269` | Accepted |
+| Ordinary Notes board | `124:273` | Accepted |
+| Shared create/edit overlay | `124:315` | Accepted |
+| Japanese workspace root | `126:340` | Accepted |
+| Japanese Notes board with Filter A and compact Review | `126:344` | Accepted |
+| Japanese create/edit overlay | `126:407` | Accepted |
+| Shared daily-surface pattern | `126:859` | Accepted |
+
+For M2, node `126:344` keeps Reading visible in Filter A but marks `Filter / Reading / Disabled` with the reason `Reading filters require the Japanese V2 learning model`. The control uses the accepted `Surface/Disabled`, `Text/Disabled`, and `Border/Subtle` variables together with the runtime-aligned dashed border and `0.55` opacity. Only All, Vocabulary, Grammar, and Kanji are enabled common filters. Native browser 200% zoom remains owned by #71; the 720×450 CSS viewport is responsive-layout evidence only.
+
+Issue #90 changes presentation only. Canonical persistence, search/workspace ordering, commands, Japanese enrollment/filtering, dashboard derivation, scheduling, and review state retain their repository owners.
+
+The 2026-08-12 owner correction places valid saved #69 drawings directly in the active note overlay above title/body. Details is secondary only. Zero drawings consume no space; multiple drawings show a newest primary projection plus bounded older-entry disclosure. Edit/Delete continue through #69 and vectors remain outside canonical note content.
 
 ## Access procedure
 
@@ -54,7 +78,9 @@ If direct design context is unavailable, do not infer details from this document
 | Prototype flows | `65:2` | `https://www.figma.com/design/mzhDU5IwWbd3n3P7oRf88q/MyNote?node-id=65-2` |
 | Implementation handoff | `66:2` | `https://www.figma.com/design/mzhDU5IwWbd3n3P7oRf88q/MyNote?node-id=66-2` |
 
-## Canonical route cards
+## Pre-#90 candidate route cards
+
+The tables in this section record the earlier M2 candidate routes. They remain useful state references but do not override the accepted issue #90 board/overlay nodes above.
 
 ### Ordinary Notes
 
@@ -128,7 +154,7 @@ Current local source includes:
 - 25 prototype destinations;
 - 27 prototype reactions.
 
-The visual direction is dark-first, editor-first, keyboard-first, and desktop-only. Do not add a framework, broad external design system, light theme, gradient-heavy branding, or mobile navigation while implementing M2.
+The current visual direction is dark-first, board-first with focused overlays, keyboard-first, and desktop-only. Do not add a framework, broad external design system, light theme, gradient-heavy branding, or mobile navigation while implementing M2.
 
 ## Required candidate hardening before acceptance
 
@@ -160,11 +186,11 @@ These findings were verified directly in the current Figma source.
 
 ### No-results
 
-Search filters note navigation. An open note and visible draft remain mounted. The list shows no matches and the editor shows that the open note is outside current results. Only first run or absence of an active note uses an editor-level empty state.
+Search filters the board. An open editor overlay and visible draft remain mounted. The board shows no matches without clearing the open note, query, or draft. Only first run or absence of canonical notes uses the board-level empty state.
 
 ### Review at 1024
 
-Use a vertical body with a compact summary row above a Fill Container review task. Revealed content and ratings wrap inside the task. Active Review uses a task-mode header with progress and Close Review; global search and create actions recede.
+Use the compact `Review N` board entry to launch the existing modal directly. Revealed content and ratings wrap inside the bounded dialog. The modal owns task progress and Close Review while the background board is inert; no intermediate Review-ready route is required.
 
 ### Rating failure
 
@@ -204,7 +230,7 @@ Keep prose dominant. The editor exposes a compact count/disclosure. The complete
 
 ### Prototype
 
-Primary reactions must be attached to real product controls: Details, Filters, Review navigation, Reveal, ratings, Add Kanji handwriting, Pen/Marker/Eraser, Save drawing, Undo, Redo, Clear, Close, discard confirmation, and Retry. Annotation controls may remain only as subordinate debug navigation.
+Primary reactions must be attached to real product controls: Details, `+ Filter`, `Review N`, Reveal, ratings, Add drawing, Pen/Marker/Eraser, Save drawing, Undo, Redo, Clear, Close, discard confirmation, and Retry. Annotation controls may remain only as subordinate debug navigation.
 
 Add two required flows:
 

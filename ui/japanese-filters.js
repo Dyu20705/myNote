@@ -1,9 +1,13 @@
-import { JAPANESE_FILTER_ERRORS } from "../core/japaneseFilters.js";
+import {
+  JAPANESE_FILTER_ERRORS,
+  resolveJapaneseCommonFilter,
+} from "../core/japaneseFilters.js";
 
 const REQUIRED_ELEMENTS = Object.freeze([
   "root",
   "panel",
   "toggle",
+  "commonFilters",
   "chips",
   "dateFrom",
   "dateTo",
@@ -14,7 +18,11 @@ const REQUIRED_ELEMENTS = Object.freeze([
 
 function validateDependencies(options) {
   const validElements = options.elements
-    && REQUIRED_ELEMENTS.every((name) => options.elements[name] instanceof HTMLElement);
+    && REQUIRED_ELEMENTS.every((name) => name === "commonFilters"
+      ? Array.isArray(options.elements[name])
+        && options.elements[name].length > 0
+        && options.elements[name].every((element) => element instanceof HTMLElement)
+      : options.elements[name] instanceof HTMLElement);
   const validFilter = options.filter
     && typeof options.filter.getFilters === "function"
     && typeof options.filter.update === "function"
@@ -77,6 +85,13 @@ export function createJapaneseFilterController(options) {
     elements.notebookType.value = values.notebookType;
     elements.dateTo.min = values.fromDate;
     elements.dateFrom.max = values.toDate;
+    for (const button of elements.commonFilters) {
+      const value = button.dataset.japaneseCommonFilter;
+      const pressed = value === "all"
+        ? values.notebookType === "all"
+        : values.notebookType === value;
+      button.setAttribute("aria-pressed", String(pressed));
+    }
   }
 
   function render(state = getState()) {
@@ -121,7 +136,13 @@ export function createJapaneseFilterController(options) {
           syncControls();
           render();
           refresh();
-          elements.toggle.focus();
+          if (definition.key === "notebookType") {
+            elements.commonFilters.find((control) => (
+              control.dataset.japaneseCommonFilter === "all"
+            ))?.focus();
+          } else {
+            elements.toggle.focus();
+          }
         });
         return button;
       }));
@@ -158,7 +179,22 @@ export function createJapaneseFilterController(options) {
     syncControls();
     render();
     refresh();
-    elements.toggle.focus();
+    elements.commonFilters.find((button) => (
+      button.dataset.japaneseCommonFilter === "all"
+    ))?.focus();
+  }
+
+  function selectCommonFilter(event) {
+    const notebookType = resolveJapaneseCommonFilter(
+      event.currentTarget.dataset.japaneseCommonFilter,
+    );
+    if (notebookType === null) {
+      return;
+    }
+    filter.update({ notebookType });
+    syncControls();
+    render();
+    refresh();
   }
 
   function toggleDisclosure() {
@@ -174,6 +210,9 @@ export function createJapaneseFilterController(options) {
   elements.notebookType.addEventListener("change", readControls);
   elements.clear.addEventListener("click", clearFilters);
   elements.toggle.addEventListener("click", toggleDisclosure);
+  for (const button of elements.commonFilters) {
+    button.addEventListener("click", selectCommonFilter);
+  }
   const unsubscribe = subscribe(render);
 
   syncControls();
@@ -186,6 +225,9 @@ export function createJapaneseFilterController(options) {
       elements.notebookType.removeEventListener("change", readControls);
       elements.clear.removeEventListener("click", clearFilters);
       elements.toggle.removeEventListener("click", toggleDisclosure);
+      for (const button of elements.commonFilters) {
+        button.removeEventListener("click", selectCommonFilter);
+      }
       unsubscribe();
     },
     render,

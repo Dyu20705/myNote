@@ -1,4 +1,4 @@
-import { commandRuntime } from "../app.js";
+import { commandRuntime, getActiveNoteId } from "../app.js";
 import { kanjiInkApplication } from "../core/kanjiInkApplication.js";
 import { KANJI_INK_LIMITS, KANJI_INK_WIDTHS } from "../core/kanjiInkEntry.js";
 import {
@@ -7,7 +7,8 @@ import {
   createKanjiPaperGeometry,
 } from "../core/kanjiPaper.js";
 
-const MAX_RENDERED_ENTRIES = 64;
+const PRIMARY_VISIBLE_ENTRIES = 1;
+const EXPANDED_WINDOW_ENTRIES = 64;
 const MIN_POINT_DISTANCE = 0.002;
 const MAX_DEVICE_PIXEL_RATIO = 3;
 
@@ -72,11 +73,11 @@ function createSupplementaryRegion() {
   const region = document.createElement("section");
   region.id = "kanjiInkRegion";
   region.className = "kanji-ink-region";
-  region.dataset.supplementaryEntity = "kanji-handwriting";
+  region.dataset.noteDrawingProjection = "kanji-ink";
   const header = document.createElement("div");
   header.className = "kanji-entry-header";
   const heading = document.createElement("h4");
-  heading.textContent = "Kanji handwriting";
+  heading.textContent = "Saved drawings";
   const count = document.createElement("span");
   count.id = "kanjiInkCount";
   header.append(heading, count);
@@ -114,9 +115,8 @@ function createSupplementaryRegion() {
 ensureStylesheet();
 const dialog = createDialog();
 const supplementary = createSupplementaryRegion();
-const supplementaryHost = document.getElementById("noteSupplementaryList");
-const supplementaryContainer = document.getElementById("noteSupplementaryRegion");
-if (!supplementaryHost || !supplementaryContainer) throw new Error("KANJI_INK_UI_MISSING_HOST");
+const drawingHost = document.getElementById("noteDrawingRegion");
+if (!drawingHost) throw new Error("KANJI_INK_UI_MISSING_HOST");
 
 const elements = {
   title: document.getElementById("kanjiInkDialogTitle"),
@@ -149,7 +149,8 @@ let lastDeletedEntry = null;
 let syncSequence = 0;
 let syncScheduled = false;
 let visibleEntryNoteId = null;
-let visibleEntryCount = MAX_RENDERED_ENTRIES;
+let visibleEntryCount = PRIMARY_VISIBLE_ENTRIES;
+let projectionError = "";
 let pendingEntryFocus = null;
 const previewLayoutTargets = new Map();
 const previewRenderFrames = new Map();
@@ -203,7 +204,7 @@ function activeNoteButton() {
 }
 
 function activeNoteId() {
-  return activeNoteButton()?.dataset.id || null;
+  return getActiveNoteId();
 }
 
 function triggerDownload({ content, type, filename }) {
@@ -508,16 +509,17 @@ async function saveEntry() {
   if (!controller || !dialogNoteId) return;
   try {
     const snapshot = controller.snapshot();
-    const editedEntryId = snapshot.savedEntry?.id ?? null;
     const operation = snapshot.errorCode === "KANJI_SAVE_FAILED"
       ? controller.retrySave({ noteId: dialogNoteId })
       : controller.save({ noteId: dialogNoteId });
     renderController();
     await operation;
+    const savedEntryId = controller.snapshot().savedEntry?.id ?? null;
+    projectionError = "";
     await synchronizeActiveNote();
-    if (editedEntryId) {
+    if (savedEntryId) {
       const refreshedCard = [...supplementary.entries.children]
-        .find((card) => card.dataset.kanjiEntryId === editedEntryId);
+        .find((card) => card.dataset.kanjiEntryId === savedEntryId);
       const refreshedEditButton = refreshedCard
         ?.querySelector('button[aria-label="Edit Kanji drawing"]');
       if (refreshedEditButton instanceof HTMLElement) dialogOpener = refreshedEditButton;
@@ -529,7 +531,7 @@ async function saveEntry() {
 function detachSupplementaryRegion() {
   clearPreviewRenderingResources();
   supplementary.region.remove();
-  supplementaryContainer.hidden = supplementaryHost.querySelector("[data-supplementary-entity]") === null;
+  drawingHost.hidden = true;
 }
 
 function newestFirstEntries(entries) {
@@ -541,10 +543,14 @@ function newestFirstEntries(entries) {
 function visibleEntriesForNote(noteId, entries) {
   if (visibleEntryNoteId !== noteId) {
     visibleEntryNoteId = noteId;
-    visibleEntryCount = MAX_RENDERED_ENTRIES;
+    visibleEntryCount = PRIMARY_VISIBLE_ENTRIES;
+    projectionError = "";
     pendingEntryFocus = null;
   } else {
-    visibleEntryCount = Math.max(visibleEntryCount, Math.min(entries.length, MAX_RENDERED_ENTRIES));
+    visibleEntryCount = Math.max(
+      PRIMARY_VISIBLE_ENTRIES,
+      Math.min(visibleEntryCount, Math.max(entries.length, PRIMARY_VISIBLE_ENTRIES)),
+    );
   }
   return entries.slice(0, visibleEntryCount);
 }
@@ -604,10 +610,17 @@ function makeEntryCard(entry) {
   remove.textContent = "Delete";
   remove.setAttribute("aria-label", legacy ? `Delete handwriting ${entry.character}` : "Delete Kanji drawing");
   remove.addEventListener("click", async () => {
-    const deleted = await kanjiInkApplication.deleteEntry(entry.id);
-    if (deleted) lastDeletedEntry = deleted;
-    await synchronizeActiveNote();
-    supplementary.undo.focus();
+    try {
+      const deleted = await kanjiInkApplication.deleteEntry(entry.id);
+      if (deleted) lastDeletedEntry = deleted;
+      projectionError = "";
+      await synchronizeActiveNote();
+      supplementary.undo.focus();
+    } catch {
+      projectionError = "Delete failed. The saved drawing is unchanged.";
+      pendingEntryFocus = { noteId: activeNoteId(), target: entry.id };
+      await synchronizeActiveNote();
+    }
   });
   actions.append(remove);
   copy.append(heading, detail, actions);
@@ -622,7 +635,8 @@ async function synchronizeActiveNote() {
   const noteId = activeNoteId();
   if (!noteId) {
     visibleEntryNoteId = null;
-    visibleEntryCount = MAX_RENDERED_ENTRIES;
+    visibleEntryCount = PRIMARY_VISIBLE_ENTRIES;
+    projectionError = "";
     return detachSupplementaryRegion();
   }
   const result = await kanjiInkApplication.loadNoteContext(noteId);
@@ -630,8 +644,8 @@ async function synchronizeActiveNote() {
   if (sequence !== syncSequence || noteId !== activeNoteId()) return;
   const hasRecovery = lastDeletedEntry?.noteId === noteId;
   if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) return detachSupplementaryRegion();
-  if (!supplementary.region.isConnected) supplementaryHost.append(supplementary.region);
-  supplementaryContainer.hidden = false;
+  if (!supplementary.region.isConnected) drawingHost.append(supplementary.region);
+  drawingHost.hidden = false;
   const sortedEntries = newestFirstEntries(result.entries);
   const visibleEntries = visibleEntriesForNote(noteId, sortedEntries);
   clearPreviewRenderingResources();
@@ -641,6 +655,7 @@ async function synchronizeActiveNote() {
   supplementary.loadMore.hidden = visibleEntries.length >= sortedEntries.length;
   if (!supplementary.loadMore.hidden) messages.push(`Showing newest ${visibleEntries.length} of ${sortedEntries.length} entries.`);
   if (result.invalidCount > 0) messages.push(`${result.invalidCount} invalid stored entr${result.invalidCount === 1 ? "y was" : "ies were"} isolated.`);
+  if (projectionError) messages.push(projectionError);
   supplementary.status.textContent = messages.join(" ");
   supplementary.recovery.hidden = !hasRecovery;
   restoreEntryFocus(noteId);
@@ -654,13 +669,16 @@ function scheduleSynchronization() {
 
 supplementary.undo.addEventListener("click", async () => {
   if (!lastDeletedEntry) return;
-  await kanjiInkApplication.restoreEntry(lastDeletedEntry);
+  const restoredEntry = lastDeletedEntry;
+  await kanjiInkApplication.restoreEntry(restoredEntry);
   lastDeletedEntry = null;
+  projectionError = "";
+  pendingEntryFocus = { noteId: restoredEntry.noteId, target: restoredEntry.id };
   await synchronizeActiveNote();
 });
 
 supplementary.loadMore.addEventListener("click", async () => {
-  visibleEntryCount += MAX_RENDERED_ENTRIES;
+  visibleEntryCount += EXPANDED_WINDOW_ENTRIES - PRIMARY_VISIBLE_ENTRIES;
   pendingEntryFocus = { noteId: activeNoteId(), target: "load-more" };
   await synchronizeActiveNote();
 });
@@ -696,8 +714,8 @@ saveObserver.observe(document.getElementById("saveState"), { childList: true, su
 const unregisterCommands = [
   commandRuntime.registry.register({
     id: "notes.kanji-ink",
-    title: "Add Kanji handwriting",
-    description: "Draw a Kanji grid entry and attach it to the active note",
+    title: "Add drawing",
+    description: "Draw a saved Kanji grid and attach it to the active note",
     shortcuts: [], scope: "shell",
     isAvailable: () => Boolean(activeNoteId()),
     unavailableReason: () => "No active note is available",

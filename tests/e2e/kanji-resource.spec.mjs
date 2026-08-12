@@ -25,9 +25,17 @@ async function expectNoHorizontalOverflow(page) {
   expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth === globalThis.document.documentElement.clientWidth)).toBe(true);
 }
 
+async function ensureEditorOpen(page) {
+  if (await page.locator("#noteEditorOverlay").isHidden()) {
+    await page.locator("#noteList .note-item").first().click();
+  }
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+}
+
 async function openAndClose(page) {
+  await ensureEditorOpen(page);
   await page.locator("#noteActionsButton").click();
-  await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
+  await page.getByRole("menuitem", { name: /Add drawing/ }).click();
   await expect(page.locator("#kanjiInkDialog")).toBeVisible();
   await page.waitForFunction(() => globalThis.document.querySelector('link[data-kanji-ink-styles="true"]')?.sheet?.cssRules.length > 0);
   expect(await page.locator(".kanji-ink-shell").evaluate((shell) => (
@@ -63,14 +71,14 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
   await expect(page.locator("#kanjiInkDialog")).toHaveCount(1);
   await expect(page.locator('link[data-kanji-ink-styles="true"]')).toHaveCount(1);
   await page.locator("#noteActionsButton").click();
-  await expect(page.getByRole("menuitem", { name: /Add Kanji handwriting/ })).toHaveCount(1);
+  await expect(page.getByRole("menuitem", { name: /Add drawing/ })).toHaveCount(1);
 
   await page.keyboard.press("Escape");
   // Equivalent responsive-layout evidence only; Playwright viewport emulation
   // does not exercise native browser zoom, OS display scaling, or physical input.
   await page.setViewportSize({ width: 720, height: 450 });
   await page.locator("#noteActionsButton").click();
-  await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
+  await page.getByRole("menuitem", { name: /Add drawing/ }).click();
   await page.waitForFunction(() => globalThis.document.querySelector('link[data-kanji-ink-styles="true"]')?.sheet?.cssRules.length > 0);
   const dialogBox = await page.locator("#kanjiInkDialog").boundingBox();
   const canvasBox = await page.locator("#kanjiInkCanvas").boundingBox();
@@ -99,6 +107,7 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
 
 test("bounded drawing evidence validates maximum V2 shape, reloads note context, and renders 64 previews", async ({ page }, testInfo) => {
   await page.goto("/");
+  await ensureEditorOpen(page);
 
   const codecEvidence = await page.evaluate(({ sampleCount }) => {
     return import("/core/kanjiInkEntry.js").then(({ serializeKanjiInkEntry, validateKanjiInkEntryV2 }) => {
@@ -166,7 +175,7 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
   await page.locator("#titleInput").fill("Bounded drawing evidence");
   await page.locator("#contentInput").fill("64-preview resource fixture.");
   await page.locator("#contentInput").press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id, entryCount }) => {
     const request = globalThis.indexedDB.open("myNoteDB", 3);
@@ -212,10 +221,12 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
   expect(contextEvidence.loadCount).toBe(2);
   expect(contextEvidence.maxDurationMs).toBeLessThan(KANJI_RESOURCE_BUDGET.maxNoteContextLoadMs);
   await expect(page.locator("#kanjiInkCount")).toHaveText("65 entries");
-  await expect(page.locator(".kanji-entry")).toHaveCount(KANJI_RESOURCE_BUDGET.previewWindowEntries);
+  await expect(page.locator(".kanji-entry")).toHaveCount(1);
+  await expect(page.locator(".kanji-entry-preview[data-paper-rendered='true']")).toHaveCount(1);
 
   const previewStartedAt = Date.now();
-  await page.locator("#detailsButton").click();
+  await page.getByRole("button", { name: "Show older drawings" }).click();
+  await expect(page.locator(".kanji-entry")).toHaveCount(KANJI_RESOURCE_BUDGET.previewWindowEntries);
   await expect(page.locator(".kanji-entry-preview[data-paper-rendered='true']")).toHaveCount(
     KANJI_RESOURCE_BUDGET.previewWindowEntries,
   );
@@ -227,8 +238,9 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
 
 test("capture fallback finishes outside releases and leaves no temporary document listeners", async ({ page }) => {
   await page.goto("/");
+  await ensureEditorOpen(page);
   await page.locator("#noteActionsButton").click();
-  await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
+  await page.getByRole("menuitem", { name: /Add drawing/ }).click();
   const canvas = page.locator("#kanjiInkCanvas");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Kanji canvas is not visible");
@@ -260,8 +272,6 @@ test("capture fallback finishes outside releases and leaves no temporary documen
   await expect(page.locator("#kanjiInkStatus")).toHaveText("2 strokes");
   await page.getByRole("button", { name: "Save drawing", exact: true }).click();
   await expect(page.locator("#kanjiInkDialog")).not.toBeVisible();
-  if (await page.locator("#noteInspector").isHidden()) await page.locator("#detailsButton").click();
-
   for (const pointerId of [803, 804]) {
     await page.getByRole("button", { name: "Edit Kanji drawing" }).click();
     await canvas.dispatchEvent("pointerdown", { pointerId, button: 0, clientX: box.x + box.width * 0.5, clientY: box.y + box.height * 0.5 });
@@ -347,10 +357,11 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   });
 
   await page.goto("/");
+  await ensureEditorOpen(page);
   await page.locator("#titleInput").fill("Observer lifecycle");
   await page.locator("#contentInput").fill("Hidden inspector observer regression.");
   await page.locator("#contentInput").press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id }) => {
     const request = globalThis.indexedDB.open("myNoteDB", 3);
@@ -378,6 +389,7 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   }, { noteId });
 
   await page.reload();
+  await ensureEditorOpen(page);
   await expect(page.locator("#noteInspector")).toBeHidden();
   await expect(page.locator("#kanjiInkCount")).toHaveText("4 entries");
   const hiddenSnapshots = await page.evaluate(async () => {
@@ -390,15 +402,14 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
     return snapshots;
   });
   expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.activeObservers))).toBeLessThanOrEqual(1);
-  expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.activeTargets))).toBeLessThanOrEqual(4);
-  expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.pendingFrames))).toBeLessThanOrEqual(4);
+  expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.activeTargets))).toBeLessThanOrEqual(1);
+  expect(Math.max(...hiddenSnapshots.map((snapshot) => snapshot.pendingFrames))).toBeLessThanOrEqual(1);
   await page.evaluate(() => globalThis.kanjiAwaitTwoNativeFrames());
   expect(await page.evaluate(() => globalThis.kanjiPreviewObserverCounts.pendingFrames)).toBe(0);
 
-  await page.locator("#detailsButton").click();
+  await page.getByRole("button", { name: "Show older drawings" }).click();
   await expect(page.locator(".kanji-entry-preview[data-paper-rendered='true']")).toHaveCount(4);
   await expect.poll(() => page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBe(0);
-  await page.locator("#detailsButton").click();
   await page.evaluate(async () => (await import("/ui/kanjiInkView.js")).kanjiInkApp.synchronize());
   expect(await page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBeLessThanOrEqual(4);
 

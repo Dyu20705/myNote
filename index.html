@@ -48,7 +48,12 @@
         <aside id="noteNavigationRegion" class="panel notes-panel" aria-label="Note navigation">
           <div class="panel-header">
             <h2 id="noteNavigationTitle">Notes</h2>
-            <span id="activeNoteLabel">Ready</span>
+            <div class="panel-header-actions">
+              <span id="activeNoteLabel">Ready</span>
+              <button id="japaneseStudyDetailsToggle" class="quiet-button" type="button" aria-expanded="false" aria-controls="japaneseDashboard" hidden>Study details</button>
+              <button id="japaneseReviewEntryButton" class="japanese-review-entry" type="button" aria-describedby="japaneseReviewEntryReason" hidden>Review <span id="japaneseReviewEntryCount">0</span></button>
+              <span id="japaneseReviewEntryReason" class="visually-hidden">No Japanese reviews are due</span>
+            </div>
           </div>
 
           <nav id="japaneseSubviewNavigation" class="japanese-subview-navigation" aria-label="Japanese workspace views" hidden>
@@ -65,11 +70,17 @@
           </section>
 
           <section id="japaneseFilterTools" class="japanese-filter-tools" hidden>
-            <div class="japanese-filter-toolbar">
-              <button id="japaneseFilterToggle" type="button" aria-expanded="false" aria-controls="japaneseFilters">Filters</button>
-              <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+            <div class="japanese-filter-presets" role="group" aria-label="Japanese common filters">
+              <button type="button" data-japanese-common-filter="all" aria-pressed="true">All</button>
+              <button type="button" data-japanese-common-filter="vocabulary" aria-pressed="false">Vocabulary</button>
+              <button type="button" data-japanese-common-filter="grammar" aria-pressed="false">Grammar</button>
+              <button type="button" data-japanese-common-filter="kanji" aria-pressed="false">Kanji</button>
+              <button type="button" data-japanese-common-filter="reading" aria-pressed="false" aria-describedby="japaneseReadingFilterReason" title="Reading filters require the Japanese V2 learning model" disabled>Reading</button>
+              <span id="japaneseReadingFilterReason" class="visually-hidden">Reading filters require the Japanese V2 learning model</span>
+              <button id="japaneseFilterToggle" type="button" aria-expanded="false" aria-controls="japaneseFilters">+ Filter</button>
             </div>
             <div id="japaneseFilterChips" class="japanese-filter-chips" aria-label="Active Japanese filters"></div>
+            <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
             <section id="japaneseFilters" class="japanese-filters" role="region" aria-label="Japanese note filters" hidden>
               <label class="japanese-filter-field" for="japaneseDateFrom">
                 <span>Created from</span>
@@ -139,25 +150,34 @@
               <ul id="japaneseRepairList" class="repair-list"></ul>
             </section>
           </section>
-        </aside>
 
-        <main id="editorRegion" class="panel editor-panel" aria-label="Editor">
           <section id="japaneseReviewOverview" class="japanese-review-overview" aria-labelledby="japaneseReviewHeading" hidden>
             <p class="eyebrow" lang="ja">復習</p>
             <h2 id="japaneseReviewHeading">Review ready</h2>
             <p>Work through due Japanese notes in a focused reveal-first session.</p>
             <button id="startReviewButton" class="primary-button" type="button">Start review</button>
           </section>
+        </aside>
+
+        <dialog id="noteEditorOverlay" class="note-editor-overlay" aria-labelledby="noteEditorOverlayLabel">
+        <main id="editorRegion" class="panel editor-panel" aria-label="Editor">
+          <div id="noteDrawingRegion" class="note-drawing-region" hidden></div>
 
           <header id="editorContextHeader" class="editor-context-header">
             <div class="editor-context-copy">
-              <span class="editor-context-label">Editor</span>
+              <span id="noteEditorOverlayLabel" class="editor-context-label">Edit note</span>
               <input id="titleInput" class="title-input" type="text" placeholder="Title" aria-label="Note title" spellcheck="false" />
-              <span id="saveState" class="editor-save-state" role="status" aria-live="polite">Saved locally</span>
+              <span id="saveState" class="editor-save-state" role="status" aria-live="polite">Saved</span>
             </div>
             <div class="editor-context-actions">
-              <button id="detailsButton" class="secondary-button" type="button" aria-expanded="false" aria-controls="noteInspector">Details</button>
-              <button id="noteActionsButton" class="quiet-button" type="button" aria-expanded="false" aria-controls="noteActionsPopover">More actions</button>
+              <button id="pinNoteButton" class="note-toolbar-button" type="button" aria-label="Pin note" aria-pressed="false" title="Pin note">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M7 3h10l-2 6 3 3H6l3-3-2-6Zm5 9v9" />
+                </svg>
+              </button>
+              <button id="detailsButton" class="note-toolbar-button" type="button" aria-label="Details" aria-expanded="false" aria-controls="noteInspector" title="Details"><span aria-hidden="true">i</span></button>
+              <button id="noteActionsButton" class="note-toolbar-button" type="button" aria-label="More actions" aria-expanded="false" aria-controls="noteActionsPopover" title="More actions"><span aria-hidden="true">⋮</span></button>
+              <button id="closeNoteEditorButton" class="note-toolbar-button" type="button" aria-label="Close note editor" title="Close note editor"><span aria-hidden="true">×</span></button>
             </div>
           </header>
 
@@ -193,16 +213,14 @@
             <div id="noteActionsList" class="note-actions-list"></div>
           </section>
 
-          <div class="editor-footer">
-            <span class="hint">Autosaves locally · Ctrl/⌘+Enter flushes now · Ctrl/⌘+K shows commands</span>
-          </div>
-
-          <div id="undoNotice" class="undo-notice" role="status" aria-label="Deletion recovery" hidden>
-            <span id="undoNoticeText">Note deleted</span>
-            <button id="undoDeleteButton" class="secondary-button" type="button">Undo delete</button>
-          </div>
         </main>
+        </dialog>
       </section>
+
+      <div id="undoNotice" class="undo-notice" role="status" aria-label="Deletion recovery" hidden>
+        <span id="undoNoticeText">Note deleted</span>
+        <button id="undoDeleteButton" class="secondary-button" type="button">Undo delete</button>
+      </div>
 
       <section id="commandPalette" class="command-palette" hidden>
         <div class="command-panel" role="dialog" aria-modal="true" aria-label="Command palette">

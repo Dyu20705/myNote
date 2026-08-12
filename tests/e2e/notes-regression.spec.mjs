@@ -25,14 +25,15 @@ test("generic Notes create, edit, search, navigation, pin, archive, export, and 
   await expect(page.locator("#noteCount")).toHaveText("1 note");
 
   await page.locator("#newNoteButton").click();
-  await expect(page.locator("#contentInput")).toBeFocused();
+  await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(content);
-  await expect(page.locator("#saveState")).toHaveText("Unsaved changes");
+  await expect(page.locator("#saveState")).toHaveText("Unsaved");
   await page.locator("#contentInput").focus();
   await page.keyboard.press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
   await expect(page.locator("#noteCount")).toHaveText("2 notes");
+  await page.getByRole("button", { name: "Close note editor" }).click();
 
   await page.locator("#searchInput").fill("Searchable generic");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(1);

@@ -161,13 +161,13 @@ List/grid is presentation-only session state, scoped to Ordinary results and def
 | Journey | Current entry | Target completion boundary | Owner |
 | --- | --- | --- | --- |
 | Create study note | Five quick-create actions | One coherent Create entry and canonical lifecycle | #70, #74 |
-| Browse Japanese Notes | Workspace and filters | Editor-first Notes subview with comprehensible filters | #70, #72 |
+| Browse Japanese Notes | Workspace and filters | Board-first Notes with direct common filters and a shared focused editor overlay | #70 lifecycle, #90 presentation |
 | Start Review | Start/Resume action | Exclusive task mode; unrelated shell commands are unavailable | #70, #74 |
 | Reveal and rate | Reveal then `1`–`4` | Rating unavailable before reveal; IME wins; success advances once | #70, #72, #74 |
 | Recover rating failure | Persistence failure | Preserve exact pending rating and current item; retry is idempotent | #70, #72 |
-| Add Kanji handwriting | Note action | Bounded saved-grid drawing; persist before success; no recognition or candidate step | #69 after #68 |
-| Retry or edit a saved drawing | Saved-grid task or Details entry | Preserve exact V2 strokes across retry/reload; V1 remains read-only historical data | #69 |
-| View saved handwriting | Compact projection | Details owns complete bounded entry list | #69, #70 |
+| Add drawing | Note action | Bounded saved-grid drawing; persist before success; no recognition or candidate step | #69 lifecycle, #90 presentation |
+| Retry or edit a saved drawing | Direct note-overlay projection | Preserve exact V2 strokes across retry/reload; V1 remains read-only historical data | #69 lifecycle, #90 presentation |
+| View saved handwriting | Direct note-overlay projection | Show one newest drawing, disclose older entries inside a bounded region, and consume no space at zero | #69 lifecycle, #90 presentation |
 
 ## 6. Surface and command inventory
 
@@ -528,7 +528,7 @@ A definition contains:
 
 Context is read-only and bounded to active note ID, workspace, current revision/dirty state, and declared capabilities. `run` calls the owning domain transaction; it does not mutate DOM, IndexedDB, search projections, or canonical collections directly.
 
-#69 registers `Add Kanji handwriting` only after #68. It remains sole owner of `KanjiInkEntry`, storage, V1-only confirmed-character search projection, mixed V1/V2 export, and lifecycle. V1 recognition metadata is historical compatibility data. V2 has no recognition path, guessed Unicode, or search/review/mastery contribution.
+#69 registers command ID `notes.kanji-ink` only after #68; issue #90 presents it as `Add drawing`. #69 remains sole owner of `KanjiInkEntry`, storage, V1-only confirmed-character search projection, mixed V1/V2 export, and lifecycle. V1 recognition metadata is historical compatibility data. V2 has no recognition path, guessed Unicode, or search/review/mastery contribution.
 
 ## 19. Design acceptance manifest
 

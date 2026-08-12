@@ -12,21 +12,25 @@ async function runCommand(page, title) {
 
 async function createNote(page, title = "Kanji canvas note") {
   await page.goto("/");
+  await page.locator("#noteList .note-item").first().click();
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill("Body remains canonical and vector-free.");
   await page.locator("#contentInput").press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
 }
 
 async function openKanjiDialog(page) {
   await page.locator("#noteActionsButton").click();
-  await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
+  await page.getByRole("menuitem", { name: /Add drawing/ }).click();
   await expect(page.locator("#kanjiInkDialog")).toBeVisible();
 }
 
-async function openDetails(page) {
-  if (await page.locator("#noteInspector").isHidden()) await page.locator("#detailsButton").click();
-  await expect(page.locator("#noteInspector")).toBeVisible();
+async function openDrawingProjection(page) {
+  if (await page.locator("#noteEditorOverlay").isHidden()) {
+    await page.locator("#noteList .note-item").first().click();
+    await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+  }
+  await expect(page.locator("#noteDrawingRegion")).toBeVisible();
 }
 
 async function drawStroke(page, points) {
@@ -195,7 +199,7 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   await expect(page.locator("#kanjiInkCanvas")).toBeFocused();
   await page.getByRole("button", { name: "Save drawing", exact: true }).click();
   await expect(page.locator("#kanjiInkDialog")).not.toBeVisible();
-  await openDetails(page);
+  await openDrawingProjection(page);
   await expect(page.getByText("Kanji drawing", { exact: true })).toBeVisible();
   await expect(page.locator(".kanji-entry-preview")).toHaveAttribute("data-paper-pattern", "ruled-horizontal");
   await expect(page.locator(".kanji-entry-preview")).toHaveAttribute("data-paper-rule-count", "7");
@@ -212,7 +216,7 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   const stableId = first[0].id;
 
   await page.reload();
-  await openDetails(page);
+  await openDrawingProjection(page);
   await page.getByRole("button", { name: "Edit Kanji drawing" }).click();
   await expect(page.getByRole("dialog", { name: "Edit Kanji drawing" })).toBeVisible();
   await page.getByRole("button", { name: "Pen", exact: true }).click();
@@ -223,6 +227,8 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   expect(edited[0].id).toBe(stableId);
   expect(edited[0].strokes).toHaveLength(2);
 
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   const jsonDownloadPromise = page.waitForEvent("download");
   await runCommand(page, "Export Kanji data as JSON");
   const jsonDownload = await jsonDownloadPromise;
@@ -231,6 +237,7 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   expect(bundle.kanjiInkEntries[0].schemaVersion).toBe(2);
   expect(JSON.stringify(bundle.kanjiInkEntries[0])).not.toContain("character");
 
+  await openDrawingProjection(page);
   await page.getByRole("button", { name: "Delete Kanji drawing" }).click();
   await expect(page.locator("#kanjiInkEntries .kanji-entry")).toHaveCount(0);
   await page.getByRole("button", { name: "Undo handwriting deletion" }).click();
@@ -317,7 +324,7 @@ test("total point capacity rejects a new stroke before silently dropping its ges
   }, { noteId });
 
   await page.reload();
-  await openDetails(page);
+  await openDrawingProjection(page);
   await page.getByRole("button", { name: "Edit Kanji drawing" }).click();
   await drawStroke(page, [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }]);
   await expect(page.locator("#kanjiInkStatus")).toHaveText("Drawing limit reached. Undo, erase, clear, or save to continue.");
@@ -366,13 +373,17 @@ test("newest-first pagination keeps a 65th drawing reachable with edit and delet
   await preloadPaginationEntries(page, noteId, PAGINATION_ENTRY_FIXTURES);
 
   await page.reload();
-  await openDetails(page);
+  await openDrawingProjection(page);
   await expect(page.locator("#kanjiInkCount")).toHaveText("65 entries");
+  await expect(page.locator("#kanjiInkEntries .kanji-entry")).toHaveCount(1);
   await expect(page.locator("#kanjiInkEntries .kanji-entry").first()).toHaveAttribute("data-kanji-entry-id", "pagination-entry-065");
   await expect(page.locator('[data-kanji-entry-id="pagination-entry-001"]')).toHaveCount(0);
 
   const loadMore = page.getByRole("button", { name: "Show older drawings", exact: true });
   await expect(loadMore).toBeVisible();
+  await loadMore.click();
+  await expect(page.locator("#kanjiInkEntries .kanji-entry")).toHaveCount(64);
+  await expect(page.locator('[data-kanji-entry-id="pagination-entry-001"]')).toHaveCount(0);
   await loadMore.click();
 
   const oldestCard = page.locator('[data-kanji-entry-id="pagination-entry-001"]');
@@ -395,8 +406,11 @@ test("newest-first ordering compares parsed instants and breaks equal-instant ti
   ]);
 
   await page.reload();
-  await openDetails(page);
-  expect(await page.locator("#kanjiInkEntries .kanji-entry").evaluateAll((cards) => (
+  await openDrawingProjection(page);
+  await page.getByRole("button", { name: "Show older drawings", exact: true }).click();
+  const visibleEntries = page.locator("#kanjiInkEntries .kanji-entry");
+  await expect(visibleEntries).toHaveCount(3);
+  expect(await visibleEntries.evaluateAll((cards) => (
     cards.map((card) => card.dataset.kanjiEntryId)
   ))).toEqual(["offset-newest", "offset-equal-a", "offset-equal-b"]);
 });
@@ -407,14 +421,15 @@ test("a fresh 65th drawing stays visible while older drawings remain reachable",
   await preloadPaginationEntries(page, noteId, PAGINATION_ENTRY_FIXTURES.slice(0, 64));
 
   await page.reload();
-  await openDetails(page);
+  await openDrawingProjection(page);
   await expect(page.locator("#kanjiInkCount")).toHaveText("64 entries");
-  await expect(page.getByRole("button", { name: "Show older drawings", exact: true })).toHaveCount(0);
+  await expect(page.locator("#kanjiInkEntries .kanji-entry")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Show older drawings", exact: true })).toBeVisible();
 
   await openKanjiDialog(page);
   await drawStroke(page, [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }]);
   await page.getByRole("button", { name: "Save drawing", exact: true }).click();
-  await openDetails(page);
+  await openDrawingProjection(page);
 
   const entries = await storedEntries(page);
   const freshEntry = entries.find((entry) => !PAGINATION_ENTRY_FIXTURES.some(([id]) => id === entry.id));
@@ -444,7 +459,7 @@ test("legacy V1 cards remain read-only and losslessly exportable", async ({ page
     database.close();
   }, { noteId });
   await page.reload();
-  await openDetails(page);
+  await openDrawingProjection(page);
   const legacy = page.locator('[data-kanji-schema-version="1"]');
   await expect(legacy).toContainText("人");
   await expect(legacy).toContainText("read only");
@@ -457,6 +472,8 @@ test("legacy V1 cards remain read-only and losslessly exportable", async ({ page
     return Array.from(context.getImageData(2, 2, 1, 1).data);
   })).toEqual([255, 255, 255, 255]);
   await expect(legacy.getByRole("button", { name: /Edit/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   const downloadPromise = page.waitForEvent("download");
   await runCommand(page, "Export Kanji data as JSON");
   const download = await downloadPromise;

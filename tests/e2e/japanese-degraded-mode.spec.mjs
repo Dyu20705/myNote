@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openJapaneseReviewSubview } from "./japanese-helpers.mjs";
+import { openJapaneseStudyDetails } from "./japanese-helpers.mjs";
 
 async function seedInvalidReview(page) {
   await page.route("**/", async (route) => {
@@ -60,7 +60,7 @@ test("invalid study data retains Japanese commands with an actionable reason", a
   await page.goto("/");
 
   await page.getByRole("button", { name: "日本語", exact: true }).click();
-  await openJapaneseReviewSubview(page);
+  await openJapaneseStudyDetails(page);
   await expect(page.getByRole("region", { name: "Needs repair" }))
     .toContainText("study-data-unavailable");
 

@@ -1,4 +1,12 @@
-import { createNoteCardPresentation } from "./notePresentation.js";
+import {
+  createNoteBoardSections,
+  createNoteCardPresentation,
+} from "./notePresentation.js";
+
+const VIRTUALIZATION_THRESHOLD = 500;
+const VIRTUAL_ROW_HEIGHT = 168;
+const VIRTUAL_OVERSCAN = 8;
+let nextListViewId = 0;
 
 function appendText(parent, className, text, tagName = "span") {
   const node = document.createElement(tagName);
@@ -55,7 +63,7 @@ function createNode(note, isActive, onSelect, formatDate) {
   button.type = "button";
   button.className = "note-item";
   button.dataset.id = note.id;
-  button.addEventListener("click", () => onSelect(note.id));
+  button.addEventListener("click", () => onSelect(note.id, button));
   renderButton(button, note, isActive, formatDate);
 
   container.append(button);
@@ -67,64 +75,111 @@ function patchNode(node, note, isActive, formatDate) {
   renderButton(button, note, isActive, formatDate);
 }
 
+function createSection(section, nodes, viewId) {
+  const root = document.createElement("section");
+  root.className = "note-board-section";
+  root.dataset.sectionId = section.id;
+
+  const heading = document.createElement("h3");
+  heading.id = `note-board-${viewId}-${section.id}-heading`;
+  heading.className = "note-board-heading";
+  heading.textContent = section.label;
+  root.setAttribute("aria-labelledby", heading.id);
+
+  const grid = document.createElement("div");
+  grid.className = "note-board-grid";
+  grid.append(...nodes);
+  root.append(heading, grid);
+  return root;
+}
+
 export function createListView({ container, onSelect, formatDate }) {
+  const viewId = nextListViewId;
+  nextListViewId += 1;
   const nodeCache = new Map();
-  const ROW_HEIGHT = 120;
-  const OVERSCAN = 8;
+  const scrollOwner = container.closest(".notes-panel") || container;
   let currentPayload = {
     notesById: new Map(),
     orderedIds: [],
     activeId: null,
     query: "",
+    boardIds: [],
+    virtualized: false,
   };
 
+  function projectSections(notesById, orderedIds) {
+    return createNoteBoardSections({ notesById, orderedIds })
+      .filter((section) => section.orderedIds.length > 0);
+  }
+
+  function createCardNodes(sections, retainedIds) {
+    const { notesById, activeId } = currentPayload;
+    return sections.map((section) => {
+      const nodes = section.orderedIds.map((id) => {
+        const note = notesById.get(id);
+        let node = nodeCache.get(id);
+        if (!node) {
+          node = createNode(note, id === activeId, onSelect, formatDate);
+          nodeCache.set(id, node);
+        } else {
+          patchNode(node, note, id === activeId, formatDate);
+        }
+        retainedIds.add(id);
+        return node;
+      });
+      return createSection(section, nodes, viewId);
+    });
+  }
+
+  function pruneCache(retainedIds) {
+    for (const id of nodeCache.keys()) {
+      if (!retainedIds.has(id)) {
+        nodeCache.delete(id);
+      }
+    }
+  }
+
+  function renderCompleteBoard(sections) {
+    const retainedIds = new Set();
+    const roots = createCardNodes(sections, retainedIds);
+    pruneCache(retainedIds);
+    container.replaceChildren(...roots);
+  }
+
   function renderWindow() {
-    const { notesById, orderedIds, activeId } = currentPayload;
-    const scrollTop = container.scrollTop;
-    const viewport = Math.max(container.clientHeight || ROW_HEIGHT * 6, ROW_HEIGHT * 6);
+    const { notesById, boardIds } = currentPayload;
+    const scrollTop = scrollOwner.scrollTop;
+    const viewport = Math.max(
+      scrollOwner.clientHeight || VIRTUAL_ROW_HEIGHT * 6,
+      VIRTUAL_ROW_HEIGHT * 6,
+    );
 
-    const rawStart = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-    const maxStart = Math.max(0, orderedIds.length - 1);
+    const rawStart = Math.max(
+      0,
+      Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN,
+    );
+    const maxStart = Math.max(0, boardIds.length - 1);
     const startIndex = Math.min(rawStart, maxStart);
-    const visibleCount = Math.ceil(viewport / ROW_HEIGHT) + OVERSCAN * 2;
-    const endIndex = Math.min(orderedIds.length, startIndex + visibleCount);
-
-    const visibleIds = orderedIds.slice(startIndex, endIndex);
+    const visibleCount = Math.ceil(viewport / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+    const endIndex = Math.min(boardIds.length, startIndex + visibleCount);
+    const visibleIds = boardIds.slice(startIndex, endIndex);
+    const sections = projectSections(notesById, visibleIds);
+    const retainedIds = new Set();
     const fragment = document.createDocumentFragment();
 
     const topSpacer = document.createElement("div");
     topSpacer.className = "list-spacer";
-    topSpacer.style.height = `${startIndex * ROW_HEIGHT}px`;
+    topSpacer.style.height = `${startIndex * VIRTUAL_ROW_HEIGHT}px`;
     fragment.append(topSpacer);
-
-    const seen = new Set();
-    for (const id of visibleIds) {
-      const note = notesById.get(id);
-      if (!note) {
-        continue;
-      }
-
-      let node = nodeCache.get(id);
-      if (!node) {
-        node = createNode(note, id === activeId, onSelect, formatDate);
-        nodeCache.set(id, node);
-      } else {
-        patchNode(node, note, id === activeId, formatDate);
-      }
-
-      seen.add(id);
-      fragment.append(node);
-    }
-
-    for (const id of nodeCache.keys()) {
-      if (!seen.has(id) && !orderedIds.includes(id)) {
-        nodeCache.delete(id);
-      }
-    }
+    fragment.append(...createCardNodes(sections, retainedIds));
+    pruneCache(retainedIds);
 
     const bottomSpacer = document.createElement("div");
     bottomSpacer.className = "list-spacer";
-    bottomSpacer.style.height = `${Math.max(0, (orderedIds.length - endIndex) * ROW_HEIGHT)}px`;
+    bottomSpacer.style.height = `${Math.max(
+      0,
+      (boardIds.length - endIndex) * VIRTUAL_ROW_HEIGHT,
+    )}px`;
     fragment.append(bottomSpacer);
 
     container.replaceChildren(fragment);
@@ -132,6 +187,7 @@ export function createListView({ container, onSelect, formatDate }) {
 
   function clearToEmpty(message) {
     nodeCache.clear();
+    container.dataset.virtualized = "false";
     container.replaceChildren();
     const empty = document.createElement("div");
     empty.className = "empty-state";
@@ -140,18 +196,33 @@ export function createListView({ container, onSelect, formatDate }) {
   }
 
   function render({ notesById, orderedIds, activeId, query }) {
-    currentPayload = { notesById, orderedIds, activeId, query };
+    const sections = projectSections(notesById, orderedIds);
+    const boardIds = sections.flatMap((section) => section.orderedIds);
+    const virtualized = boardIds.length >= VIRTUALIZATION_THRESHOLD;
+    currentPayload = {
+      notesById,
+      orderedIds,
+      activeId,
+      query,
+      boardIds,
+      virtualized,
+    };
+    container.dataset.virtualized = String(virtualized);
 
-    if (orderedIds.length === 0) {
+    if (boardIds.length === 0) {
       clearToEmpty(query ? "No notes match this search." : "No notes yet. Create one to start.");
       return;
     }
 
-    renderWindow();
+    if (virtualized) {
+      renderWindow();
+    } else {
+      renderCompleteBoard(sections);
+    }
   }
 
-  container.addEventListener("scroll", () => {
-    if (currentPayload.orderedIds.length > 0) {
+  scrollOwner.addEventListener("scroll", () => {
+    if (currentPayload.virtualized) {
       renderWindow();
     }
   });

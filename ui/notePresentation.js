@@ -81,6 +81,31 @@ export function deriveNotePreview(content, options = {}) {
   return `${projected.slice(0, maxLength - 1).trimEnd()}…`.padEnd(maxLength, "…");
 }
 
+export function createNoteBoardSections({ notesById, orderedIds } = {}) {
+  if (!(notesById instanceof Map) || !Array.isArray(orderedIds)) {
+    throw presentationError();
+  }
+
+  const pinnedIds = [];
+  const noteIds = [];
+  for (const id of orderedIds) {
+    const note = notesById.get(id);
+    if (!note || typeof note !== "object") {
+      continue;
+    }
+    if (note.pinned === true) {
+      pinnedIds.push(id);
+    } else {
+      noteIds.push(id);
+    }
+  }
+
+  return [
+    { id: "pinned", label: "PINNED", orderedIds: pinnedIds },
+    { id: "notes", label: "NOTES", orderedIds: noteIds },
+  ];
+}
+
 export function createNoteCardPresentation(note, { formatDate } = {}) {
   if (!note || typeof note !== "object" || typeof formatDate !== "function") {
     throw presentationError();
