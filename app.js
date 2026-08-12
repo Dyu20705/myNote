@@ -105,6 +105,10 @@ function activeNote(state = store.getState()) {
   return state.notes.find((note) => note.id === state.activeId) ?? null;
 }
 
+export function getActiveNoteId() {
+  return store.getState().activeId;
+}
+
 function setBacklinksFromIndex() {
   store.setState({ backlinksMap: backlinkIndex.toMap() });
 }

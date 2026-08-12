@@ -10,7 +10,7 @@ async function createAndSave(page, title, content) {
   await expect(page.locator("#saveState")).toHaveText("Saved");
 }
 
-test("editor context header owns title, save status, Details, and More without permanent Save", async ({ page }) => {
+test("editor overlay owns drawing projection, title, save status, Details, and More without permanent Save", async ({ page }) => {
   await page.goto("/");
   await page.locator("#noteList .note-item").first().click();
 
@@ -18,6 +18,7 @@ test("editor context header owns title, save status, Details, and More without p
   await expect(header).toBeVisible();
   await expect(header.locator("#titleInput")).toHaveCount(1);
   await expect(header.locator("#saveState")).toHaveCount(1);
+  await expect(page.locator("#noteDrawingRegion")).toBeHidden();
   await expect(header.getByRole("button", { name: "Details", exact: true })).toBeVisible();
   await expect(header.getByRole("button", { name: "More actions", exact: true })).toBeVisible();
   await expect(page.locator("#saveButton")).toHaveCount(0);
@@ -86,7 +87,7 @@ test("More actions resolves current registry metadata and labelled recoverable d
   await expect(popover.getByRole("menuitem", { name: /Save note/ })).toHaveCount(0);
   await expect(popover.getByRole("menuitem", { name: /Toggle pin active note/ })).toHaveCount(0);
   await expect(popover.getByRole("menuitem", { name: /Archive active note/ })).toBeVisible();
-  await expect(popover.getByRole("menuitem", { name: /Add Kanji handwriting/ })).toBeVisible();
+  await expect(popover.getByRole("menuitem", { name: /Add drawing/ })).toBeVisible();
   const deleteItem = popover.getByRole("menuitem", { name: /Delete active note/ });
   await expect(deleteItem).toContainText("Recoverable through Undo");
   await deleteItem.click();

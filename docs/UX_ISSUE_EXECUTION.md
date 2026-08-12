@@ -32,6 +32,20 @@ Issue #69 branches after #68 and remains independently reviewable:
 
 The final #73 gate may depend on both the core UX chain and the complete #69 vertical slice. Core readiness should be recorded independently so saved-grid delivery does not hide core UX progress. Recognition adoption is a superseded historical direction and is not a dependency of the current V2 path.
 
+## Issue #90 presentation override
+
+Issue #90 is a later accepted simplification package and supersedes presentation-only clauses from stages #66, #68, and #70:
+
+- Notes and Japanese Notes open board-first rather than with a permanent editor.
+- One centered create/edit overlay is shared by ordinary and Japanese notes.
+- Valid #69 drawings project directly above title/body with zero-state collapse and bounded older-entry disclosure; Details is not the sole healthy surface.
+- Search/workspace ordering remains upstream; the board only projects `PINNED` and `NOTES` sections.
+- Japanese Filter A is visible and immediate; `+ Filter` owns the existing advanced canonical controls and removable chips.
+- `Review N` starts or resumes the existing Review dialog directly; derived metrics/repair diagnostics are optional Study details.
+- Non-critical usage guidance lives in `docs/cheatsheet.md` instead of permanent instructional UI.
+
+This override adds no persistence, schema, search-ranking, scheduler, review-state, command, framework, mobile, or touch scope. The older stages below remain the historical execution record for their owning packages.
+
 ## Stage 0: Design acceptance and issue #65
 
 ### Goal

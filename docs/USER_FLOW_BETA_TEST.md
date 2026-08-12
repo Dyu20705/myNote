@@ -15,13 +15,14 @@ This guide defines the core acceptance flows and a four-week internal beta seque
 1. Open the application.
 2. Press `Ctrl/Cmd+N`.
 3. Enter a title and body.
-4. Allow autosave to complete or select **Save**.
+4. Allow autosave to complete or press `Ctrl/Cmd+Enter`.
 5. Confirm the visible local-save status.
-6. Reload the page.
+6. Close the editor overlay and confirm the card remains on the board.
+7. Reload the page.
 
 Expected:
 
-- The note appears in the list.
+- The note appears in the `PINNED` or `NOTES` board section.
 - The acknowledged title and body survive reload.
 - No duplicate note is created.
 
@@ -35,7 +36,7 @@ Expected:
 Expected:
 
 - Results update without visible main-thread stalls.
-- Active selection remains synchronized between list and editor.
+- Active selection remains synchronized between the board and centered editor overlay.
 - Keyboard focus remains visible and predictable.
 
 ### C. Wiki links and backlinks

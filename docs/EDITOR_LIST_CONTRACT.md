@@ -8,6 +8,8 @@ Base revision: `7ea7a8333bee51548b3fd48a70703422c7f97822`
 
 Design source: Figma pattern `42:167` (Inspector & Note Actions), plus the accepted Notes route hierarchy. Repository lifecycle, save-status, and command behavior remain authoritative where sample design copy differs.
 
+Issue #90 supersedes the permanent-editor presentation described by the original #68 package. The current tree keeps the same lifecycle and command owners, presents ordered cards in a board, and mounts one centered create/edit overlay only when editing is intentional.
+
 ## 1. Boundary
 
 This package changes ordinary note presentation and interaction hierarchy only. Canonical note normalization, Markdown parsing, search ranking, persistence, history, autosave, command execution, Japanese enrollment, scheduling, schemas, and migrations retain their existing owners.
@@ -32,22 +34,29 @@ The preview helper:
 
 `createNoteCardPresentation()` exposes only existing note data: title, bounded preview, formatted update date, at most four tags, pinned state, and archived state.
 
-`ui/list.js` renders exactly one native button per visible note. There is no sibling permanent delete control. The active note uses `aria-current="true"`, an inset rail, stronger border, and stronger type weight. Virtualization, ordering, active restoration, and controller-owned keyboard navigation remain unchanged.
+`createNoteBoardSections()` projects the one upstream `orderedIds` sequence into stable `PINNED` and `NOTES` presentation sections without sorting, filtering, deduplicating, or mutating canonical data. `ui/list.js` renders exactly one native button per visible note. There is no sibling permanent delete control. The active note uses `aria-current="true"`, an inset rail, stronger border, and stronger type weight. Virtualization, ordering, active restoration, and controller-owned keyboard navigation remain unchanged.
 
-## 3. Editor context header
+## 3. Centered editor overlay
 
-The editor context header owns:
+The board is the healthy default surface. `New note`, Japanese quick create, a card selection, or the editor-focus command opens the same native modal dialog in create or edit mode. The overlay owns presentation context only; canonical selection, creation, autosave, search, state, and persistence keep their previous owners.
+
+The overlay editor context header owns:
 
 - the editable title;
 - the sole live `#saveState` region;
 - the `Details` disclosure;
-- the `More actions` disclosure.
+- the visible Pin action;
+- the `More actions` disclosure;
+- the close action.
+
+Before close, the overlay awaits the existing autosave flush. Failure keeps the exact draft and overlay visible. Success restores board scroll and returns focus to the connected opener, replacement active card, or stable workspace fallback. Query and workspace state are not reset by opening or closing the overlay.
+
+`#noteDrawingRegion` sits above the title/body and consumes no layout space with zero valid entries. It projects the newest note-linked drawing first and discloses older drawings inside a bounded scroll owner. It reads and mutates only through the #69 application/lifecycle boundary; canonical note content never owns drawing vectors.
 
 Routine save status remains restrained secondary text. The permanent primary Save button is removed from the rendered UI. Explicit save remains available through:
 
 - autosave;
 - `Ctrl/Cmd+Enter` in the editor;
-- the `Save note` command in More actions;
 - the shared command palette.
 
 The application header owns note count only. This avoids two competing save-status regions.
@@ -60,9 +69,9 @@ A hidden bootstrap-only `#saveButton` adapter remains in static HTML because the
 
 - Backlinks;
 - Metadata;
-- Supplementary entities.
+- Non-drawing supplementary entities.
 
-Empty Backlinks and Supplementary sections remain hidden. The inspector does not show an empty placeholder. Metadata exposes restrained current presentation facts such as local storage, update label, tags, and current pinned/archive state.
+Empty Backlinks and Supplementary sections remain hidden. Healthy drawings are not hidden in Details; the inspector may retain only secondary diagnostics or metadata. The inspector does not show an empty placeholder. Metadata exposes restrained current presentation facts such as local storage, update label, tags, and current pinned/archive state.
 
 The inspector imports no store, search client, history, lifecycle, or persistence module. It observes already-rendered presentation and invokes no durable mutation.
 
@@ -90,12 +99,7 @@ The registry:
 - never stores or executes behavior closures;
 - uses stale-safe unregister closures.
 
-The current More actions surface resolves:
-
-- `editor.save`;
-- `notes.pin`;
-- `notes.archive`;
-- `notes.delete`.
+The current More actions surface resolves `notes.archive`, the bounded `notes.kanji-ink` extension presented as `Add drawing`, and `notes.delete`. Save remains an editor command and Pin is promoted to the visible overlay toolbar; neither is duplicated in the rare-action menu.
 
 Delete is explicitly labelled and styled as destructive. The action description states that deletion is recoverable through Undo. Every action invokes the existing command ID; the menu performs no direct persistence.
 
@@ -111,9 +115,10 @@ No new recycle-bin storage, tombstone schema, or irreversible shortcut is introd
 
 ## 7. Focus and dismissal
 
-- Details and More actions are native buttons with visible focus.
+- The editor is a native modal dialog; background board commands cannot run while it is open.
+- Details, Pin, More actions, and Close are native buttons with visible focus.
 - Opening one closes the other.
-- Close buttons and Escape restore focus to the opener.
+- Close buttons and Escape flush before dismissal and restore board scroll plus logical opener focus.
 - Clicking outside the action popover closes it without stealing focus.
 - Menu actions use current availability and cannot execute when unavailable.
 - The command palette remains the complete keyboard-help and direct-dispatch parity surface.
@@ -149,7 +154,7 @@ The final documentation head requires a fresh workflow before review and merge.
 
 - Physical screen-reader, forced-colors, Safari, Firefox, macOS, and Windows verification remain release-gate evidence.
 - Mobile one-pane navigation belongs to #71.
-- Japanese Notes/Review information architecture belongs to #70.
+- Japanese board/filter/Review presentation is superseded by issue #90 while its lifecycle remains owned by the existing Japanese modules.
 - Kanji handwriting entities and storage belong to #69.
 - Empty/loading/error/recovery route mapping belongs to #72.
 - Existing dependency-audit and GitHub Actions Node-runtime warnings are unchanged.

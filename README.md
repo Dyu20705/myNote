@@ -36,7 +36,7 @@ npm run test:e2e
 - Note creation, editing, deletion, pinning, and archiving.
 - Serialized autosave and explicit save handling.
 - Scan-friendly note cards with bounded plain-text previews and semantic selected state.
-- Editor context header with one save-status owner, Details inspector, and registry-backed More actions.
+- Centered overlay editor with one save-status owner, visible Pin, Details inspector, and registry-backed More actions.
 - Labelled deletion with bounded Undo recovery through the existing command stack.
 - Keyboard-first navigation and registry-backed command palette.
 - Worker-based incremental search.
@@ -45,13 +45,15 @@ npm run test:e2e
 - Markdown and JSON export.
 - Legacy localStorage migration to IndexedDB.
 - Notes and 日本語 workspace switching through one shared application runtime.
-- Editor-first Japanese Notes plus a distinct Review subview with the canonical six-card dashboard and non-empty bounded repair diagnostics.
+- Board-first Notes and Japanese Notes with one centered create/edit overlay that preserves query, scroll, draft, and focus context.
+- Instant Japanese common filters, advanced canonical filter disclosure, one-action `Review N`, and optional derived study details.
 - One New Japanese note disclosure backed by the same five command-registry actions exposed in the palette.
 - Reveal-first, keyboard-operable review sessions with durable ratings, close/resume, deterministic skips, and explicit retry state.
 - Isolated Japanese study-review persistence, deterministic templates, scheduling, dashboard derivation, immutable workspace state, and durable lifecycle actions.
 - IndexedDB schema-v3 compatibility with additive `studyReviews` and `kanjiInkEntries` stores; existing notes are preserved and never enrolled automatically.
 - Japanese note export with review scheduling metadata retained separately in `studyReviews`.
 - Saved-grid Kanji drawings with Pen/Marker/Eraser, bounded Undo/Redo, persist-before-success retry, and mixed legacy-V1/current-V2 preservation.
+- Direct note-overlay drawing projection with zero-state collapse, newest-first bounded disclosure, and existing lifecycle-backed Edit/Delete.
 - Safe-mode local database reset.
 
 ## Documentation
@@ -62,6 +64,7 @@ npm run test:e2e
 - [Command ownership audit](docs/COMMAND_OWNERSHIP.md)
 - [Command registry runtime contract](docs/COMMAND_REGISTRY.md)
 - [Editor and note-list interaction contract](docs/EDITOR_LIST_CONTRACT.md)
+- [Daily-use cheatsheet](docs/cheatsheet.md)
 - [Japanese study dashboard contract](docs/JAPANESE_STUDY_DASHBOARD.md)
 - [Japanese study lifecycle contract](docs/JAPANESE_STUDY_LIFECYCLE.md)
 - [Japanese study workspace interaction contract](docs/JAPANESE_STUDY_WORKSPACE.md)
@@ -104,6 +107,7 @@ Text editing and IME composition suppress navigation, sequence, create, delete, 
 - `ui/commandRegistry.js`: bounded command metadata, availability, scope, dispatch, sequence, and cleanup owner.
 - `ui/palette.js`: command rendering, filtering, invocation-by-ID, and focus-return adapter.
 - `ui/notePresentation.js`: bounded presentation-only note-card projection.
+- `ui/noteEditorOverlay.js`: native-dialog lifecycle, board scroll snapshot, close serialization, and focus-return presentation owner.
 - `ui/noteActionRegistry.js`: command-ID-only note-action extension descriptors.
 - `ui/editorChrome.js`: Details, More actions, focus return, and deletion-recovery presentation adapter.
 - `scripts/`: local verification and static-server utilities.

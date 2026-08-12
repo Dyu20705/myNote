@@ -10,11 +10,11 @@ The 2026-08-09 owner decision replaced runtime handwriting recognition with a sa
 
 ## User flow
 
-1. Open **More actions → Add Kanji handwriting** for the active note.
+1. Open **More actions → Add drawing** for the active note.
 2. Draw on the repeated horizontal ruled paper with Pen or Marker; Eraser removes intersecting strokes.
 3. Use bounded Undo, Redo, or Clear as needed.
 4. Save a non-empty valid drawing only after IndexedDB persistence succeeds.
-5. Reload, edit a V2 drawing, delete/undo, or export it from the supplementary entry surface.
+5. The saved projection appears immediately above the note title/body; reload, edit a V2 drawing, delete/undo, or export it from that direct surface.
 
 The accepted desktop dialog is a viewport-bounded `900 × 594` surface with an `860 × 430` ruled canvas, icon-first tools with accessible names and tooltips, Pen selected by default, and a concise live failure state. The persisted `paperStyle: "grid"` value is retained as the V2 compatibility discriminator; presentation uses the one canonical repeated horizontal-rule pattern shared by Canvas2D and SVG. The dialog has no recognition or candidate region. Mobile/touch redesign remains out of scope.
 
@@ -111,13 +111,13 @@ The checked-in Chromium resource test uses bounded fixtures and conservative reg
 | --- | --- | ---: | --- |
 | V2 validation plus codec serialization | One exact combined-operation warm-up, then 5 samples of one entry with 32 strokes, one 256-point stroke, and 4,096 total points | each sample `< 1,000 ms`; canonical entry `≤ 262,144 bytes`; codec envelope `≤ 8 MiB` | PASS; canonical entry and codec-envelope byte assertions passed |
 | Note-context load/reload | 65 valid minimal V2 entries; call the UI synchronization boundary twice | 2 loads; maximum `< 2,000 ms` | PASS |
-| Bounded preview render | Open Details for the same 65-entry note and wait for rendered-paper markers | exactly 64 previews; maximum `< 5,000 ms`; older-entry disclosure remains visible | PASS |
+| Bounded preview render | Open the same 65-entry note, confirm one primary preview, then disclose the bounded window | exactly 1 preview initially and 64 after disclosure; expanded render `< 5,000 ms`; older-entry disclosure remains visible | PASS |
 
 The timing limits are regression tripwires, not device-wide latency guarantees. Deterministic counts and byte limits are the primary evidence. The exact command is `npx --no-install playwright test tests/e2e/kanji-resource.spec.mjs --project=chromium`; it runs the Playwright Chromium project against the repository's static source server. The resource test records its bounded raw duration arrays in the `kanji-resource-evidence` test annotation and command output, making each run its own audit trail without promoting machine-specific timings into normative history. The 2026-08-10 run was on Windows; CI hardware and native browser builds remain environment-specific. The 720×450 Playwright case is only equivalent responsive-layout evidence; setting a CSS viewport does not exercise native browser zoom.
 
 ## Verification and rollback
 
-Automated coverage owns strict V1/V2 validation, V1 unknown-field preservation, mixed-record CRUD/delete/restore/import/export, V1-only search projection, Pen/Marker/Eraser/history behavior, empty-save and failed-save retry, database v2→v3 migration, atomic lifecycle failure, and the browser draw/save/reload/edit/delete/export path. It also covers focus return, resize/DPR behavior, required desktop viewports, equivalent responsive layout at a 720×450 CSS viewport, no horizontal document overflow, repeated-open resource cleanup, and no recognizer call path. Native browser 200% zoom requires separate recorded manual evidence.
+Automated coverage owns strict V1/V2 validation, V1 unknown-field preservation, mixed-record CRUD/delete/restore/import/export, V1-only search projection, Pen/Marker/Eraser/history behavior, empty-save and failed-save retry, database v2→v3 migration, atomic lifecycle failure, and the browser draw/save/direct-projection/reload/edit/delete/export path. It also covers zero-drawing collapse, bounded multiple-drawing disclosure, draft preservation, focus return, resize/DPR behavior, required desktop viewports, equivalent responsive layout at a 720×450 CSS viewport, no horizontal document overflow, repeated-open resource cleanup, and no recognizer call path. Native browser 200% zoom requires separate recorded manual evidence.
 
 Physical Windows 11 pen usability, native browser 200% zoom, and OS-level 200% display scaling remain `UNKNOWN — REQUIRES VALIDATION` until recorded manual evidence exists. Automated CSS viewport emulation does not close any of those unknowns.
 
