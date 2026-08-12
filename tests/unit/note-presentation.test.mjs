@@ -82,3 +82,46 @@ test("presentation helpers reject malformed bounds with content-free errors", as
     });
   }
 });
+
+test("createNoteBoardSections partitions upstream order without taking query ownership", async () => {
+  const { createNoteBoardSections } = await loadModule();
+  const notes = [
+    Object.freeze({ id: "note-2", pinned: false }),
+    Object.freeze({ id: "pinned-1", pinned: true }),
+    Object.freeze({ id: "note-1", pinned: false }),
+    Object.freeze({ id: "pinned-2", pinned: true }),
+  ];
+  const notesById = new Map(notes.map((note) => [note.id, note]));
+  notesById.set("invalid", null);
+  const originalEntries = [...notesById.entries()];
+  const orderedIds = Object.freeze([
+    "note-2",
+    "pinned-1",
+    "stale",
+    "invalid",
+    "note-1",
+    "pinned-2",
+  ]);
+
+  assert.deepEqual(createNoteBoardSections({ notesById, orderedIds }), [
+    { id: "pinned", label: "PINNED", orderedIds: ["pinned-1", "pinned-2"] },
+    { id: "notes", label: "NOTES", orderedIds: ["note-2", "note-1"] },
+  ]);
+  assert.deepEqual([...notesById.entries()], originalEntries);
+  assert.deepEqual(orderedIds, [
+    "note-2",
+    "pinned-1",
+    "stale",
+    "invalid",
+    "note-1",
+    "pinned-2",
+  ]);
+  assert.throws(() => createNoteBoardSections({ notesById: {}, orderedIds: [] }), {
+    code: "NOTE_PRESENTATION_OPTIONS_INVALID",
+    message: "NOTE_PRESENTATION_OPTIONS_INVALID",
+  });
+  assert.throws(() => createNoteBoardSections({ notesById, orderedIds: null }), {
+    code: "NOTE_PRESENTATION_OPTIONS_INVALID",
+    message: "NOTE_PRESENTATION_OPTIONS_INVALID",
+  });
+});
