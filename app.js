@@ -28,6 +28,7 @@ import {
 import { createJapaneseApp } from "./japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
+import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
 
 const AUTOSAVE_DEBOUNCE = 350;
@@ -37,11 +38,16 @@ const els = {
   saveState: document.getElementById("saveState"),
   searchInput: document.getElementById("searchInput"),
   newNoteButton: document.getElementById("newNoteButton"),
+  newJapaneseNoteButton: document.getElementById("newJapaneseNoteButton"),
   refreshButton: document.getElementById("refreshButton"),
   saveButton: document.getElementById("saveButton"),
   noteList: document.getElementById("noteList"),
   titleInput: document.getElementById("titleInput"),
   contentInput: document.getElementById("contentInput"),
+  noteEditorOverlay: document.getElementById("noteEditorOverlay"),
+  noteEditorOverlayLabel: document.getElementById("noteEditorOverlayLabel"),
+  closeNoteEditorButton: document.getElementById("closeNoteEditorButton"),
+  pinNoteButton: document.getElementById("pinNoteButton"),
   activeNoteLabel: document.getElementById("activeNoteLabel"),
   backlinksList: document.getElementById("backlinksList"),
   commandPalette: document.getElementById("commandPalette"),
@@ -82,6 +88,7 @@ let workspaceFlushDepth = 0;
 let reconcileInFlight = false;
 let compositionActive = false;
 let palette = null;
+let noteEditorOverlay = null;
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat("en", {
@@ -123,14 +130,31 @@ function renderTopline() {
   const state = store.getState();
   const count = state.notes.length;
   els.noteCount.textContent = `${count} note${count === 1 ? "" : "s"}`;
-  els.activeNoteLabel.textContent = activeNote(state) ? "Editing" : state.emptyLabel || "Ready";
-  els.saveState.textContent = state.dirty ? "Unsaved changes" : state.saveMessage;
+  els.activeNoteLabel.textContent = state.emptyLabel || "Ready";
+  const storageUnavailable = state.saveMessage === "Storage unavailable"
+    || state.saveMessage === "Safe mode: storage unavailable";
+  const savePresentation = storageUnavailable
+    ? { label: state.saveMessage, state: "error" }
+    : state.dirty
+      ? { label: "Unsaved", state: "warning" }
+      : state.saveMessage === "Saved locally"
+      ? { label: "Saved", state: "success" }
+      : state.saveMessage === "Saved locally; search index unavailable"
+        ? { label: "Saved · Search unavailable", state: "warning" }
+        : { label: state.saveMessage, state: "" };
+  els.saveState.textContent = savePresentation.label;
+  els.saveState.dataset.state = savePresentation.state;
 }
 
 function renderEditor() {
   const note = activeNote();
   els.titleInput.value = note?.title ?? "";
   els.contentInput.value = note?.content ?? "";
+  const pinned = note?.pinned === true;
+  els.pinNoteButton.disabled = !note;
+  els.pinNoteButton.setAttribute("aria-pressed", String(pinned));
+  els.pinNoteButton.setAttribute("aria-label", pinned ? "Unpin note" : "Pin note");
+  els.pinNoteButton.title = pinned ? "Unpin note" : "Pin note";
 }
 
 function renderBacklinks() {
@@ -169,8 +193,12 @@ function renderBacklinks() {
 
 const listView = createListView({
   container: els.noteList,
-  onSelect(id) {
-    runAction(() => setActiveNote(id));
+  onSelect(id, opener) {
+    runAction(async () => {
+      if (await setActiveNote(id)) {
+        openNoteEditor({ opener, mode: "edit" });
+      }
+    });
   },
   onDelete(id) {
     if (activeNote()?.id === id) {
@@ -337,8 +365,18 @@ const noteLifecycle = createNoteLifecycle({
   },
 });
 
-function focusEditor() {
-  els.contentInput.focus();
+function openNoteEditor({ opener = document.activeElement, mode = "edit" } = {}) {
+  if (!activeNote() || !noteEditorOverlay) {
+    return false;
+  }
+  noteEditorOverlay.open({ opener, mode });
+  return true;
+}
+
+function focusEditor(opener = document.activeElement) {
+  if (openNoteEditor({ opener, mode: "edit" })) {
+    queueMicrotask(() => els.contentInput.focus());
+  }
 }
 
 function focusSearch() {
@@ -448,6 +486,16 @@ const autosave = createAutosave({
   onSave: saveCurrentNote,
 });
 
+noteEditorOverlay = createNoteEditorOverlay({
+  dialog: els.noteEditorOverlay,
+  closeButton: els.closeNoteEditorButton,
+  modeLabel: els.noteEditorOverlayLabel,
+  titleInput: els.titleInput,
+  board: els.noteList,
+  beforeClose: () => autosave.flush(),
+  fallbackFocus: () => (els.newNoteButton.hidden ? els.newJapaneseNoteButton : els.newNoteButton),
+});
+
 async function reconcileCurrentView() {
   if (reconcileInFlight) {
     return false;
@@ -495,26 +543,22 @@ noteWorkspace = createNoteWorkspaceController({
   onRender: renderWorkspace,
 });
 
-async function createNote(seed = {}) {
+async function createNote(seed = {}, options = {}) {
   await autosave.flush();
   const note = createEmptyNote(seed);
   const state = store.getState();
-  const previousQuery = state.query;
   const previousActiveId = state.activeId;
   const revision = bumpSaveRevision();
 
   await commandStack.execute({
     do: async () => {
-      store.setState({ query: "" });
       await applyUpsertNote(note, {
         activeId: note.id,
         revision,
         historyOp: { op: "create", noteId: note.id, version: note.version },
       });
-      focusEditor();
     },
     undo: async () => {
-      store.setState({ query: previousQuery });
       await applyRemoveNote(note.id, {
         preferredActiveId: previousActiveId,
         revision: bumpSaveRevision(),
@@ -522,6 +566,10 @@ async function createNote(seed = {}) {
       });
     },
   });
+  if (options.openEditor !== false) {
+    openNoteEditor({ opener: options.opener, mode: "create" });
+  }
+  return note;
 }
 
 async function deleteActiveNote() {
@@ -624,6 +672,7 @@ async function openDailyNote() {
   const found = store.getState().notes.find((note) => note.title === dateId);
   if (found) {
     await setActiveNote(found.id);
+    openNoteEditor({ mode: "edit" });
     return;
   }
   await createNote({ title: dateId, tags: ["daily"] });
@@ -719,13 +768,14 @@ function commandContext(overrides = {}) {
     ? overrides.target
     : document.activeElement;
   const reviewOpen = Boolean(els.reviewDialog?.open);
+  const editorOpen = Boolean(els.noteEditorOverlay?.open);
   const paletteOpen = Boolean(palette?.isOpen());
   const editorTarget = target === els.titleInput || target === els.contentInput;
   const activeScope = reviewOpen
     ? "review-modal"
     : paletteOpen
       ? "palette"
-      : editorTarget
+      : editorOpen || editorTarget
         ? "editor"
         : "shell";
 
@@ -735,7 +785,7 @@ function commandContext(overrides = {}) {
     activeScope,
     targetKind: targetKind(target),
     paletteOpen,
-    modalScope: reviewOpen ? "review-modal" : null,
+    modalScope: reviewOpen ? "review-modal" : editorOpen ? "editor" : null,
     compositionActive,
     focusToken: target instanceof HTMLElement ? target.id || activeScope : activeScope,
     opener: target instanceof HTMLElement ? target : document.activeElement,
@@ -790,7 +840,7 @@ const unregisterApplicationCommands = [
     shortcuts: [{ key: "n", primaryModifier: true }],
     isAvailable: (context) => context.workspace === "notes",
     unavailableReason: () => "Switch to Notes workspace to create an ordinary note",
-    run: () => createNote(),
+    run: (context) => createNote({}, { opener: context.opener }),
   }),
   registerCommand({
     id: "notes.daily",
@@ -922,7 +972,7 @@ const unregisterApplicationCommands = [
     shortcuts: [{ key: "i" }],
     isAvailable: () => Boolean(activeNote()),
     unavailableReason: () => "No active note to edit",
-    run: () => focusEditor(),
+    run: (context) => focusEditor(context.opener),
   }),
   registerCommand({
     id: "export.markdown",
@@ -1066,6 +1116,7 @@ createJapaneseApp({
     backlinkIndex,
     workspace: noteWorkspace,
     registerEnrolledDelete,
+    openNoteEditor,
   },
   document,
 });
@@ -1089,7 +1140,7 @@ async function bootstrap() {
   backlinkIndex.rebuild(loaded);
   setBacklinksFromIndex();
   if (loaded.length === 0) {
-    await createNote({ title: "Untitled", content: "" });
+    await createNote({ title: "Untitled", content: "" }, { openEditor: false });
     return;
   }
   await refreshSearch({ emptyLabel: "No notes" });
@@ -1117,6 +1168,7 @@ export const commandRuntime = Object.freeze({
       unregister();
     }
     palette.destroy();
+    noteEditorOverlay.destroy();
     commandRegistry.destroy();
   },
 });

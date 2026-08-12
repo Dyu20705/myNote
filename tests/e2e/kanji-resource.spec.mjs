@@ -25,7 +25,15 @@ async function expectNoHorizontalOverflow(page) {
   expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth === globalThis.document.documentElement.clientWidth)).toBe(true);
 }
 
+async function ensureEditorOpen(page) {
+  if (await page.locator("#noteEditorOverlay").isHidden()) {
+    await page.locator("#noteList .note-item").first().click();
+  }
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+}
+
 async function openAndClose(page) {
+  await ensureEditorOpen(page);
   await page.locator("#noteActionsButton").click();
   await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
   await expect(page.locator("#kanjiInkDialog")).toBeVisible();
@@ -99,6 +107,7 @@ test("repeated open and close retains one dialog, stylesheet, command, and bound
 
 test("bounded drawing evidence validates maximum V2 shape, reloads note context, and renders 64 previews", async ({ page }, testInfo) => {
   await page.goto("/");
+  await ensureEditorOpen(page);
 
   const codecEvidence = await page.evaluate(({ sampleCount }) => {
     return import("/core/kanjiInkEntry.js").then(({ serializeKanjiInkEntry, validateKanjiInkEntryV2 }) => {
@@ -166,7 +175,7 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
   await page.locator("#titleInput").fill("Bounded drawing evidence");
   await page.locator("#contentInput").fill("64-preview resource fixture.");
   await page.locator("#contentInput").press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id, entryCount }) => {
     const request = globalThis.indexedDB.open("myNoteDB", 3);
@@ -227,6 +236,7 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
 
 test("capture fallback finishes outside releases and leaves no temporary document listeners", async ({ page }) => {
   await page.goto("/");
+  await ensureEditorOpen(page);
   await page.locator("#noteActionsButton").click();
   await page.getByRole("menuitem", { name: /Add Kanji handwriting/ }).click();
   const canvas = page.locator("#kanjiInkCanvas");
@@ -347,10 +357,11 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   });
 
   await page.goto("/");
+  await ensureEditorOpen(page);
   await page.locator("#titleInput").fill("Observer lifecycle");
   await page.locator("#contentInput").fill("Hidden inspector observer regression.");
   await page.locator("#contentInput").press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id }) => {
     const request = globalThis.indexedDB.open("myNoteDB", 3);
@@ -378,6 +389,7 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   }, { noteId });
 
   await page.reload();
+  await ensureEditorOpen(page);
   await expect(page.locator("#noteInspector")).toBeHidden();
   await expect(page.locator("#kanjiInkCount")).toHaveText("4 entries");
   const hiddenSnapshots = await page.evaluate(async () => {

@@ -2,16 +2,17 @@ import { expect, test } from "@playwright/test";
 
 async function createAndSave(page, title, content) {
   await page.locator("#newNoteButton").click();
-  await expect(page.locator("#contentInput")).toBeFocused();
+  await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(content);
   await page.locator("#contentInput").focus();
   await page.keyboard.press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
 }
 
 test("editor context header owns title, save status, Details, and More without permanent Save", async ({ page }) => {
   await page.goto("/");
+  await page.locator("#noteList .note-item").first().click();
 
   const header = page.locator("#editorContextHeader");
   await expect(header).toBeVisible();
@@ -54,6 +55,7 @@ test("note cards use bounded plain text and semantic non-color selection without
 
 test("Details progressively discloses metadata, hides empty backlinks, and returns focus", async ({ page }) => {
   await page.goto("/");
+  await page.locator("#noteList .note-item").first().click();
   const opener = page.getByRole("button", { name: "Details", exact: true });
 
   await expect(page.locator("#noteInspector")).toBeHidden();
@@ -80,14 +82,17 @@ test("More actions resolves current registry metadata and labelled recoverable d
   await opener.click();
   const popover = page.getByRole("menu", { name: "Note actions" });
   await expect(popover).toBeVisible();
-  await expect(popover.getByRole("menuitem", { name: /Save note/ })).toBeVisible();
-  await expect(popover.getByRole("menuitem", { name: /Toggle pin active note/ })).toBeVisible();
+  await expect(page.locator("#pinNoteButton")).toHaveAccessibleName("Pin note");
+  await expect(popover.getByRole("menuitem", { name: /Save note/ })).toHaveCount(0);
+  await expect(popover.getByRole("menuitem", { name: /Toggle pin active note/ })).toHaveCount(0);
   await expect(popover.getByRole("menuitem", { name: /Archive active note/ })).toBeVisible();
+  await expect(popover.getByRole("menuitem", { name: /Add Kanji handwriting/ })).toBeVisible();
   const deleteItem = popover.getByRole("menuitem", { name: /Delete active note/ });
   await expect(deleteItem).toContainText("Recoverable through Undo");
   await deleteItem.click();
 
   await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   const notice = page.getByRole("status", { name: "Deletion recovery" });
   await expect(notice).toContainText("Note deleted");
   await notice.getByRole("button", { name: "Undo delete", exact: true }).click();

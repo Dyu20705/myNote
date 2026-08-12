@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  closeNoteEditor,
   createJapaneseNoteFromMenu,
   openJapaneseReviewSubview,
 } from "./japanese-helpers.mjs";
@@ -93,7 +94,7 @@ async function runCommand(page, title) {
 async function flushEditor(page) {
   await page.locator("#contentInput").focus();
   await page.keyboard.press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
 }
 
 async function downloadText(download) {
@@ -153,6 +154,7 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
   for (const [index, action] of createActions.entries()) {
     await createJapaneseNoteFromMenu(page, action);
     await expect(page.locator("#noteCount")).toHaveText(`${index + 2} notes`);
+    await closeNoteEditor(page);
   }
 
   await expect(page.locator("#japaneseDueCount")).toHaveText("5");
@@ -163,7 +165,9 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
   await expect(page.locator("#japanesePlannerProgress")).toHaveText("0 / 6");
 
   await createJapaneseNoteFromMenu(page, "Create today’s output note");
+  await closeNoteEditor(page);
   await createJapaneseNoteFromMenu(page, "Create this week’s planner");
+  await closeNoteEditor(page);
   await expect(page.locator("#noteCount")).toHaveText("6 notes");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(5);
 
@@ -286,6 +290,7 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill(content);
   await flushEditor(page);
+  await closeNoteEditor(page);
 
   await expect.poll(async () => {
     const snapshot = await readDatabaseSnapshot(page, activeId);
@@ -335,6 +340,7 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await expect(page.locator("#japaneseDueCount")).toHaveText("1");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#titleInput")).toBeFocused();
+  await closeNoteEditor(page);
 
   await openJapaneseReviewSubview(page);
   const startButton = page.getByRole("button", { name: "Start review" });

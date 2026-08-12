@@ -371,8 +371,7 @@ strong {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: clamp(var(--mn-sidebar-min), 24vw, 300px) minmax(0, 1fr);
-  gap: var(--mn-space-3);
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   overflow: hidden;
 }
@@ -383,23 +382,21 @@ strong {
   background: var(--mn-surface-base);
 }
 
-.notes-panel,
-.editor-panel {
+.notes-panel {
   height: 100%;
   min-width: 0;
   min-height: 0;
-}
-
-.notes-panel {
   overflow-x: hidden;
   overflow-y: auto;
 }
 
 .editor-panel {
-  padding: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--mn-space-4);
   display: grid;
-  grid-template-rows: auto auto minmax(160px, 1fr) auto auto;
-  gap: 10px;
+  grid-template-rows: auto minmax(160px, 1fr);
+  gap: var(--mn-space-4);
   overflow: hidden;
   background: var(--mn-bg-canvas);
 }

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  closeNoteEditor,
   createJapaneseNoteFromMenu,
   openJapaneseReviewSubview,
 } from "./japanese-helpers.mjs";
@@ -28,6 +29,7 @@ test("palette delete, undo, and Delete key keep enrolled note and review atomic 
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#japaneseDueCount")).toHaveText("1");
+  await closeNoteEditor(page);
 
   const noteId = await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");

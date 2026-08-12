@@ -12,10 +12,11 @@ async function runCommand(page, title) {
 
 async function createNote(page, title = "Kanji canvas note") {
   await page.goto("/");
+  await page.locator("#noteList .note-item").first().click();
   await page.locator("#titleInput").fill(title);
   await page.locator("#contentInput").fill("Body remains canonical and vector-free.");
   await page.locator("#contentInput").press("Control+Enter");
-  await expect(page.locator("#saveState")).toHaveText("Saved locally");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
 }
 
 async function openKanjiDialog(page) {
@@ -25,6 +26,10 @@ async function openKanjiDialog(page) {
 }
 
 async function openDetails(page) {
+  if (await page.locator("#noteEditorOverlay").isHidden()) {
+    await page.locator("#noteList .note-item").first().click();
+    await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+  }
   if (await page.locator("#noteInspector").isHidden()) await page.locator("#detailsButton").click();
   await expect(page.locator("#noteInspector")).toBeVisible();
 }
@@ -223,6 +228,8 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   expect(edited[0].id).toBe(stableId);
   expect(edited[0].strokes).toHaveLength(2);
 
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   const jsonDownloadPromise = page.waitForEvent("download");
   await runCommand(page, "Export Kanji data as JSON");
   const jsonDownload = await jsonDownloadPromise;
@@ -231,6 +238,7 @@ test("saved-grid canvas supports tools, history, durable editing, recovery, and 
   expect(bundle.kanjiInkEntries[0].schemaVersion).toBe(2);
   expect(JSON.stringify(bundle.kanjiInkEntries[0])).not.toContain("character");
 
+  await openDetails(page);
   await page.getByRole("button", { name: "Delete Kanji drawing" }).click();
   await expect(page.locator("#kanjiInkEntries .kanji-entry")).toHaveCount(0);
   await page.getByRole("button", { name: "Undo handwriting deletion" }).click();
@@ -457,6 +465,8 @@ test("legacy V1 cards remain read-only and losslessly exportable", async ({ page
     return Array.from(context.getImageData(2, 2, 1, 1).data);
   })).toEqual([255, 255, 255, 255]);
   await expect(legacy.getByRole("button", { name: /Edit/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   const downloadPromise = page.waitForEvent("download");
   await runCommand(page, "Export Kanji data as JSON");
   const download = await downloadPromise;

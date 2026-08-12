@@ -54,7 +54,8 @@ function validateRuntime(runtime) {
     && typeof runtime.commandRegistry.execute === "function"
     && typeof runtime.commandRegistry.snapshot === "function"
     && typeof runtime.getCommandContext === "function"
-    && typeof runtime.registerEnrolledDelete === "function";
+    && typeof runtime.registerEnrolledDelete === "function"
+    && typeof runtime.openNoteEditor === "function";
   if (!valid) {
     throw new TypeError("Invalid Japanese application runtime");
   }
@@ -331,7 +332,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     return "";
   }
 
-  async function runQuickCreate(type) {
+  async function runQuickCreate(type, opener) {
     quickCreatePending = true;
     elements.japaneseCreate.setAttribute("aria-busy", "true");
     elements.japaneseCreateMenu.hidden = true;
@@ -340,7 +341,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     try {
       activeSubview = "notes";
       const note = await coordinator.quickCreate(type);
-      elements.titleInput.focus();
+      runtime.openNoteEditor({ opener, mode: "create" });
       return note;
     } finally {
       quickCreatePending = false;
@@ -363,7 +364,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     scope: "shell",
     isAvailable: () => !store.getState().studyDataUnavailable && !quickCreatePending,
     unavailableReason: quickCreateUnavailableReason,
-    run: () => runQuickCreate(type),
+    run: (context) => runQuickCreate(type, context.opener),
   }));
   const unregisterCommands = quickCreateCommands.map((command) => commandRegistry.register(command));
   const unregisterDelete = runtime.registerEnrolledDelete(async (noteId) => {

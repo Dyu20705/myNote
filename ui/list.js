@@ -63,7 +63,7 @@ function createNode(note, isActive, onSelect, formatDate) {
   button.type = "button";
   button.className = "note-item";
   button.dataset.id = note.id;
-  button.addEventListener("click", () => onSelect(note.id));
+  button.addEventListener("click", () => onSelect(note.id, button));
   renderButton(button, note, isActive, formatDate);
 
   container.append(button);

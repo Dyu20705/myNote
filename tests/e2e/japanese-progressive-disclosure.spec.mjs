@@ -15,6 +15,8 @@ async function createJapaneseNote(page, action, title) {
     .click();
   await expect(page.locator("#titleInput")).toHaveValue(title);
   await expect(page.locator("#titleInput")).toBeFocused();
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
 }
 
 for (const viewport of [
@@ -25,7 +27,7 @@ for (const viewport of [
   test(`Japanese Notes and Review stay bounded at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await openJapaneseWorkspace(page);
-    await expect(page.locator("#contentInput")).toBeVisible();
+    await expect(page.locator("#noteEditorOverlay")).toBeHidden();
     await expect.poll(() => page.evaluate(() => (
       globalThis.document.documentElement.scrollWidth
       <= globalThis.document.documentElement.clientWidth
@@ -43,7 +45,7 @@ for (const viewport of [
   });
 }
 
-test("Japanese Notes opens editor-first while Review owns the full dashboard", async ({ page }) => {
+test("Japanese Notes opens board-first while Review owns the full dashboard", async ({ page }) => {
   await openJapaneseWorkspace(page);
 
   const notesSubview = page.getByRole("button", { name: "Japanese Notes", exact: true });
@@ -51,7 +53,7 @@ test("Japanese Notes opens editor-first while Review owns the full dashboard", a
 
   await expect(notesSubview).toHaveAttribute("aria-pressed", "true");
   await expect(reviewSubview).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator("#contentInput")).toBeVisible();
+  await expect(page.locator("#contentInput")).toBeHidden();
   await expect(page.locator("#japaneseNotesSummary")).toBeVisible();
   await expect(page.locator(".search-box")).toBeVisible();
   await expect(page.getByRole("button", { name: "New Japanese note" })).toBeVisible();
@@ -72,7 +74,7 @@ test("Japanese Notes opens editor-first while Review owns the full dashboard", a
   await expect(page.getByRole("button", { name: "Start review" })).toBeEnabled();
 
   await notesSubview.click();
-  await expect(page.locator("#contentInput")).toBeVisible();
+  await expect(page.locator("#contentInput")).toBeHidden();
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#japaneseDashboard")).toBeHidden();
 });
@@ -121,6 +123,7 @@ test("quick-create UI and palette expose the same command identity and unavailab
   await paletteCommand.click();
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect(page.locator("#titleInput")).toBeFocused();
+  await page.getByRole("button", { name: "Close note editor" }).click();
 
   await page.getByRole("navigation", { name: "Japanese workspace views" })
     .getByRole("button", { name: /^Review/ })
@@ -133,6 +136,7 @@ test("quick-create UI and palette expose the same command identity and unavailab
     .toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#titleInput")).toHaveValue("New grammar pattern");
   await expect(page.locator("#titleInput")).toBeFocused();
+  await page.getByRole("button", { name: "Close note editor" }).click();
   await trigger.click();
 
   await page.evaluate(async () => {

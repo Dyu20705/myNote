@@ -15,6 +15,14 @@ export async function createJapaneseNoteFromMenu(page, action) {
     ?.hasAttribute("aria-busy"));
 }
 
+export async function closeNoteEditor(page) {
+  const overlay = page.locator("#noteEditorOverlay");
+  if (await overlay.isVisible()) {
+    await page.getByRole("button", { name: "Close note editor" }).click();
+  }
+  await overlay.waitFor({ state: "hidden" });
+}
+
 export async function openJapaneseReviewSubview(page) {
   const button = page
     .getByRole("navigation", { name: "Japanese workspace views" })

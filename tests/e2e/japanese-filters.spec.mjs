@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { createJapaneseNoteFromMenu } from "./japanese-helpers.mjs";
+import { closeNoteEditor, createJapaneseNoteFromMenu } from "./japanese-helpers.mjs";
 
 async function createJapaneseNote(page, buttonName, expectedTitle) {
   await createJapaneseNoteFromMenu(page, buttonName);
   const title = page.getByRole("textbox", { name: "Note title", exact: true });
   await expect(title).toHaveValue(expectedTitle);
   await expect(title).toBeFocused();
+  await closeNoteEditor(page);
 }
 
 test("Japanese filters compose with search, validate ranges, and stay workspace-local", async ({ page }) => {

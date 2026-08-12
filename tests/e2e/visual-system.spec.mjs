@@ -71,10 +71,6 @@ test("core controls expose visible focus and composite search focus", async ({ p
     "#searchInput",
     "#newNoteButton",
     "#refreshButton",
-    "#titleInput",
-    "#detailsButton",
-    "#noteActionsButton",
-    "#contentInput",
   ];
   for (const selector of focusTargets) {
     const target = page.locator(selector);
@@ -104,6 +100,38 @@ test("core controls expose visible focus and composite search focus", async ({ p
   });
   expect(searchFocus.borderColor).toBe("rgb(56, 189, 248)");
   expect(searchFocus.boxShadow).not.toBe("none");
+
+  await page.locator("#noteList .note-item").first().click();
+  const overlayFocusTargets = [
+    "#titleInput",
+    "#pinNoteButton",
+    "#detailsButton",
+    "#noteActionsButton",
+    "#closeNoteEditorButton",
+    "#contentInput",
+  ];
+  for (const [index, selector] of overlayFocusTargets.entries()) {
+    const target = page.locator(selector);
+    if (index === 0) {
+      await target.focus();
+    } else {
+      await page.keyboard.press("Tab");
+    }
+    await expect(target).toBeFocused();
+    const focusStyle = await target.evaluate((element) => {
+      const style = globalThis.getComputedStyle(element);
+      return {
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
+        outlineColor: style.outlineColor,
+        outlineOffset: style.outlineOffset,
+      };
+    });
+    expect(focusStyle.outlineStyle, `${selector} focus outline style`).toBe("solid");
+    expect(numericPixels(focusStyle.outlineWidth), `${selector} focus outline width`).toBeGreaterThanOrEqual(2);
+    expect(focusStyle.outlineColor, `${selector} focus outline color`).toBe("rgb(56, 189, 248)");
+    expect(numericPixels(focusStyle.outlineOffset), `${selector} focus outline offset`).toBeGreaterThanOrEqual(2);
+  }
 });
 
 test("selected, disabled, busy, invalid, and destructive states are not color-only", async ({ page }) => {
@@ -175,6 +203,7 @@ test("selected, disabled, busy, invalid, and destructive states are not color-on
   expect(busyStyle.afterContent).not.toBe("normal");
   expect(busyStyle.afterDisplay).not.toBe("none");
 
+  await page.locator("#noteList .note-item").first().click();
   await page.getByRole("button", { name: "More actions" }).click();
   const deleteButton = page.locator("#noteActionsList [data-command-id='notes.delete']");
   await expect(deleteButton).toHaveAccessibleName(/Delete active note/);
@@ -235,6 +264,7 @@ for (const viewport of VIEWPORTS) {
 
     const title = `${LONG_ENGLISH.slice(0, 220)} 日本語の長いタイトル`;
     const content = `${LONG_ENGLISH}\n\n${LONG_JAPANESE}${LONG_MARKDOWN_TOKEN}`;
+    await page.locator("#noteList .note-item").first().click();
     await page.locator("#titleInput").fill(title);
     await page.locator("#contentInput").fill(content);
 
@@ -262,10 +292,12 @@ for (const viewport of VIEWPORTS) {
     expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
     expect(["anywhere", "break-word"]).toContain(geometry.contentOverflowWrap);
 
+    await page.getByRole("button", { name: "Close note editor" }).click();
     await page.locator("#japaneseWorkspaceButton").click();
     await expect(page.locator("#japaneseWorkspaceButton")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#editorRegion")).toBeVisible();
+    await expect(page.locator("#editorRegion")).toBeHidden();
     await page.locator("#notesWorkspaceButton").click();
+    await page.locator('.note-item[aria-current="true"]').click();
     await expect(page.locator("#titleInput")).toHaveValue(title);
     await expect(page.locator("#contentInput")).toHaveValue(content);
   });

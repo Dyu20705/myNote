@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  closeNoteEditor,
   createJapaneseNoteFromMenu,
   openJapaneseReviewSubview,
 } from "./japanese-helpers.mjs";
@@ -49,6 +50,7 @@ test("quick create updates the filtered workspace and deterministic dashboard", 
   await expect(page.locator("#japaneseDueCount")).toHaveText("1");
   await expect(page.locator("#japaneseNewVocabulary")).toHaveText("1");
   await expect(page.locator("#noteList .note-item-title")).toContainText(["New vocabulary"]);
+  await closeNoteEditor(page);
 
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await expect(page.locator("#noteCount")).toHaveText("2 notes");
@@ -78,6 +80,7 @@ test("command palette exposes the five Japanese quick-create commands", async ({
 test("review content stays hidden, close resumes, and all ratings are keyboard reachable", async ({ page }) => {
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
+  await closeNoteEditor(page);
   await openJapaneseReviewSubview(page);
 
   const startButton = page.getByRole("button", { name: "Start review" });
@@ -109,6 +112,7 @@ test("review content stays hidden, close resumes, and all ratings are keyboard r
 test("rating persistence failure remains visible and retryable without advancing", async ({ page }) => {
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
+  await closeNoteEditor(page);
   await openJapaneseReviewSubview(page);
   await page.getByRole("button", { name: "Start review" }).click();
   await page.getByRole("button", { name: "Reveal review content" }).click();
@@ -139,8 +143,11 @@ test("rating persistence failure remains visible and retryable without advancing
 test("review session deterministically skips missing and archived current notes", async ({ page }) => {
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
+  await closeNoteEditor(page);
   await createJapaneseNoteFromMenu(page, "Create kanji note");
+  await closeNoteEditor(page);
   await createJapaneseNoteFromMenu(page, "Create grammar note");
+  await closeNoteEditor(page);
   await expect(page.locator("#japaneseDueCount")).toHaveText("3");
 
   await openJapaneseReviewSubview(page);

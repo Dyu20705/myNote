@@ -36,7 +36,7 @@ test("Japanese workspace refresh uses the injected workspace API instead of the 
   assert.match(japaneseApp, /runtime\.workspace/);
 });
 
-test("editor-first shell has one application header and one editor context header", async () => {
+test("board-first shell has one application header and one shared editor overlay header", async () => {
   const index = await source("index.html");
 
   assert.equal(index.match(/<header\b/g)?.length, 2);
@@ -47,6 +47,7 @@ test("editor-first shell has one application header and one editor context heade
   assert.match(index, /<nav[^>]+id="japaneseSubviewNavigation"[^>]+aria-label="Japanese workspace views"/);
   assert.match(index, /<aside[^>]+id="noteNavigationRegion"[^>]+aria-label="Note navigation"/);
   assert.match(index, /<aside[^>]+id="noteInspector"[^>]+aria-label="Note details"/);
+  assert.match(index, /<dialog[^>]+id="noteEditorOverlay"[^>]+aria-labelledby="noteEditorOverlayLabel"/);
   assert.equal(index.match(/<main\b/g)?.length, 1);
   assert.match(index, /<main[^>]+id="editorRegion"[^>]+aria-label="Editor"/);
 
@@ -57,8 +58,10 @@ test("editor-first shell has one application header and one editor context heade
     "newNoteButton",
     "refreshButton",
     "saveState",
+    "pinNoteButton",
     "detailsButton",
     "noteActionsButton",
+    "closeNoteEditorButton",
     "undoNotice",
   ]) {
     assert.match(index, new RegExp(`id="${id}"`));
