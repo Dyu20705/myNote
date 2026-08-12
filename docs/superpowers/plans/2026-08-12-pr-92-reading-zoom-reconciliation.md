@@ -22,7 +22,15 @@
 - Do not implement archive navigation or any other issue #94 behavior before #90 merges.
 - Make no schema, persistence, scheduler, review-state, search-ranking, dependency, framework, mobile, or touch changes.
 - Keep PR #92 draft until a subsequent reviewer or owner explicitly changes its review state.
-- Perform exactly one consolidated push after the complete local gate passes; local commits remain allowed.
+- Perform exactly two coordinated pushes as approved by the owner: the isolated runtime/test stream pushes first, then the authority/docs/evidence stream integrates that exact commit and pushes second after the complete local gate.
+
+## Approved Two-Stream Execution Override
+
+- Stream A is owned by a separate implementation agent in an isolated worktree. It may modify only `core/japaneseFilters.js`, `ui/japanese-filters.js`, `tests/unit/japanese-filters.test.mjs`, and `tests/e2e/japanese-filters.spec.mjs`.
+- Stream A performs push 1 to remote `UX/90` only after focused tests, full lint, and the complete unit suite pass. It does not mutate GitHub issue/PR text, Figma, or documentation.
+- Stream B is owned by the coordinating implementer in the existing `UX-90` worktree. It owns issue #90, Figma node `126:344`, tracked documentation, integration, the complete release gate, PR follow-up, and push 2.
+- Stream B must integrate Stream A's exact pushed commit before running the complete release gate. The two streams must not edit the same files.
+- A third push requires fresh owner authority.
 
 ## File Map
 
@@ -309,11 +317,13 @@ Run:
 
 ```sh
 npx --no-install playwright test tests/e2e/japanese-filters.spec.mjs --project=chromium
+npm run lint
+npm run test:unit
 ```
 
-Expected: the Japanese filter scenario passes; Vocabulary, Grammar, and Kanji each update results immediately; All restores the complete Japanese board; Reading remains disabled and reasoned.
+Expected: the Japanese filter scenario passes; Vocabulary, Grammar, and Kanji each update results immediately; All restores the complete Japanese board; Reading remains disabled and reasoned; full lint and the complete unit suite are green.
 
-- [ ] **Step 8: Commit the runtime contract locally**
+- [ ] **Step 8: Commit and perform coordinated push 1**
 
 Run:
 
@@ -321,9 +331,10 @@ Run:
 git add core/japaneseFilters.js ui/japanese-filters.js tests/unit/japanese-filters.test.mjs tests/e2e/japanese-filters.spec.mjs
 git diff --cached --check
 git commit -m "fix(ux): centralize Japanese filter capability"
+git push origin HEAD:UX/90
 ```
 
-Expected: one focused local commit. Do not push.
+Expected: one focused commit and exactly one successful Stream A push. Report the exact commit SHA to Stream B. Do not edit or push any other file, and do not update PR text.
 
 ---
 
@@ -462,7 +473,7 @@ In `docs/ISSUE_90_VERIFICATION.md`:
 - record that issue #90 and Figma node `126:344` now agree that Reading is visible, disabled, and reasoned until Japanese V2;
 - replace the native-zoom blocker with an explicit owner disposition: native browser 200% zoom remains unvalidated in #90 and is deferred to #71; `720×450` remains only responsive-layout evidence;
 - update every command result and test count to the exact values printed by Step 3;
-- update the publication section to say the package is ready for one consolidated push and re-review, while PR approval/merge still remain external gates;
+- update the publication section to say push 1 contains the isolated runtime/test slice and the evidence-complete tree is ready for coordinated push 2 and re-review, while PR approval/merge still remain external gates;
 - retain physical pen, OS display scaling, and untested assistive-technology/browser combinations as explicit non-claims.
 
 - [ ] **Step 5: Run the final complete release gate on the evidence-complete tree**
@@ -503,7 +514,7 @@ Expected: one local evidence commit and no uncommitted files.
 
 **Interfaces:**
 - Consumes: all green local commits and Task 5 evidence.
-- Produces: one new remote PR head, an accurate draft PR narrative, and a single re-review trigger without resolving nonexistent inline threads.
+- Produces: the second and final planned remote PR head, an accurate draft PR narrative, and a single re-review trigger without resolving nonexistent inline threads.
 
 - [ ] **Step 1: Audit exact publication scope**
 
@@ -519,7 +530,7 @@ git diff --check origin/UX/90...HEAD
 
 Expected: worktree is clean; the range contains the approved spec, this implementation plan, focused resolver/tests, reconciled documentation/history, and refreshed verification only. No #94, schema, dependency, archive, or unrelated refactor file appears.
 
-- [ ] **Step 2: Perform the single consolidated push**
+- [ ] **Step 2: Perform coordinated push 2**
 
 Run exactly once:
 
@@ -527,7 +538,7 @@ Run exactly once:
 git push origin HEAD:UX/90
 ```
 
-Expected: remote `UX/90` advances to local HEAD. Do not issue a second push in this reconciliation batch.
+Expected: remote `UX/90` advances from Stream A's pushed runtime commit to the evidence-complete local HEAD. Do not issue a third push in this reconciliation batch.
 
 - [ ] **Step 3: Verify the new remote head and CI trigger**
 
@@ -584,4 +595,4 @@ Use read-only PR/check queries until the current-head run reaches a terminal sta
 - issue #90 still open and #71/#94 still blocked until #90 merges;
 - no merge performed.
 
-If CI fails, use `github:gh-fix-ci` and diagnose only the failing current-head logs before any further mutation. A repair requiring another push needs fresh user authority because this plan promises one consolidated push.
+If CI fails, use `github:gh-fix-ci` and diagnose only the failing current-head logs before any further mutation. A repair requiring another push needs fresh user authority because both approved pushes have been consumed.
