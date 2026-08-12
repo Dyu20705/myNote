@@ -36,6 +36,19 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   await createJapaneseNote(page, "Create kanji note", "新しい漢字");
   await createJapaneseNote(page, "Create grammar note", "New grammar pattern");
 
+  for (const [name, title] of [
+    ["Vocabulary", "New vocabulary"],
+    ["Grammar", "New grammar pattern"],
+    ["Kanji", "新しい漢字"],
+  ]) {
+    await common.getByRole("button", { name, exact: true }).click();
+    await expect(common.getByRole("button", { name, exact: true }))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#noteList .note-item-title")).toHaveText(title);
+  }
+  await common.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.locator("#noteList .note-item-title")).toHaveCount(3);
+
   await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
     const store = getActiveStore();
@@ -60,6 +73,14 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
     .toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#noteList .note-item-title")).toHaveText("New grammar pattern");
   await expect(search).toHaveValue("New");
+  await common.getByRole("button", { name: "Reading", exact: true }).dispatchEvent("click");
+  await expect(common.getByRole("button", { name: "Grammar", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(common.getByRole("button", { name: "Reading", exact: true }))
+    .toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#japaneseNoteType")).toHaveValue("grammar");
+  await expect(search).toHaveValue("New");
+  await expect(page.locator("#noteList .note-item-title")).toHaveText("New grammar pattern");
   await common.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(2);
   await search.fill("");

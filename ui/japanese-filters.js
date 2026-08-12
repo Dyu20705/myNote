@@ -1,4 +1,7 @@
-import { JAPANESE_FILTER_ERRORS } from "../core/japaneseFilters.js";
+import {
+  JAPANESE_FILTER_ERRORS,
+  resolveJapaneseCommonFilter,
+} from "../core/japaneseFilters.js";
 
 const REQUIRED_ELEMENTS = Object.freeze([
   "root",
@@ -182,8 +185,10 @@ export function createJapaneseFilterController(options) {
   }
 
   function selectCommonFilter(event) {
-    const notebookType = event.currentTarget.dataset.japaneseCommonFilter;
-    if (!notebookType || notebookType === "reading") {
+    const notebookType = resolveJapaneseCommonFilter(
+      event.currentTarget.dataset.japaneseCommonFilter,
+    );
+    if (notebookType === null) {
       return;
     }
     filter.update({ notebookType });

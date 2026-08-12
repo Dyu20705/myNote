@@ -34,6 +34,13 @@ function normalizeNotebookType(value) {
   return STUDY_NOTEBOOK_TYPES.includes(value) ? value : ALL_NOTEBOOK_TYPES;
 }
 
+export function resolveJapaneseCommonFilter(value) {
+  if (value === ALL_NOTEBOOK_TYPES) {
+    return ALL_NOTEBOOK_TYPES;
+  }
+  return STUDY_NOTEBOOK_TYPES.includes(value) ? value : null;
+}
+
 function localDateFromIso(value) {
   if (typeof value !== "string") {
     return null;
