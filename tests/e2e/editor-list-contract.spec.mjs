@@ -103,3 +103,132 @@ test("explicit save and delete remain discoverable through the shared command re
   await page.locator("#commandInput").fill("Delete active note");
   await expect(page.locator("#commandList [data-command-id='notes.delete']")).toBeVisible();
 });
+
+test("list view renders upstream results as semantic pinned and notes board sections", async ({ page }) => {
+  await page.goto("/");
+
+  const snapshot = await page.evaluate(async () => {
+    const { createListView } = await import("/ui/list.js");
+    const container = globalThis.document.createElement("div");
+    globalThis.document.body.append(container);
+    const selectedIds = [];
+    const notes = [
+      {
+        id: "note-2",
+        title: "Second note",
+        content: "Second",
+        updatedAt: "2026-08-12T02:00:00.000Z",
+        pinned: false,
+      },
+      {
+        id: "pinned-1",
+        title: "Pinned note",
+        content: "Pinned",
+        updatedAt: "2026-08-12T01:00:00.000Z",
+        pinned: true,
+      },
+      {
+        id: "note-1",
+        title: "First note",
+        content: "First",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        pinned: false,
+      },
+    ];
+    createListView({
+      container,
+      onSelect(id) {
+        selectedIds.push(id);
+      },
+      formatDate() {
+        return "Aug 12";
+      },
+    }).render({
+      notesById: new Map(notes.map((note) => [note.id, note])),
+      orderedIds: ["note-2", "pinned-1", "stale", "note-1"],
+      activeId: "pinned-1",
+      query: "",
+    });
+
+    container.querySelector('[data-id="note-2"]').click();
+    const result = {
+      headings: [...container.querySelectorAll(".note-board-heading")]
+        .map((node) => node.textContent),
+      sections: [...container.querySelectorAll(".note-board-section")].map((section) => ({
+        id: section.dataset.sectionId,
+        cards: [...section.querySelectorAll(".note-item")].map((card) => card.dataset.id),
+      })),
+      activeId: container.querySelector('.note-item[aria-current="true"]')?.dataset.id,
+      selectedIds,
+      virtualized: container.dataset.virtualized,
+    };
+    container.remove();
+    return result;
+  });
+
+  expect(snapshot).toEqual({
+    headings: ["PINNED", "NOTES"],
+    sections: [
+      { id: "pinned", cards: ["pinned-1"] },
+      { id: "notes", cards: ["note-2", "note-1"] },
+    ],
+    activeId: "pinned-1",
+    selectedIds: ["note-2"],
+    virtualized: "false",
+  });
+});
+
+test("list view virtualizes at the documented 500-note boundary", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    const { createListView } = await import("/ui/list.js");
+    const container = globalThis.document.createElement("div");
+    Object.defineProperties(container, {
+      clientHeight: { configurable: true, value: 720 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    globalThis.document.body.append(container);
+    const notes = Array.from({ length: 500 }, (_, index) => ({
+      id: `note-${index}`,
+      title: `Note ${index}`,
+      content: "Bounded preview",
+      updatedAt: "2026-08-12T00:00:00.000Z",
+      pinned: index < 2,
+    }));
+    const view = createListView({ container, onSelect() {}, formatDate: () => "Aug 12" });
+    const notesById = new Map(notes.map((note) => [note.id, note]));
+
+    view.render({
+      notesById,
+      orderedIds: notes.slice(0, 499).map((note) => note.id),
+      activeId: null,
+      query: "",
+    });
+    const below = {
+      virtualized: container.dataset.virtualized,
+      cards: container.querySelectorAll(".note-item").length,
+    };
+
+    view.render({
+      notesById,
+      orderedIds: notes.map((note) => note.id),
+      activeId: null,
+      query: "",
+    });
+    const atBoundary = {
+      virtualized: container.dataset.virtualized,
+      cards: container.querySelectorAll(".note-item").length,
+      headings: [...container.querySelectorAll(".note-board-heading")]
+        .map((node) => node.textContent),
+    };
+    container.remove();
+    return { below, atBoundary };
+  });
+
+  expect(result.below).toEqual({ virtualized: "false", cards: 499 });
+  expect(result.atBoundary.virtualized).toBe("true");
+  expect(result.atBoundary.cards).toBeGreaterThan(0);
+  expect(result.atBoundary.cards).toBeLessThan(500);
+  expect(result.atBoundary.headings).toEqual(["PINNED", "NOTES"]);
+});
