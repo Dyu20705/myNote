@@ -44,7 +44,9 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
     await common.getByRole("button", { name, exact: true }).click();
     await expect(common.getByRole("button", { name, exact: true }))
       .toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#noteList .note-item-title")).toHaveText(title);
+    const visibleTitles = page.locator("#noteList .note-item-title");
+    await expect(visibleTitles).toHaveCount(1);
+    await expect(visibleTitles).toHaveText(title);
   }
   await common.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(3);

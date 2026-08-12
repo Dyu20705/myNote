@@ -408,7 +408,9 @@ test("newest-first ordering compares parsed instants and breaks equal-instant ti
   await page.reload();
   await openDrawingProjection(page);
   await page.getByRole("button", { name: "Show older drawings", exact: true }).click();
-  expect(await page.locator("#kanjiInkEntries .kanji-entry").evaluateAll((cards) => (
+  const visibleEntries = page.locator("#kanjiInkEntries .kanji-entry");
+  await expect(visibleEntries).toHaveCount(3);
+  expect(await visibleEntries.evaluateAll((cards) => (
     cards.map((card) => card.dataset.kanjiEntryId)
   ))).toEqual(["offset-newest", "offset-equal-a", "offset-equal-b"]);
 });
