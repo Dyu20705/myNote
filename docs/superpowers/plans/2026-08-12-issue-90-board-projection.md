@@ -1,6 +1,6 @@
 # Issue #90 Board Projection Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For implementers:** Use the repository's subtask-driven or plan-execution workflow to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the pure presentation projection that partitions existing workspace/search result order into stable `PINNED` and `NOTES` board sections without implementing the board UI.
 
@@ -23,7 +23,7 @@
 
 - Modify `ui/notePresentation.js`: own the pure `createNoteBoardSections` projection and bounded input validation.
 - Modify `tests/unit/note-presentation.test.mjs`: specify partition order, stale-ID handling, immutability, and invalid-input behavior through the public export.
-- Retain `docs/superpowers/specs/2026-08-12-issue-90-board-projection-design.md`: approved design authority for this slice.
+- Retain `../specs/2026-08-12-issue-90-board-projection-design.md`: approved design authority for this slice.
 
 ---
 
@@ -216,25 +216,13 @@ git diff --name-only origin/main...HEAD
 Expected changed paths:
 
 ```text
-docs/superpowers/plans/2026-08-12-issue-90-board-projection.md
-docs/superpowers/specs/2026-08-12-issue-90-board-projection-design.md
+2026-08-12-issue-90-board-projection.md (implementation plan)
+2026-08-12-issue-90-board-projection-design.md (approved specification)
 tests/unit/note-presentation.test.mjs
 ui/notePresentation.js
 ```
 
-- [ ] **Step 4: Commit this implementation plan if it is not yet committed**
-
-Run:
-
-```sh
-git add -- docs/superpowers/plans/2026-08-12-issue-90-board-projection.md
-git diff --cached --check
-git commit -m "docs(ux): add issue 90 foundation plan"
-```
-
-Expected: the plan is tracked before publication. If it was committed earlier, verify a clean index and do not create an empty commit.
-
-- [ ] **Step 5: Perform the preparation agent's single push**
+- [ ] **Step 4: Perform the preparation agent's single push**
 
 Run exactly once after every preceding gate is green:
 
@@ -244,7 +232,7 @@ git push -u origin UX/90
 
 Expected: remote tracking is established and no second push is performed by this preparation step.
 
-- [ ] **Step 6: Open the sole draft pull request for #90**
+- [ ] **Step 5: Open the sole draft pull request for #90**
 
 Create one draft PR targeting `main` with title:
 
@@ -288,7 +276,7 @@ removes the helper, its test, and planning records without touching canonical da
 
 Expected: one draft PR URL. Do not use `Closes #90` because the issue remains incomplete.
 
-- [ ] **Step 7: Hand off the next engineering slice**
+- [ ] **Step 6: Hand off the next engineering slice**
 
 Tell the engineer to continue on branch `UX/90` and the same draft PR with this next
 bounded order:
