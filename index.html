@@ -48,7 +48,12 @@
         <aside id="noteNavigationRegion" class="panel notes-panel" aria-label="Note navigation">
           <div class="panel-header">
             <h2 id="noteNavigationTitle">Notes</h2>
-            <span id="activeNoteLabel">Ready</span>
+            <div class="panel-header-actions">
+              <span id="activeNoteLabel">Ready</span>
+              <button id="japaneseStudyDetailsToggle" class="quiet-button" type="button" aria-expanded="false" aria-controls="japaneseDashboard" hidden>Study details</button>
+              <button id="japaneseReviewEntryButton" class="japanese-review-entry" type="button" aria-describedby="japaneseReviewEntryReason" hidden>Review <span id="japaneseReviewEntryCount">0</span></button>
+              <span id="japaneseReviewEntryReason" class="visually-hidden">No Japanese reviews are due</span>
+            </div>
           </div>
 
           <nav id="japaneseSubviewNavigation" class="japanese-subview-navigation" aria-label="Japanese workspace views" hidden>
@@ -65,11 +70,17 @@
           </section>
 
           <section id="japaneseFilterTools" class="japanese-filter-tools" hidden>
-            <div class="japanese-filter-toolbar">
-              <button id="japaneseFilterToggle" type="button" aria-expanded="false" aria-controls="japaneseFilters">Filters</button>
-              <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+            <div class="japanese-filter-presets" role="group" aria-label="Japanese common filters">
+              <button type="button" data-japanese-common-filter="all" aria-pressed="true">All</button>
+              <button type="button" data-japanese-common-filter="vocabulary" aria-pressed="false">Vocabulary</button>
+              <button type="button" data-japanese-common-filter="grammar" aria-pressed="false">Grammar</button>
+              <button type="button" data-japanese-common-filter="kanji" aria-pressed="false">Kanji</button>
+              <button type="button" data-japanese-common-filter="reading" aria-pressed="false" aria-describedby="japaneseReadingFilterReason" title="Reading filters require the Japanese V2 learning model" disabled>Reading</button>
+              <span id="japaneseReadingFilterReason" class="visually-hidden">Reading filters require the Japanese V2 learning model</span>
+              <button id="japaneseFilterToggle" type="button" aria-expanded="false" aria-controls="japaneseFilters">+ Filter</button>
             </div>
             <div id="japaneseFilterChips" class="japanese-filter-chips" aria-label="Active Japanese filters"></div>
+            <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
             <section id="japaneseFilters" class="japanese-filters" role="region" aria-label="Japanese note filters" hidden>
               <label class="japanese-filter-field" for="japaneseDateFrom">
                 <span>Created from</span>

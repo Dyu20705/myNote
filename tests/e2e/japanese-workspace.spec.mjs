@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import {
   closeNoteEditor,
   createJapaneseNoteFromMenu,
-  openJapaneseReviewSubview,
+  openJapaneseReview,
+  openJapaneseStudyDetails,
 } from "./japanese-helpers.mjs";
 
 async function openJapaneseWorkspace(page) {
@@ -26,11 +27,11 @@ test("Notes remains default and workspace switching preserves the active ordinar
   await japaneseButton.click();
 
   await expect(japaneseButton).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#japaneseNotesSummary")).toBeVisible();
+  await expect(page.locator("#japaneseReviewEntryButton")).toBeVisible();
   await expect(page.getByRole("button", { name: "New Japanese note" })).toBeVisible();
   await expect(page.locator("#japaneseDashboard")).toBeHidden();
 
-  await openJapaneseReviewSubview(page);
+  await openJapaneseStudyDetails(page);
   await expect(page.locator("#japaneseDashboard")).toBeVisible();
   await expect(page.locator("#japaneseDashboard [data-dashboard-card]")).toHaveCount(6);
   await expect(page.getByRole("region", { name: "Needs repair" })).toBeHidden();
@@ -81,10 +82,7 @@ test("review content stays hidden, close resumes, and all ratings are keyboard r
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await closeNoteEditor(page);
-  await openJapaneseReviewSubview(page);
-
-  const startButton = page.getByRole("button", { name: "Start review" });
-  await startButton.click();
+  const reviewEntry = await openJapaneseReview(page);
 
   const dialog = page.getByRole("dialog", { name: "Japanese review session" });
   await expect(dialog).toBeVisible();
@@ -93,9 +91,9 @@ test("review content stays hidden, close resumes, and all ratings are keyboard r
 
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("button", { name: "Resume review" })).toBeFocused();
+  await expect(reviewEntry).toBeFocused();
 
-  await page.getByRole("button", { name: "Resume review" }).click();
+  await reviewEntry.click();
   await page.getByRole("button", { name: "Reveal review content" }).click();
   await expect(page.locator("#reviewContent")).toBeVisible();
   await expect(page.locator("#reviewContent")).toContainText("## Reading");
@@ -113,8 +111,7 @@ test("rating persistence failure remains visible and retryable without advancing
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await closeNoteEditor(page);
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  await openJapaneseReview(page);
   await page.getByRole("button", { name: "Reveal review content" }).click();
 
   await page.evaluate(() => {
@@ -150,8 +147,7 @@ test("review session deterministically skips missing and archived current notes"
   await closeNoteEditor(page);
   await expect(page.locator("#japaneseDueCount")).toHaveText("3");
 
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  await openJapaneseReview(page);
   await page.evaluate(async () => {
     const { getActiveStore } = await import("/core/state.js");
     const store = getActiveStore();

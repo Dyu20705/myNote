@@ -12,6 +12,7 @@
 .japanese-actions button,
 .japanese-filters button,
 .japanese-filter-toolbar button,
+.japanese-filter-presets button,
 .japanese-filter-chips button,
 .japanese-subview-navigation button,
 .japanese-notes-summary button,
@@ -38,6 +39,7 @@
 .japanese-actions button:hover,
 .japanese-filters button:hover,
 .japanese-filter-toolbar button:hover,
+.japanese-filter-presets button:hover,
 .japanese-filter-chips button:hover,
 .japanese-subview-navigation button:hover,
 .japanese-notes-summary button:hover,
@@ -60,6 +62,48 @@
 
 .japanese-create {
   position: relative;
+}
+
+.panel-header-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--mn-space-2);
+}
+
+.japanese-review-entry {
+  min-height: var(--mn-control-md);
+  border: 1px solid var(--mn-action-primary-bg);
+  border-radius: var(--mn-radius-md);
+  padding: var(--mn-space-2) var(--mn-space-4);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-selected);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.panel-header .japanese-review-entry span {
+  color: inherit;
+  font: inherit;
+}
+
+.japanese-review-entry:hover,
+.japanese-review-entry:active {
+  border-color: var(--mn-focus-ring);
+  background: var(--mn-surface-hover);
+}
+
+.japanese-review-entry:disabled {
+  border-style: dashed;
+  color: var(--mn-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+body[data-workspace="japanese"] #activeNoteLabel {
+  display: none;
 }
 
 .japanese-create[hidden],
@@ -144,6 +188,34 @@
   display: grid;
   gap: var(--mn-space-2);
   margin: 0 10px 10px;
+}
+
+.japanese-filter-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mn-space-1);
+}
+
+.japanese-filter-presets button {
+  min-height: 34px;
+  border-radius: 999px;
+  padding-inline: 14px;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.japanese-filter-presets button[aria-pressed="true"] {
+  border-color: var(--mn-action-primary-bg);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-selected);
+  font-weight: 600;
+}
+
+.japanese-filter-presets button:disabled {
+  border-style: dashed;
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .japanese-filter-tools[aria-busy="true"] {

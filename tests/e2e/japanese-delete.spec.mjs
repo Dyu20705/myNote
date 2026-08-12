@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   closeNoteEditor,
   createJapaneseNoteFromMenu,
-  openJapaneseReviewSubview,
+  openJapaneseStudyDetails,
 } from "./japanese-helpers.mjs";
 
 async function openJapaneseWorkspace(page) {
@@ -45,7 +45,7 @@ test("palette delete, undo, and Delete key keep enrolled note and review atomic 
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect.poll(() => enrolledRecordPresence(page, noteId)).toEqual({ note: false, review: false });
 
-  await openJapaneseReviewSubview(page);
+  await openJapaneseStudyDetails(page);
   await page.getByRole("heading", { name: "Study dashboard" }).click();
   await page.keyboard.press("Control+z");
 
@@ -59,7 +59,7 @@ test("palette delete, undo, and Delete key keep enrolled note and review atomic 
   await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
   await expect.poll(() => enrolledRecordPresence(page, noteId)).toEqual({ note: true, review: true });
 
-  await openJapaneseReviewSubview(page);
+  await openJapaneseStudyDetails(page);
   await page.getByRole("heading", { name: "Study dashboard" }).click();
   await page.keyboard.press("Delete");
 

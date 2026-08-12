@@ -82,6 +82,7 @@ function collectElements(document) {
     filterTools: document.querySelector("#japaneseFilterTools"),
     filtersRoot: document.querySelector("#japaneseFilters"),
     filterToggle: document.querySelector("#japaneseFilterToggle"),
+    commonFilters: [...document.querySelectorAll("[data-japanese-common-filter]")],
     filterChips: document.querySelector("#japaneseFilterChips"),
     filterDateFrom: document.querySelector("#japaneseDateFrom"),
     filterDateTo: document.querySelector("#japaneseDateTo"),
@@ -101,6 +102,10 @@ function collectElements(document) {
     repairRegion: document.querySelector("#japaneseRepairRegion"),
     reviewOverview: document.querySelector("#japaneseReviewOverview"),
     startReview: document.querySelector("#startReviewButton"),
+    reviewEntry: document.querySelector("#japaneseReviewEntryButton"),
+    reviewEntryCount: document.querySelector("#japaneseReviewEntryCount"),
+    reviewEntryReason: document.querySelector("#japaneseReviewEntryReason"),
+    studyDetailsToggle: document.querySelector("#japaneseStudyDetailsToggle"),
     quickCreateButtons: [...document.querySelectorAll("[data-japanese-template]")],
     titleInput: document.querySelector("#titleInput"),
     reviewDialog: document.querySelector("#reviewDialog"),
@@ -166,7 +171,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     backlinkIndex,
   } = runtime;
   const workspace = runtime.workspace;
-  let activeSubview = "notes";
+  let studyDetailsOpen = false;
   let quickCreatePending = false;
 
   function persistenceDatabase() {
@@ -230,25 +235,27 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   function renderDashboard(state = store.getState()) {
     const japanese = state.workspace === "japanese";
-    const review = japanese && activeSubview === "review";
     const unavailable = Boolean(state.studyDataUnavailable);
     document.body.dataset.workspace = japanese ? "japanese" : "notes";
-    document.body.dataset.japaneseSubview = activeSubview;
+    document.body.dataset.japaneseSubview = "notes";
     elements.notesButton.setAttribute("aria-pressed", String(!japanese));
     elements.japaneseButton.setAttribute("aria-pressed", String(japanese));
     elements.noteNavigationTitle.textContent = japanese ? "Japanese Notes" : "Notes";
     elements.searchInput.placeholder = japanese ? "Search Japanese notes" : "Search notes";
-    elements.searchBox.hidden = review;
+    elements.searchBox.hidden = false;
     elements.newNoteButton.hidden = japanese;
-    elements.japaneseCreate.hidden = !japanese || review;
-    elements.subviewNavigation.hidden = !japanese;
-    elements.notesSubview.setAttribute("aria-pressed", String(japanese && !review));
-    elements.reviewSubview.setAttribute("aria-pressed", String(review));
-    elements.notesSummary.hidden = !japanese || review;
-    elements.filterTools.hidden = !japanese || review;
-    elements.noteList.hidden = review;
-    elements.dashboard.hidden = !review;
-    elements.reviewOverview.hidden = !review;
+    elements.japaneseCreate.hidden = !japanese;
+    elements.subviewNavigation.hidden = true;
+    elements.notesSubview.setAttribute("aria-pressed", "false");
+    elements.reviewSubview.setAttribute("aria-pressed", "false");
+    elements.notesSummary.hidden = true;
+    elements.filterTools.hidden = !japanese;
+    elements.noteList.hidden = false;
+    elements.dashboard.hidden = !japanese || !studyDetailsOpen;
+    elements.reviewOverview.hidden = true;
+    elements.reviewEntry.hidden = !japanese;
+    elements.studyDetailsToggle.hidden = !japanese;
+    elements.studyDetailsToggle.setAttribute("aria-expanded", String(studyDetailsOpen));
 
     const dashboard = state.studyDashboard || {
       dueCount: 0,
@@ -263,6 +270,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.dueCount.textContent = String(dashboard.dueCount);
     elements.notesDueCount.textContent = String(dashboard.dueCount);
     elements.reviewDueLabel.textContent = `${dashboard.dueCount} due`;
+    elements.reviewEntryCount.textContent = String(dashboard.dueCount);
     elements.newVocabulary.textContent = String(dashboard.newVocabulary);
     elements.dueKanji.textContent = String(dashboard.dueKanji);
     elements.grammarTotal.textContent = String(dashboard.grammarTotal);
@@ -280,11 +288,21 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       item.textContent = `${repair.code}${target} ×${repair.count}`;
       return item;
     }));
-    elements.repairRegion.hidden = !review || repairs.length === 0;
+    elements.repairRegion.hidden = !japanese || !studyDetailsOpen || repairs.length === 0;
 
     const activeSession = state.reviewSession?.status === "active";
     elements.startReview.textContent = activeSession ? "Resume review" : "Start review";
     elements.startReview.disabled = unavailable || (!activeSession && dashboard.dueCount === 0);
+    elements.reviewEntry.disabled = unavailable || (!activeSession && dashboard.dueCount === 0);
+    const reviewEntryReason = unavailable
+      ? "Japanese study data is unavailable"
+      : !activeSession && dashboard.dueCount === 0
+        ? "No Japanese reviews are due"
+        : activeSession
+          ? "Resume the active Japanese review"
+          : "Start due Japanese reviews";
+    elements.reviewEntry.title = reviewEntryReason;
+    elements.reviewEntryReason.textContent = reviewEntryReason;
 
     const quickCreateAvailability = new Map(commandRegistry
       .snapshot(runtime.getCommandContext())
@@ -298,17 +316,12 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.newJapaneseNote.disabled = unavailable || quickCreatePending;
   }
 
-  function setSubview(nextSubview) {
-    activeSubview = nextSubview === "review" ? "review" : "notes";
-    filterController.render();
-    renderDashboard();
-  }
-
   const filterController = createJapaneseFilterController({
     elements: {
       root: elements.filterTools,
       panel: elements.filtersRoot,
       toggle: elements.filterToggle,
+      commonFilters: elements.commonFilters,
       chips: elements.filterChips,
       dateFrom: elements.filterDateFrom,
       dateTo: elements.filterDateTo,
@@ -339,7 +352,6 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.newJapaneseNote.setAttribute("aria-expanded", "false");
     renderDashboard();
     try {
-      activeSubview = "notes";
       const note = await coordinator.quickCreate(type);
       runtime.openNoteEditor({ opener, mode: "create" });
       return note;
@@ -384,17 +396,26 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   elements.notesButton.addEventListener("click", () => {
     elements.japaneseCreateMenu.hidden = true;
     elements.newJapaneseNote.setAttribute("aria-expanded", "false");
+    studyDetailsOpen = false;
     coordinator.switchWorkspace("notes").catch(() => undefined);
   });
   elements.japaneseButton.addEventListener("click", () => {
-    activeSubview = "notes";
+    studyDetailsOpen = false;
     coordinator.switchWorkspace("japanese").catch(() => undefined);
   });
-  elements.notesSubview.addEventListener("click", () => setSubview("notes"));
-  elements.reviewSubview.addEventListener("click", () => setSubview("review"));
+  elements.notesSubview.addEventListener("click", () => {
+    studyDetailsOpen = false;
+    renderDashboard();
+  });
+  elements.reviewSubview.addEventListener("click", () => {
+    openReview(elements.reviewSubview).catch(() => undefined);
+  });
   elements.summaryReview.addEventListener("click", () => {
-    setSubview("review");
-    elements.reviewSubview.focus();
+    openReview(elements.summaryReview).catch(() => undefined);
+  });
+  elements.studyDetailsToggle.addEventListener("click", () => {
+    studyDetailsOpen = !studyDetailsOpen;
+    renderDashboard();
   });
   elements.newJapaneseNote.addEventListener("click", () => {
     const open = elements.japaneseCreateMenu.hidden;
@@ -427,7 +448,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     }
   });
 
-  let reviewOpener = elements.startReview;
+  let reviewOpener = elements.reviewEntry;
 
   function renderReview() {
     let state = store.getState();
@@ -465,9 +486,9 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       || (session.revealed ? "Choose a rating" : "Content hidden until reveal");
   }
 
-  async function openReview() {
+  async function openReview(opener = elements.reviewEntry) {
     await coordinator.ready;
-    reviewOpener = elements.startReview;
+    reviewOpener = opener;
     if (store.getState().reviewSession?.status !== "active") {
       actions.startReview(currentContext().nowIso);
     }
@@ -509,7 +530,10 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   }
 
   elements.startReview.addEventListener("click", () => {
-    openReview().catch(() => undefined);
+    openReview(elements.startReview).catch(() => undefined);
+  });
+  elements.reviewEntry.addEventListener("click", () => {
+    openReview(elements.reviewEntry).catch(() => undefined);
   });
   elements.closeReview.addEventListener("click", () => {
     elements.reviewDialog.close();

@@ -32,12 +32,9 @@ for (const viewport of [
       globalThis.document.documentElement.scrollWidth
       <= globalThis.document.documentElement.clientWidth
     ))).toBe(true);
-
-    await page.getByRole("navigation", { name: "Japanese workspace views" })
-      .getByRole("button", { name: /^Review/ })
-      .click();
-    await expect(page.locator("#japaneseReviewOverview")).toBeVisible();
-    await expect(page.locator("#japaneseDashboard [data-dashboard-card]")).toHaveCount(6);
+    await expect(page.locator("#japaneseReviewEntryButton")).toBeVisible();
+    await expect(page.locator("#japaneseSubviewNavigation")).toBeHidden();
+    await expect(page.locator("#japaneseNotesSummary")).toBeHidden();
     await expect.poll(() => page.evaluate(() => (
       globalThis.document.documentElement.scrollWidth
       <= globalThis.document.documentElement.clientWidth
@@ -45,38 +42,33 @@ for (const viewport of [
   });
 }
 
-test("Japanese Notes opens board-first while Review owns the full dashboard", async ({ page }) => {
+test("Japanese Notes exposes Filter A and starts Review from one compact board action", async ({ page }) => {
   await openJapaneseWorkspace(page);
 
-  const notesSubview = page.getByRole("button", { name: "Japanese Notes", exact: true });
-  const reviewSubview = page.getByRole("button", { name: /^Review/ });
-
-  await expect(notesSubview).toHaveAttribute("aria-pressed", "true");
-  await expect(reviewSubview).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("#contentInput")).toBeHidden();
-  await expect(page.locator("#japaneseNotesSummary")).toBeVisible();
   await expect(page.locator(".search-box")).toBeVisible();
   await expect(page.getByRole("button", { name: "New Japanese note" })).toBeVisible();
   await expect(page.locator("#japaneseDashboard")).toBeHidden();
+  await expect(page.locator("#japaneseReviewOverview")).toBeHidden();
+  await expect(page.locator("#japaneseSubviewNavigation")).toBeHidden();
+  await expect(page.locator("#japaneseNotesSummary")).toBeHidden();
   await expect(page.getByRole("region", { name: "Needs repair" })).toBeHidden();
+  const review = page.locator("#japaneseReviewEntryButton");
+  await expect(review).toHaveAccessibleName("Review 0");
+  await expect(review).toHaveAccessibleDescription("No Japanese reviews are due");
+  await expect(review).toBeDisabled();
 
   await createJapaneseNote(page, "Create vocabulary note", "New vocabulary");
-  await expect(page.locator("#japaneseNotesDueCount")).toHaveText("1");
-
-  await reviewSubview.click();
-  await expect(reviewSubview).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#contentInput")).toBeHidden();
-  await expect(page.locator("#japaneseReviewOverview")).toBeVisible();
-  await expect(page.locator(".search-box")).toBeHidden();
-  await expect(page.getByRole("button", { name: "New Japanese note" })).toBeHidden();
-  await expect(page.locator("#japaneseDashboard")).toBeVisible();
-  await expect(page.locator("#japaneseDashboard [data-dashboard-card]")).toHaveCount(6);
-  await expect(page.getByRole("button", { name: "Start review" })).toBeEnabled();
-
-  await notesSubview.click();
-  await expect(page.locator("#contentInput")).toBeHidden();
-  await expect(page.locator("#titleInput")).toHaveValue("New vocabulary");
-  await expect(page.locator("#japaneseDashboard")).toBeHidden();
+  await expect(review).toHaveAccessibleName("Review 1");
+  await expect(review).toHaveAccessibleDescription("Start due Japanese reviews");
+  await expect(review).toBeEnabled();
+  await review.click();
+  const dialog = page.getByRole("dialog", { name: "Japanese review session" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reveal review content" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(review).toBeFocused();
 });
 
 test("filter disclosure renders removable validated chips without clearing text search", async ({ page }) => {
@@ -88,7 +80,7 @@ test("filter disclosure renders removable validated chips without clearing text 
   await search.fill("New");
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(2);
 
-  const toggle = page.getByRole("button", { name: "Filters", exact: true });
+  const toggle = page.getByRole("button", { name: "+ Filter", exact: true });
   await expect(page.getByRole("region", { name: "Japanese note filters" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Clear all" })).toBeHidden();
   await toggle.click();
@@ -125,14 +117,11 @@ test("quick-create UI and palette expose the same command identity and unavailab
   await expect(page.locator("#titleInput")).toBeFocused();
   await page.getByRole("button", { name: "Close note editor" }).click();
 
-  await page.getByRole("navigation", { name: "Japanese workspace views" })
-    .getByRole("button", { name: /^Review/ })
-    .click();
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.keyboard.press("Control+k");
   await page.locator("#commandInput").fill("Create grammar note");
   await page.locator("#commandInput").press("Enter");
-  await expect(page.getByRole("button", { name: "Japanese Notes", exact: true }))
+  await expect(page.getByRole("button", { name: "日本語", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#titleInput")).toHaveValue("New grammar pattern");
   await expect(page.locator("#titleInput")).toBeFocused();
@@ -193,29 +182,28 @@ test("quick-create disclosure exposes every action through native keyboard trave
   await expect(trigger).toBeFocused();
 });
 
-test("Open review hands focus to the visible Review subview control", async ({ page }) => {
-  await openJapaneseWorkspace(page);
-
-  await page.locator("#japaneseSummaryReviewButton").focus();
-  await page.keyboard.press("Enter");
-  await expect(page.locator("#japaneseReviewSubviewButton")).toBeFocused();
-});
-
-test("Review subview preserves an active reveal-first session across subview switching", async ({ page }) => {
+test("compact Review closes back to the same board control", async ({ page }) => {
   await openJapaneseWorkspace(page);
   await createJapaneseNote(page, "Create vocabulary note", "New vocabulary");
-  await page.getByRole("button", { name: /^Review/ }).click();
-  await page.getByRole("button", { name: "Start review" }).click();
+  const review = page.locator("#japaneseReviewEntryButton");
+  await review.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Japanese review session" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(review).toBeFocused();
+});
+
+test("compact Review resumes an active reveal-first session", async ({ page }) => {
+  await openJapaneseWorkspace(page);
+  await createJapaneseNote(page, "Create vocabulary note", "New vocabulary");
+  const review = page.locator("#japaneseReviewEntryButton");
+  await review.click();
 
   const dialog = page.getByRole("dialog", { name: "Japanese review session" });
   await expect(dialog).toBeVisible();
   await expect(page.locator("#reviewContent")).toBeHidden();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Resume review" })).toBeFocused();
-
-  await page.getByRole("button", { name: "Japanese Notes", exact: true }).click();
-  await page.getByRole("button", { name: /^Review/ }).click();
-  await expect(page.getByRole("button", { name: "Resume review" })).toBeVisible();
-  await page.getByRole("button", { name: "Resume review" }).click();
+  await expect(review).toBeFocused();
+  await review.click();
   await expect(page.getByRole("button", { name: "Reveal review content" })).toBeFocused();
 });

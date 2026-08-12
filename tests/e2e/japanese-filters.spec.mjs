@@ -16,8 +16,20 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
 
   await page.getByRole("button", { name: "日本語", exact: true }).click();
   const filters = page.getByRole("region", { name: "Japanese note filters" });
+  const common = page.getByRole("group", { name: "Japanese common filters" });
   await expect(filters).toBeHidden();
-  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  for (const name of ["All", "Vocabulary", "Grammar", "Kanji", "Reading", "+ Filter"]) {
+    await expect(common.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  await expect(common.getByRole("button", { name: "All", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(common.getByRole("button", { name: "Reading", exact: true })).toBeDisabled();
+  await expect(common.getByRole("button", { name: "Reading", exact: true }))
+    .toHaveAttribute("title", "Reading filters require the Japanese V2 learning model");
+  await expect(common.getByRole("button", { name: "Reading", exact: true }))
+    .toHaveAccessibleDescription("Reading filters require the Japanese V2 learning model");
+  await expect(page.getByRole("button", { name: /Apply/i })).toHaveCount(0);
+  await common.getByRole("button", { name: "+ Filter", exact: true }).click();
   await expect(filters).toBeVisible();
 
   await createJapaneseNote(page, "Create vocabulary note", "New vocabulary");
@@ -40,6 +52,17 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
         : note),
     });
   });
+
+  const search = page.locator("#searchInput");
+  await search.fill("New");
+  await common.getByRole("button", { name: "Grammar", exact: true }).click();
+  await expect(common.getByRole("button", { name: "Grammar", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#noteList .note-item-title")).toHaveText("New grammar pattern");
+  await expect(search).toHaveValue("New");
+  await common.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.locator("#noteList .note-item-title")).toHaveCount(2);
+  await search.fill("");
 
   await page.locator("#japaneseDateFrom").fill("2026-07-30");
   await page.locator("#japaneseDateTo").fill("2026-07-31");
@@ -69,5 +92,5 @@ test("Japanese filters compose with search, validate ranges, and stay workspace-
   await page.getByRole("button", { name: "Clear all" }).click();
   await expect(page.locator("#noteList .note-item-title")).toHaveCount(3);
   await expect(page.locator("#japaneseFilterStatus")).toHaveText("Showing 3 of 3 Japanese notes");
-  await expect(page.getByRole("button", { name: "Filters", exact: true })).toBeFocused();
+  await expect(common.getByRole("button", { name: "All", exact: true })).toBeFocused();
 });

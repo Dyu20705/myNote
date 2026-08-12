@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import {
   closeNoteEditor,
   createJapaneseNoteFromMenu,
-  openJapaneseReviewSubview,
+  openJapaneseReview,
+  openJapaneseStudyDetails,
 } from "./japanese-helpers.mjs";
 
 async function openBlankOrigin(page) {
@@ -182,12 +183,11 @@ test("fresh database completes all five templates, duplicate guards, dashboard m
   expect(enrollment.noteIds).toHaveLength(5);
   expect(enrollment.types).toEqual(["grammar", "kanji", "output", "planner", "vocabulary"]);
 
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  const reviewEntry = await openJapaneseReview(page);
   await page.getByRole("button", { name: "Reveal review content" }).click();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Resume review" })).toBeFocused();
-  await page.getByRole("button", { name: "Resume review" }).click();
+  await expect(reviewEntry).toBeFocused();
+  await reviewEntry.click();
 
   for (const [index, rating] of ["Again", "Hard", "Good", "Easy", "Good"].entries()) {
     if (index > 0) {
@@ -234,12 +234,12 @@ test("valid orphan review remains durable and appears as bounded repair state", 
 
   await page.goto("/");
   await openJapaneseWorkspace(page);
-  await openJapaneseReviewSubview(page);
+  await openJapaneseStudyDetails(page);
   const repair = page.getByRole("region", { name: "Needs repair" });
   await expect(repair).toContainText("orphan-review");
   await expect(repair).toContainText("×1");
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
-  await expect(page.getByRole("button", { name: "Start review" })).toBeDisabled();
+  await expect(page.locator("#japaneseReviewEntryButton")).toBeDisabled();
 
   const snapshot = await readDatabaseSnapshot(page, existing.id);
   expect(snapshot.note).toEqual(existing);
@@ -257,10 +257,9 @@ test("invalid persisted review keeps Notes operational and exposes bounded Japan
   await page.goto("/");
   await expect(page.locator("#titleInput")).toHaveValue("Existing ordinary note");
   await openJapaneseWorkspace(page);
-  await openJapaneseReviewSubview(page);
+  await openJapaneseStudyDetails(page);
   await expect(page.getByRole("region", { name: "Needs repair" })).toContainText("study-data-unavailable");
-  await expect(page.getByRole("button", { name: "Start review" })).toBeDisabled();
-  await page.getByRole("button", { name: "Japanese Notes", exact: true }).click();
+  await expect(page.locator("#japaneseReviewEntryButton")).toBeDisabled();
   await expect(page.getByRole("button", { name: "New Japanese note" })).toBeDisabled();
 
   const snapshot = await readDatabaseSnapshot(page, existing.id);
@@ -342,9 +341,8 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await expect(page.locator("#titleInput")).toBeFocused();
   await closeNoteEditor(page);
 
-  await openJapaneseReviewSubview(page);
-  const startButton = page.getByRole("button", { name: "Start review" });
-  await startButton.focus();
+  const reviewEntry = page.locator("#japaneseReviewEntryButton");
+  await reviewEntry.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Japanese review session" });
   await expect(dialog).toBeVisible();
@@ -353,7 +351,7 @@ test("narrow reduced-motion keyboard path preserves focus, modal semantics, and 
   await page.keyboard.press("1");
   await expect(page.getByText("Review complete")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(startButton).toBeDisabled();
+  await expect(reviewEntry).toBeDisabled();
   await expect(japaneseButton).toBeFocused();
 
   const viewportFits = await page.evaluate(() => (

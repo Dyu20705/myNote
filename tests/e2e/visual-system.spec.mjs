@@ -150,10 +150,7 @@ test("selected, disabled, busy, invalid, and destructive states are not color-on
   expect(numericPixels(selected.borderWidth)).toBeGreaterThanOrEqual(1);
 
   await page.locator("#japaneseWorkspaceButton").click();
-  await page.getByRole("navigation", { name: "Japanese workspace views" })
-    .getByRole("button", { name: /^Review/ })
-    .click();
-  const disabled = page.locator("#startReviewButton");
+  const disabled = page.locator("#japaneseReviewEntryButton");
   await expect(disabled).toBeDisabled();
   const disabledStyle = await disabled.evaluate((element) => {
     const style = globalThis.getComputedStyle(element);
@@ -167,8 +164,7 @@ test("selected, disabled, busy, invalid, and destructive states are not color-on
   expect(disabledStyle.opacity).toBeLessThan(1);
   expect(disabledStyle.borderStyle).toBe("dashed");
 
-  await page.getByRole("button", { name: "Japanese Notes", exact: true }).click();
-  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await page.getByRole("button", { name: "+ Filter", exact: true }).click();
   const invalidInput = page.locator("#japaneseDateFrom");
   await invalidInput.evaluate((element) => element.setAttribute("aria-invalid", "true"));
   const invalidStyle = await invalidInput.evaluate((element) => {

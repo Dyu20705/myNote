@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   createJapaneseNoteFromMenu,
-  openJapaneseReviewSubview,
+  openJapaneseReview,
 } from "./japanese-helpers.mjs";
 
 async function openApplication(page) {
@@ -94,8 +94,7 @@ test("review modal isolates background note-navigation commands", async ({ page 
   await expect(page.locator("#titleInput")).toHaveValue("新しい漢字");
   await closeNoteEditor(page);
 
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  await openJapaneseReview(page);
   await page.getByRole("button", { name: "Reveal review content" }).click();
   const dialog = page.getByRole("dialog", { name: "Japanese review session" });
   const good = page.getByRole("button", { name: "Good" });
@@ -115,8 +114,7 @@ test("review numeric shortcut remains owned by the active modal", async ({ page 
   await openJapaneseWorkspace(page);
   await createJapaneseNoteFromMenu(page, "Create vocabulary note");
   await closeNoteEditor(page);
-  await openJapaneseReviewSubview(page);
-  await page.getByRole("button", { name: "Start review" }).click();
+  await openJapaneseReview(page);
   await page.getByRole("button", { name: "Reveal review content" }).click();
 
   await page.getByRole("button", { name: "Good" }).focus();
