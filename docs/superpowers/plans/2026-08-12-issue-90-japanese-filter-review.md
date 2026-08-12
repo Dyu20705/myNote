@@ -75,7 +75,7 @@
 
 - [x] Run focused Japanese filter/progressive/release/workspace/delete/degraded tests.
 - [x] Run command-registry and editor-shell modal/workspace regressions.
-- [ ] Run content, lint, unit, integration, and complete E2E gates.
+- [x] Run content, lint, unit, integration, and complete E2E gates.
 - [x] Review exact diff and commit locally without pushing.
 
 ## Focused commands

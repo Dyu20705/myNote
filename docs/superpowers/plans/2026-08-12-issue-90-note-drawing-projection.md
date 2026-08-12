@@ -47,8 +47,8 @@
 
 - [x] Update only superseded Details-only and 64-preview presentation expectations in #69 browser/resource tests.
 - [x] Run focused drawing, overlay, editor, Japanese, resource, import, and persistence regressions.
-- [ ] Run the complete repository release gate and `git diff --check`.
-- [ ] Update issue #90 docs/evidence, commit locally, then perform the one consolidated push.
+- [x] Run the complete repository release gate and `git diff --check`.
+- [x] Update issue #90 docs/evidence, commit locally, and prepare the one consolidated push.
 
 ## Focused commands
 
