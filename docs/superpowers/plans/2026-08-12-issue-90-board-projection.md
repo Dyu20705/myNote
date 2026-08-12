@@ -2,6 +2,8 @@
 
 > **For implementers:** Use the repository's subtask-driven or plan-execution workflow to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Historical completion:** The foundation RED→GREEN slice, initial verification, first branch push, draft PR #92 creation, and engineering handoff all completed. Every command below is retained as executed evidence and must not be repeated as an open publication instruction. All later issue #90 work continues on the same remote branch and PR.
+
 **Goal:** Add the pure presentation projection that partitions existing workspace/search result order into stable `PINNED` and `NOTES` board sections without implementing the board UI.
 
 **Architecture:** `ui/notePresentation.js` remains a presentation-only module. The new helper consumes the canonical `notesById` map and upstream `orderedIds`, returns fresh ID-only section descriptors, and does not sort, filter, mutate state, or access the DOM. Search/workspace coordination remains the ordering authority.
@@ -37,7 +39,7 @@
 - Consumes: `createNoteBoardSections({ notesById: Map, orderedIds: Array })` arguments supplied by a future board renderer.
 - Produces: `Array<{ id: "pinned" | "notes", label: "PINNED" | "NOTES", orderedIds: Array }>` with fresh descriptors and arrays.
 
-- [ ] **Step 1: Write the failing public-seam test**
+- [x] **Step 1: Write the failing public-seam test**
 
 Append this test to `tests/unit/note-presentation.test.mjs`:
 
@@ -86,7 +88,7 @@ test("createNoteBoardSections partitions upstream order without taking query own
 });
 ```
 
-- [ ] **Step 2: Run the focused test and record RED**
+- [x] **Step 2: Run the focused test and record RED**
 
 Run:
 
@@ -96,7 +98,7 @@ node --test tests/unit/note-presentation.test.mjs
 
 Expected: the five existing tests pass and the new test fails because `createNoteBoardSections` is not exported.
 
-- [ ] **Step 3: Add the minimal pure implementation**
+- [x] **Step 3: Add the minimal pure implementation**
 
 Add this export to `ui/notePresentation.js` after `deriveNotePreview` and before `createNoteCardPresentation`:
 
@@ -127,7 +129,7 @@ export function createNoteBoardSections({ notesById, orderedIds } = {}) {
 }
 ```
 
-- [ ] **Step 4: Run focused GREEN and static checks**
+- [x] **Step 4: Run focused GREEN and static checks**
 
 Run:
 
@@ -141,7 +143,7 @@ git diff --check
 
 Expected: six tests pass, both syntax checks exit zero, ESLint reports no error, and the diff check is clean.
 
-- [ ] **Step 5: Review the bounded diff**
+- [x] **Step 5: Review the bounded diff**
 
 Run:
 
@@ -152,7 +154,7 @@ git status --short --branch
 
 Confirm that no DOM renderer, CSS, application orchestration, persistence, Japanese, review, or dependency file changed.
 
-- [ ] **Step 6: Commit the RED→GREEN slice**
+- [x] **Step 6: Commit the RED→GREEN slice**
 
 Run:
 
@@ -176,7 +178,7 @@ Expected: one focused implementation commit after the already committed design r
 - Consumes: committed `createNoteBoardSections` public seam and all repository release-gate scripts.
 - Produces: one remote `UX/90` branch and the sole draft PR for issue #90.
 
-- [ ] **Step 1: Install the locked dependency tree and Chromium**
+- [x] **Step 1: Install the locked dependency tree and Chromium**
 
 Run:
 
@@ -187,7 +189,7 @@ npx --no-install playwright install --with-deps chromium
 
 Expected: both commands exit zero using Node.js 22 and the lockfile dependency versions.
 
-- [ ] **Step 2: Run the complete release gate**
+- [x] **Step 2: Run the complete release gate**
 
 Run each command separately and retain its exit code and test counts:
 
@@ -202,7 +204,7 @@ git diff --check
 
 Expected: every command exits zero. Do not push or open a PR if any command fails.
 
-- [ ] **Step 3: Audit scope and repository state**
+- [x] **Step 3: Audit scope and repository state**
 
 Run:
 
@@ -222,7 +224,7 @@ tests/unit/note-presentation.test.mjs
 ui/notePresentation.js
 ```
 
-- [ ] **Step 4: Perform the preparation agent's single push**
+- [x] **Step 4: Perform the preparation agent's single push**
 
 Run exactly once after every preceding gate is green:
 
@@ -232,7 +234,7 @@ git push -u origin UX/90
 
 Expected: remote tracking is established and no second push is performed by this preparation step.
 
-- [ ] **Step 5: Open the sole draft pull request for #90**
+- [x] **Step 5: Open the sole draft pull request for #90**
 
 Create one draft PR targeting `main` with title:
 
@@ -276,7 +278,7 @@ removes the helper, its test, and planning records without touching canonical da
 
 Expected: one draft PR URL. Do not use `Closes #90` because the issue remains incomplete.
 
-- [ ] **Step 6: Hand off the next engineering slice**
+- [x] **Step 6: Hand off the next engineering slice**
 
 Tell the engineer to continue on branch `UX/90` and the same draft PR with this next
 bounded order:

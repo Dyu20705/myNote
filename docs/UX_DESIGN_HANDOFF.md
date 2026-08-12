@@ -40,6 +40,8 @@ mzhDU5IwWbd3n3P7oRf88q
 | Japanese create/edit overlay | `126:407` | Accepted |
 | Shared daily-surface pattern | `126:859` | Accepted |
 
+For M2, node `126:344` keeps Reading visible in Filter A but marks `Filter / Reading / Disabled` with the reason `Reading filters require the Japanese V2 learning model`. The control uses the accepted `Surface/Disabled`, `Text/Disabled`, and `Border/Subtle` variables together with the runtime-aligned dashed border and `0.55` opacity. Only All, Vocabulary, Grammar, and Kanji are enabled common filters. Native browser 200% zoom remains owned by #71; the 720×450 CSS viewport is responsive-layout evidence only.
+
 Issue #90 changes presentation only. Canonical persistence, search/workspace ordering, commands, Japanese enrollment/filtering, dashboard derivation, scheduling, and review state retain their repository owners.
 
 The 2026-08-12 owner correction places valid saved #69 drawings directly in the active note overlay above title/body. Details is secondary only. Zero drawings consume no space; multiple drawings show a newest primary projection plus bounded older-entry disclosure. Edit/Delete continue through #69 and vectors remain outside canonical note content.

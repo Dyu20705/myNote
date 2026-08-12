@@ -40,7 +40,7 @@ Issue #90 is a later accepted simplification package and supersedes presentation
 - One centered create/edit overlay is shared by ordinary and Japanese notes.
 - Valid #69 drawings project directly above title/body with zero-state collapse and bounded older-entry disclosure; Details is not the sole healthy surface.
 - Search/workspace ordering remains upstream; the board only projects `PINNED` and `NOTES` sections.
-- Japanese Filter A is visible and immediate; `+ Filter` owns the existing advanced canonical controls and removable chips.
+- Japanese Filter A is visible; enabled All/Vocabulary/Grammar/Kanji controls are immediate, Reading is visibly disabled pending Japanese V2 canonical semantics, and `+ Filter` owns the existing advanced canonical controls and removable chips.
 - `Review N` starts or resumes the existing Review dialog directly; derived metrics/repair diagnostics are optional Study details.
 - Non-critical usage guidance lives in `docs/cheatsheet.md` instead of permanent instructional UI.
 

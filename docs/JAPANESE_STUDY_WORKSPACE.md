@@ -46,6 +46,8 @@ Japanese Notes exposes common Filter A controls directly above the board and kee
 - `Reading` is disabled with the explicit reason `Reading filters require the Japanese V2 learning model`. The M2 runtime does not invent a new canonical type or map Reading to an unrelated type.
 - `+ Filter` discloses the complete existing canonical date/type controls. There is no Apply action.
 
+Common controls pass through `resolveJapaneseCommonFilter()` before `JapaneseNoteFilter.update()`. The resolver returns only `all` or an existing canonical M2 notebook type; deferred and unknown values return `null` and cannot mutate filter state.
+
 - Created from and Created to use native date inputs and form an inclusive range.
 - Date comparison uses each note's canonical `createdAt` timestamp converted to the browser's local calendar date.
 - Note type is derived through the canonical `validateStudyReview` boundary and supports vocabulary, kanji, grammar, output, planner, or all types.

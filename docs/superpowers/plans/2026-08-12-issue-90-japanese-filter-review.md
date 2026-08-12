@@ -2,6 +2,8 @@
 
 > **For implementers:** Preserve the existing Japanese filter, review-session, scheduler, and persistence owners while adapting only their presentation.
 
+**Owner reconciliation:** Reading remains visible but disabled for M2 until Japanese V2 defines canonical semantics. Enabled common controls resolve through the canonical M2 type set; native browser 200% zoom is deferred to #71, not this package.
+
 **Goal:** Match the accepted Japanese board with instant common filters, advanced canonical filter disclosure, and one-action Review entry.
 
 **Architecture:** `JapaneseNoteFilter` remains the only structured-filter state and application owner. `ui/japanese-filters.js` adds presentation adapters for common type buttons without adding a query path. `japaneseApp.js` keeps review orchestration and opens the existing review dialog directly from the board entry. The dashboard remains a derived-state source for counts and repair diagnostics, but is no longer a mandatory review route.
