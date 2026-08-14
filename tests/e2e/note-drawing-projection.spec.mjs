@@ -206,7 +206,7 @@ test("drawing save and delete failure preserve canonical data with explicit reco
 
   await abortNextInkMutation(page, "delete");
   await page.getByRole("button", { name: "Delete Kanji drawing", exact: true }).click();
-  await expect(page.locator("#kanjiInkRegionStatus")).toHaveText("Delete failed. The saved drawing is unchanged.");
+  await expect(page.locator("#kanjiInkRegionStatus")).toHaveText("Drawing couldn't be deleted. The saved drawing is unchanged. Try again.");
   await expect(page.locator(`[data-kanji-entry-id="${savedId}"]`)).toBeVisible();
   expect((await readCanonicalFixture(page, noteId)).entries.map((entry) => entry.id)).toEqual([savedId]);
 });
