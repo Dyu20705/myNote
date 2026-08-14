@@ -343,6 +343,7 @@ async function refreshSearch(options = {}) {
     query: Object.hasOwn(options, "query") ? options.query : state.query,
     preferredId: Object.hasOwn(options, "preferredId") ? options.preferredId : state.activeId,
     emptyLabel: options.emptyLabel || state.emptyLabel || "Ready",
+    synchronizeEditor: options.synchronizeEditor === true,
   });
 }
 

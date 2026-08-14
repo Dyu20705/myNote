@@ -180,12 +180,15 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   function clearJapaneseAnnouncement() {
     elements.stateAnnouncement.textContent = "";
+    elements.stateAnnouncement.setAttribute("aria-live", "polite");
     lastJapaneseAnnouncementKey = "";
   }
 
-  function announceJapanese(message, key) {
+  function announceJapanese(message, key, announce = "polite") {
     if (!message) return;
-    const normalizedKey = key || message;
+    const politeness = announce === "assertive" ? "assertive" : "polite";
+    elements.stateAnnouncement.setAttribute("aria-live", politeness);
+    const normalizedKey = `${politeness}:${key || message}`;
     if (normalizedKey === lastJapaneseAnnouncementKey) return;
     lastJapaneseAnnouncementKey = normalizedKey;
     elements.stateAnnouncement.textContent = message;
@@ -504,7 +507,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
         || (session.revealed ? "Choose a rating" : "Content hidden until reveal");
     }
     if (reviewPhase === "rating-failed") {
-      announceJapanese(presentation.message, "rating-failed");
+      announceJapanese(presentation.message, "rating-failed", presentation.announce);
     } else if (!state.studyDataUnavailable) {
       clearJapaneseAnnouncement();
     }

@@ -226,24 +226,26 @@ test("populated v1 upgrade preserves exact note bytes and never enrolls existing
 
 test("valid orphan review remains durable and appears as bounded repair state", async ({ page }) => {
   const existing = ordinaryNote("ordinary-v2");
+  const orphanNoteId = "missing-review-owner";
   await seedDatabase(page, {
     version: 2,
     notes: [existing],
-    reviews: [validReview("orphan-review")],
+    reviews: [validReview(orphanNoteId)],
   });
 
   await page.goto("/");
   await openJapaneseWorkspace(page);
   await openJapaneseStudyDetails(page);
   const repair = page.getByRole("region", { name: "Needs repair" });
-  await expect(repair).not.toContainText("orphan-review");
+  await expect(repair).toContainText("orphan-review");
+  await expect(repair).not.toContainText(orphanNoteId);
   await expect(repair).toContainText("×1");
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect(page.locator("#japaneseReviewEntryButton")).toBeDisabled();
 
   const snapshot = await readDatabaseSnapshot(page, existing.id);
   expect(snapshot.note).toEqual(existing);
-  expect(snapshot.reviews).toEqual([validReview("orphan-review")]);
+  expect(snapshot.reviews).toEqual([validReview(orphanNoteId)]);
 });
 
 test("invalid persisted review keeps Notes operational and exposes bounded Japanese bootstrap failure", async ({ page }) => {

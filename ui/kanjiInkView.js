@@ -328,10 +328,13 @@ function visualStatus(snapshot, presentation) {
 function announceDrawing(presentation) {
   if (presentation.announce === "off" || !presentation.message) {
     elements.announcement.textContent = "";
+    elements.announcement.setAttribute("aria-live", "polite");
     lastDrawingAnnouncementKey = "";
     return;
   }
-  const key = `${presentation.kind}:${presentation.message}`;
+  const politeness = presentation.announce === "assertive" ? "assertive" : "polite";
+  elements.announcement.setAttribute("aria-live", politeness);
+  const key = `${politeness}:${presentation.kind}:${presentation.message}`;
   if (key === lastDrawingAnnouncementKey) return;
   lastDrawingAnnouncementKey = key;
   elements.announcement.textContent = presentation.message;

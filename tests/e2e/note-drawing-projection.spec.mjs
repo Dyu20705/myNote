@@ -195,7 +195,7 @@ test("drawing save and delete failure preserve canonical data with explicit reco
   await drawStroke(page);
   await abortNextInkMutation(page, "add");
   await page.getByRole("button", { name: "Save drawing", exact: true }).click();
-  await expect(page.locator("#kanjiInkStatus")).toHaveText("Save failed. Your drawing is preserved; retry save.");
+  await expect(page.locator("#kanjiInkStatus")).toHaveText("Save failed. Your drawing is preserved.");
   await expect(page.getByRole("dialog", { name: "Draw Kanji" })).toBeVisible();
   expect((await readCanonicalFixture(page, noteId)).entries).toHaveLength(0);
 

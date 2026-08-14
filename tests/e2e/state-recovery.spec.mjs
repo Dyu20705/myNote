@@ -26,8 +26,8 @@ async function installDatabaseFailureHarness(page) {
   });
 }
 
-async function failNextSearchUpsert(page) {
-  await page.evaluate(async () => {
+async function failNextSearchUpsert(page, expectedContent) {
+  await page.evaluate(async (content) => {
     const { getActiveSearchClient } = await import("/core/searchClient.js");
     const searchClient = getActiveSearchClient();
     if (!searchClient) throw new Error("Active search client is unavailable");
@@ -35,14 +35,14 @@ async function failNextSearchUpsert(page) {
     const originalUpsert = searchClient.upsert.bind(searchClient);
     let pendingFailure = true;
     searchClient.upsert = async (...args) => {
-      if (pendingFailure) {
+      if (pendingFailure && args[0]?.content === content) {
         pendingFailure = false;
         searchClient.upsert = originalUpsert;
         throw new Error("Injected derived search failure");
       }
       return originalUpsert(...args);
     };
-  });
+  }, expectedContent);
 }
 
 async function openOrCreateNote(page) {
@@ -169,7 +169,7 @@ test("derived search failure reports saved canonical data and survives reload", 
   await openOrCreateNote(page);
   await saveDraft(page, { title: "Canonical survives", content: "before derived failure" });
 
-  await failNextSearchUpsert(page);
+  await failNextSearchUpsert(page, "persisted despite search failure");
   await page.locator("#contentInput").fill("persisted despite search failure");
   await page.locator("#contentInput").press("Control+Enter");
   await expect(page.locator("#saveState")).toContainText("Search");
@@ -255,7 +255,7 @@ test("drawing failure preserves draft, retry projects silently, and failed delet
   await expect(page.locator("#kanjiInkStatus")).toHaveText("Save failed. Your drawing is preserved.");
   await expect(page.locator("#saveKanjiButton")).toHaveAttribute("aria-label", "Retry save drawing");
   await expect(page.locator("#kanjiInkStatus")).not.toHaveAttribute("aria-live");
-  await expect(page.locator("#kanjiInkAnnouncement")).toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#kanjiInkAnnouncement")).toHaveAttribute("aria-live", "assertive");
 
   await page.locator("#saveKanjiButton").click();
   await expect(page.locator("#kanjiInkDialog")).toBeHidden();
@@ -303,6 +303,7 @@ test("Japanese no-result preserves context and rating failure keeps the same rev
   await expect(page.locator("#reviewStatus")).toHaveText(
     "Rating wasn't saved. This review item is unchanged. Try again.",
   );
+  await expect(page.locator("#japaneseStateAnnouncement")).toHaveAttribute("aria-live", "assertive");
   await expect(good).toBeFocused();
 
   await good.click();

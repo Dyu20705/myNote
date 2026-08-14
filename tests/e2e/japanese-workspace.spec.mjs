@@ -24,6 +24,7 @@ test("Notes remains default and workspace switching preserves the active ordinar
   await expect(page.locator("#japaneseDashboard")).toBeHidden();
 
   await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
   await closeNoteEditor(page);
   const initialTitle = await page.locator("#titleInput").inputValue();
   await japaneseButton.click();
