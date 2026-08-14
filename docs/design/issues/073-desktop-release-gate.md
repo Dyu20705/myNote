@@ -229,7 +229,7 @@ An unresolved P0/P1 or an unmet score/category floor keeps #73 open. The pull re
 ## 12. Expected files and ownership
 
 - Create `docs/design/issues/073-desktop-release-gate.md` as the authoritative issue contract.
-- Create `docs/superpowers/plans/2026-08-14-issue-73-desktop-release-gate.md` after design approval.
+- Create the approved issue #73 implementation plan after design approval.
 - Create `tests/e2e/ux-release-gate.spec.mjs` for uncovered cross-package evidence only.
 - Create `docs/UX_RELEASE_GATE.md` for the scored audit and decision.
 - Add the release document to `README.md` only when the document exists.

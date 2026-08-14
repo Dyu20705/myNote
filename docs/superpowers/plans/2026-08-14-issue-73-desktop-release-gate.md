@@ -1,6 +1,6 @@
 # Issue 73 Desktop Release Gate Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution instruction:** Follow this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Produce the final, reproducible desktop UX release-gate evidence for issue #73, score it without inflating unknowns, and publish one reviewable draft pull request without creating unowned product surfaces or noisy CI activity.
 
@@ -19,9 +19,9 @@
 - A production correction requires a deterministic failing assertion first and must be committed separately from evidence/docs.
 - Treat Node/toolchain mismatch, missing native hardware/OS, or executor-blocked browser provisioning as environment limitations, not product PASS or product FAIL.
 - Never bypass a blocked install/test command through alternate package managers, wrappers, unapproved network access, or repeated equivalent commands.
-- Use one branch, one push, one draft PR to `dev`, and the one automatic PR CI run. Do not create empty commits, trial pushes, duplicate PRs, status-spam comments, or manual CI reruns.
+- Use one branch, one original push, one draft PR to `dev`, and one original automatic PR CI run. Owner exception for the deterministic CI #332 lint and CI #333 fixture corrections: amend commits 11–12 in place, then make at most one batched force ref update and await one resulting automatic CI. Do not create empty commits, trial pushes, extra push/ref updates, duplicate PRs, status-spam comments, or manual CI reruns.
 - Do not merge, close #73, reconcile #15/#20, or start the next package. A truthful `BLOCKED` release document is an acceptable output when any P0/P1, category floor, complete-gate, or required native-evidence condition remains unmet.
-- Stay within six implementation-branch commits: design, plan, focused evidence, release document, at most one bounded runtime correction, and at most one review correction.
+- The initial implementation budget was six commits: design, plan, focused evidence, release document, at most one bounded runtime correction, and at most one review correction. Owner-authorized review-only extensions added commits 7–8 and 9–10; this final correction wave authorizes commits 11–12 only. The hard cap is 12 commits. The sole publication exception is the original one-push/one-automatic-CI rule plus this iteration's at-most-one batched force ref update and one resulting automatic CI; one branch, one draft PR, no manual rerun, and every other anti-spam constraint remain unchanged.
 
 ---
 
@@ -472,7 +472,7 @@ git commit -m "docs(ux): record issue 73 release evidence"
 
 - [ ] **Step 1: Classify every failure before editing runtime**
 
-Use `superpowers:systematic-debugging` for any unexpected test failure. Choose exactly one classification:
+Use the repository systematic-debugging procedure for any unexpected test failure. Choose exactly one classification:
 
 - test defect: correct the focused test without changing the product contract;
 - existing-owner runtime defect: continue to Step 2;
@@ -534,7 +534,7 @@ The diagnostic must select at most one production owner from the explicit list a
 
 - [ ] **Step 1: Run the supported complete gate once where executable**
 
-Use `superpowers:verification-before-completion`. First run the non-mutating environment preflight:
+Use the repository verification-before-completion procedure. First run the non-mutating environment preflight:
 
 ```sh
 node --version

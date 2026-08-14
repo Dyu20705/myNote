@@ -2,16 +2,17 @@
 
 Issue: [#73](https://github.com/Dyu20705/myNote/issues/73)
 
-Decision: **BLOCKED**
+Decision: **BLOCKED — 90/100**
 
 ## Audited revision and environment
 
 | Item | Audited value |
 | --- | --- |
-| Accepted implementation base | `320fcc31942cc32fbb1401584c51c7ddf2573bed` |
+| Audited base SHA | `320fcc31942cc32fbb1401584c51c7ddf2573bed` |
 | Focused evidence commit | `eaf113312cb7ff60a664067dc7fb6aac860eb0f1` (`test(ux): add final release gate evidence`) |
 | Privacy-safe evidence correction | `3acab3045a218a2d5efa069918bdb757f6a70b53` (`test(ux): redact external request diagnostics`) |
-| Product evidence revision | `6a85bc5cb87276b37b5cb21072399a3ea3d73420` (`test(ux): expand healthy control inventory`); this document changes documentation only |
+| Audited evidence-head SHA | `97ca6d2290a20730871cb8185b9f6a820eab640f` (`test(ux): complete release surface audit`) |
+| Documentation attestation | The following attestation changes documentation only; it does not alter the audited evidence head. |
 | Supported repository toolchain | Node.js `>=22.13 <23`; npm `11.7.0`; Playwright `1.62.0` |
 | Local audit toolchain | Node.js `24.19.0`; npm `11.9.0` — unsupported for release certification |
 | Local dependency install | `npm ci --cache /tmp/mynote-issue73-npm-cache` passed; 73 packages installed |
@@ -24,9 +25,11 @@ Decision: **BLOCKED**
 | Integrated-base CI toolchain | Node.js `22.20.0`; npm `11.7.0`; `@playwright/test`, `playwright`, and `playwright-core` `1.62.0` |
 | Integrated-base CI browser | Chrome Headless Shell `151.0.7922.34`, Chromium revision `1234`, selected by the default-headless `browserName: "chromium"` configuration |
 | Integrated-base metadata authority | The run head and current audit have byte-identical `.github/workflows/ci.yml` and `package-lock.json`; exact values come from those files plus Playwright `1.62.0`'s installed `playwright-core/browsers.json` |
-| Final issue-branch CI | **PENDING — automatic PR gate is authoritative** |
+| First issue-branch CI result | Automatic PR run #332 (`31815328781`), `verify` job (`94815502788`): content contract passed `3/3`; lint failed on four `no-undef` bare `document` references in `tests/e2e/ux-release-gate.spec.mjs:244,257`; unit, integration, and browser steps skipped |
+| Second issue-branch CI result | Automatic PR run #333 (`31816849261`), `verify` job (`94820479572`): dependency installation, content, lint, unit, integration, and Chromium installation passed; E2E passed `115/116`, with the sole fresh-database fixture mismatch in `workspace transitions preserve ordinary context and keyboard return` |
+| Final issue-branch CI | **PENDING — one policy-safe corrective automatic CI is pending** |
 
-The base CI result applies to the integrated product tests present at the accepted base. It does not certify the later focused evidence file or this documentation head. The issue-branch automatic CI must run the complete gate on the final head.
+The base CI result applies to the integrated product tests present at the accepted base. The first issue-branch run passed the content contract but did not pass lint; the second passed through Chromium installation but had one focused E2E fixture failure. Neither run certifies the later focused evidence file or this documentation head. One policy-safe corrective automatic CI must run the complete gate on the final head.
 
 ## Executive result
 
@@ -132,7 +135,7 @@ The evidence map was built in four steps:
 | Saved-grid | `saved-grid canvas supports tools, history, durable editing, recovery, and export`; `delete, restore, export, and import remain atomic service operations`; `npm run test:e2e`; `npm run test:unit` | Integrated-base GREEN | Saved-grid application service |
 | Persistence/migration | `valid legacy fixture commits canonical notes and returns a bounded outcome`; `a source changed during normalization is rejected before any legacy write`; `canonical upsert failure rejects before memory or derived commit`; `npm run test:integration` | Integrated-base GREEN | Storage/lifecycle owners |
 | Content contract | `tracked repository text is English-only`; `tracked repository text contains no tool-specific provenance markers`; `npm run test:content` | Integrated-base GREEN | Final branch pending |
-| Focused #73 cross-package | `release shell exposes only owner-backed navigation and bounded commands` (including an expanded native/focusable count-only healthy-control audit); `workspace transitions preserve ordinary context and keyboard return`; all four named viewport cases (healthy containment plus a one-shot bootstrap storage failure, reachable Retry/Reset recovery controls, recovery containment, and Retry recovery); `saved-grid drawing stays local and outside canonical note content` (including the expanded count-only audit with the drawing dialog open); `npx --no-install playwright test tests/e2e/ux-release-gate.spec.mjs --project=chromium` | ENVIRONMENT BLOCKED | No product RED observed; no score credit |
+| Focused #73 cross-package | `release shell exposes only owner-backed navigation and bounded commands`; `healthy release surfaces expose no forbidden controls` (numeric-only audit of the initial shell, command palette, Japanese workspace, Japanese create menu, Japanese Review dialog, note actions menu, and drawing dialog); `workspace transitions preserve ordinary context and keyboard return`; all four named viewport cases (healthy containment plus a one-shot bootstrap storage failure, reachable Retry/Reset recovery controls, recovery containment, and Retry recovery); `saved-grid drawing stays local and outside canonical note content`; `npx --no-install playwright test tests/e2e/ux-release-gate.spec.mjs --project=chromium` | ENVIRONMENT BLOCKED | No product RED observed; no score credit |
 
 ## Workflow matrix
 
@@ -168,8 +171,8 @@ The evidence map was built in four steps:
 | IME precedence | `IME composition suppresses shell navigation commands`; `npm run test:e2e` | Integrated-base GREEN | Composition suppresses application navigation |
 | Modal isolation | `palette and review-modal scopes isolate background commands`; `npm run test:unit` | Integrated-base GREEN | Palette, editor, and Review keep distinct scope |
 | Focus return | `keyboard traversal includes editor context actions and reaches the shell deterministically`; `npm run test:e2e` | Integrated-base GREEN | Logical opener/card/control receives focus |
-| Focused forbidden-control audit | The final focused suite scans visible native and user-operable/focusable controls: buttons, links/areas, non-hidden inputs, selects, textareas, summary/details, role-bearing elements, nonnegative tabindex, editable/clickable elements, applicable media/embed surfaces, and their accessible-name corpus (relevant text, ARIA references, associated labels, title, ID, name, placeholder, type, and declarative value). It returns only a numeric count and asserts zero for the forbidden release families on the healthy shell and with drawing open. | ENVIRONMENT BLOCKED | No matched text, user content, URL, path, or identifier leaves the browser context |
-| Release inventory | Static registration count: 21 application commands, 5 Japanese create commands, 3 saved-grid commands, and 1 saved-grid import command | 30 registered definitions | Source command: `rg -n 'id: "[a-z].*\.' app.js japaneseApp.js ui/kanjiInkView.js ui/kanjiInkImportCommand.js` |
+| Focused forbidden-control audit | The final focused suite scans visible native and user-operable/focusable controls: buttons, links/areas, non-hidden inputs, selects, textareas, summary/details, role-bearing elements, nonnegative tabindex, editable/clickable elements, applicable media/embed surfaces, and their accessible-name corpus (relevant text, ARIA references, associated labels, title, ID, name, placeholder, type, and declarative value). It returns only a numeric count and asserts zero for the forbidden release families on the initial shell, command palette, Japanese workspace, Japanese create menu, Japanese Review dialog, note actions menu, and drawing dialog. | ENVIRONMENT BLOCKED | No matched text, user content, URL, path, or identifier leaves the browser context |
+| Release inventory | Static registration count: 25 literal definitions plus 5 explicit Japanese template rows | 30 registered definitions | Reproduce with the two-part inventory below: `25 + 5 = 30` |
 
 ## Viewport, zoom, input, focus, and motion matrix
 
@@ -201,7 +204,7 @@ The evidence map was built in four steps:
 | Bounded entry/stroke/point/history | `V2 accepts the exact 4,096-point capacity under canonical JSON size measurement`; `History retains no more than 100 committed draft states`; `npm run test:unit` | Integrated-base GREEN | 32 strokes, 256 points per stroke, 4,096 total points, 100 drawing draft states |
 | V1-only search | `mixed search projects only confirmed V1 characters`; `npm run test:unit` | Integrated-base GREEN | V2 contributes no inferred character text |
 | No invented recognition data | `V2 human-readable export does not invent recognition data`; `npm run test:unit` | Integrated-base GREEN | V2 has no guessed Unicode |
-| Local network boundary | `saved-grid canvas supports tools, history, durable editing, recovery, and export`; `npm run test:e2e` | Integrated-base GREEN | Existing base test observed no external request; focused #73 count-only request assertion remains pending |
+| Local network boundary | Focused #73 numeric-only request assertion in `saved-grid drawing stays local and outside canonical note content`; focused #73 browser command | PENDING | The blocked focused run earns no score or PASS credit; the assertion records only the external-request count. |
 | Physical Windows pen | No direct run | **UNKNOWN — REQUIRES VALIDATION** | Automated pointer events are not hardware evidence |
 
 ## Failure and recovery
@@ -247,8 +250,8 @@ The focused resource command is `npx --no-install playwright test tests/e2e/kanj
 | Explicit reset confirmation | `application recovery is non-destructive until reset confirmation`; `npm run test:unit` | Integrated-base GREEN | No automatic destructive bootstrap action |
 | No V2 recognizer/model/dataset path | `controller persistence is recognizer-free and preserves V2 edit identity`; `V2 human-readable export does not invent recognition data`; `npm run test:unit` | Integrated-base GREEN | Historical V1 attribution remains compatibility data only |
 | No normal-product telemetry surface | `shell exposes coherent application and editor-context landmarks without telemetry`; `npm run test:e2e` | Integrated-base GREEN | Local diagnostic measurements are not normal UI |
-| Focused forbidden-control diagnostic | Final focused evidence returns only the numeric count of visible forbidden-family controls from its expanded native/focusable inventory in the healthy shell and open drawing dialog; focused #73 browser command | PENDING | The accessible-name corpus stays in page context; it does not serialize matched text, user content, URLs, paths, or fixture identifiers |
-| Focused release request diagnostic | `saved-grid drawing stays local and outside canonical note content`; focused #73 browser command | PENDING | Commit `3acab30` uses a count-only external-request assertion; no paths, methods, query text, or user identifiers can appear in its custom diagnostic |
+| Focused forbidden-control diagnostic | Final focused evidence returns only the numeric count of visible forbidden-family controls from its expanded native/focusable inventory across the initial shell, command palette, Japanese workspace, Japanese create menu, Japanese Review dialog, note actions menu, and drawing dialog; focused #73 browser command | PENDING | The accessible-name corpus stays in page context; it does not serialize matched text, user content, URLs, paths, or fixture identifiers |
+| Focused release request diagnostic | `saved-grid drawing stays local and outside canonical note content`; focused #73 browser command | PENDING | The assertion retains only an external-request count; no paths, methods, query text, or user identifiers can appear in its custom diagnostic |
 | Release document artifacts | Static tables contain only test titles, counts, synthetic fixture shapes, commands, and aggregate measurements | PASS | No user note text, imported source data, raw vectors, browser-profile material, authentication material, or content-bearing failure output is stored here |
 
 ## Findings and ownership
@@ -305,7 +308,11 @@ Inventory and direct evidence lookup:
 rg -n '^\s*(test|it)(\.\w+)?\(' tests/unit tests/integration tests/e2e tests/repository-content.contract.test.mjs
 rg -n -i "list/grid|grid view|view toggle" app.js ui tests
 rg -n "notesWorkspaceButton|japaneseWorkspaceButton|notes.archive|Reminders|Labels|Trash" index.html app.js
+rg -n 'id: "[a-z][^"]*"' app.js ui/kanjiInkView.js ui/kanjiInkImportCommand.js | wc -l
+rg -n '^\s*\["(?:vocabulary|kanji|grammar|output|planner)", "Create .+"\],$' japaneseApp.js | wc -l
 ```
+
+The first command inventory count is `25` literal registrations; the second is the five explicit Japanese template rows that generate `japanese.create.<type>` command IDs. Their reproducible arithmetic is `25 + 5 = 30`.
 
 Supported complete repository gate:
 
