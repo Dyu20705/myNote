@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 async function installDatabaseFailureHarness(page) {
   await page.addInitScript(() => {
-    const originalTransaction = IDBDatabase.prototype.transaction;
+    const originalTransaction = globalThis.IDBDatabase.prototype.transaction;
     let failure = null;
     Object.defineProperty(globalThis, "__stateRecoveryDbTest", {
       configurable: true,
@@ -12,11 +12,14 @@ async function installDatabaseFailureHarness(page) {
         },
       },
     });
-    IDBDatabase.prototype.transaction = function(storeNames, mode, options) {
+    globalThis.IDBDatabase.prototype.transaction = function transaction(storeNames, mode, options) {
       const names = Array.isArray(storeNames) ? storeNames : [storeNames];
       if (failure && mode === failure.mode && names.includes(failure.storeName)) {
         failure = null;
-        throw new DOMException("Injected state recovery transaction failure", "InvalidStateError");
+        throw new globalThis.DOMException(
+          "Injected state recovery transaction failure",
+          "InvalidStateError",
+        );
       }
       return originalTransaction.call(this, storeNames, mode, options);
     };
@@ -25,7 +28,7 @@ async function installDatabaseFailureHarness(page) {
 
 async function installSearchFailureHarness(page) {
   await page.addInitScript(() => {
-    const originalPostMessage = Worker.prototype.postMessage;
+    const originalPostMessage = globalThis.Worker.prototype.postMessage;
     let failNextUpsert = false;
     Object.defineProperty(globalThis, "__stateRecoverySearchTest", {
       configurable: true,
@@ -35,7 +38,7 @@ async function installSearchFailureHarness(page) {
         },
       },
     });
-    Worker.prototype.postMessage = function(message, transfer) {
+    globalThis.Worker.prototype.postMessage = function postMessage(message, transfer) {
       if (failNextUpsert && message?.type === "upsert") {
         failNextUpsert = false;
         queueMicrotask(() => {
@@ -94,7 +97,7 @@ test("fresh database remains empty until explicit create", async ({ page }) => {
   await expect(page.locator("#noteList .empty-state button")).toHaveText("New note");
 
   const storedCount = await page.evaluate(async () => {
-    const request = indexedDB.open("myNoteDB", 3);
+    const request = globalThis.indexedDB.open("myNoteDB", 3);
     const db = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -192,12 +195,12 @@ test("derived search failure reports saved canonical data and survives reload", 
 
 test("bootstrap storage failure is persistent and non-destructive until explicit recovery", async ({ page }) => {
   await page.addInitScript(() => {
-    const originalOpen = indexedDB.open.bind(indexedDB);
+    const originalOpen = globalThis.indexedDB.open.bind(globalThis.indexedDB);
     let failOnce = true;
-    indexedDB.open = function(...args) {
+    globalThis.indexedDB.open = function open(...args) {
       if (failOnce) {
         failOnce = false;
-        throw new DOMException("Injected bootstrap failure", "InvalidStateError");
+        throw new globalThis.DOMException("Injected bootstrap failure", "InvalidStateError");
       }
       return originalOpen(...args);
     };
@@ -225,12 +228,12 @@ test("reset cancellation mutates no data and restores focus to Reset trigger", a
   await closeEditor(page);
 
   await page.addInitScript(() => {
-    const originalOpen = indexedDB.open.bind(indexedDB);
+    const originalOpen = globalThis.indexedDB.open.bind(globalThis.indexedDB);
     let failOnce = true;
-    indexedDB.open = function(...args) {
+    globalThis.indexedDB.open = function open(...args) {
       if (failOnce) {
         failOnce = false;
-        throw new DOMException("Injected bootstrap failure", "InvalidStateError");
+        throw new globalThis.DOMException("Injected bootstrap failure", "InvalidStateError");
       }
       return originalOpen(...args);
     };
@@ -310,11 +313,15 @@ test("Japanese no-result preserves context and rating failure keeps the same rev
 
   await expect(page.locator("#reviewNoteTitle")).toHaveText(originalTitle || "");
   await expect(page.locator("#reviewProgress")).toHaveText(originalProgress || "");
-  await expect(page.locator("#reviewStatus")).toHaveText("Rating wasn't saved. This review item is unchanged. Try again.");
+  await expect(page.locator("#reviewStatus")).toHaveText(
+    "Rating wasn't saved. This review item is unchanged. Try again.",
+  );
   await expect(good).toBeFocused();
 
   await good.click();
-  await expect(page.locator("#reviewStatus")).not.toHaveText("Rating wasn't saved. This review item is unchanged. Try again.");
+  await expect(page.locator("#reviewStatus")).not.toHaveText(
+    "Rating wasn't saved. This review item is unchanged. Try again.",
+  );
 });
 
 test("healthy visual statuses are not repeated live announcements", async ({ page }) => {

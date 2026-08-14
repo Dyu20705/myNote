@@ -82,7 +82,7 @@ test("JSON import validates, restores atomically, and becomes searchable after r
   });
   await reloadPromise;
 
-  await expect(page.locator("#noteCount")).toHaveText("2 notes");
+  await expect(page.locator("#noteCount")).toHaveText("1 note");
   await page.locator("#searchInput").fill("Imported Kanji bundle");
   await expect(page.locator("#noteList .note-item-title")).toHaveText("Imported Kanji bundle");
   await page.locator("#noteList .note-item-title").click();
@@ -93,7 +93,7 @@ test("JSON import validates, restores atomically, and becomes searchable after r
 
 test("invalid JSON import reports failure without changing notes", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
 
   const chooserPromise = page.waitForEvent("filechooser");
   await runCommand(page, "Import Kanji data from JSON");
@@ -106,5 +106,5 @@ test("invalid JSON import reports failure without changing notes", async ({ page
 
   await expect(page.locator("#kanjiImportStatus"))
     .toHaveText("Kanji import failed. No data changed.");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
 });

@@ -142,7 +142,7 @@ function validReview(noteId, notebookType = "vocabulary", overrides = {}) {
 
 test("fresh database completes all five templates, duplicate guards, dashboard metrics, close/resume, and all rating controls", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
   await openJapaneseWorkspace(page);
 
   const createActions = [
@@ -236,7 +236,7 @@ test("valid orphan review remains durable and appears as bounded repair state", 
   await openJapaneseWorkspace(page);
   await openJapaneseStudyDetails(page);
   const repair = page.getByRole("region", { name: "Needs repair" });
-  await expect(repair).toContainText("orphan-review");
+  await expect(repair).not.toContainText("orphan-review");
   await expect(repair).toContainText("×1");
   await expect(page.locator("#japaneseDueCount")).toHaveText("0");
   await expect(page.locator("#japaneseReviewEntryButton")).toBeDisabled();

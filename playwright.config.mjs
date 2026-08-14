@@ -15,7 +15,19 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "off",
   },
-  projects: [{ name: "chromium" }],
+  projects: [
+    {
+      name: "chromium",
+      testIgnore: /kanji-handwriting\.spec\.mjs/,
+    },
+    {
+      name: "chromium-kanji-legacy-baseline",
+      testMatch: /kanji-handwriting\.spec\.mjs/,
+      use: {
+        storageState: "tests/e2e/fixtures/legacy-baseline-storage-state.json",
+      },
+    },
+  ],
   webServer: {
     command: "node scripts/serve-static.mjs",
     url: "http://127.0.0.1:4173",

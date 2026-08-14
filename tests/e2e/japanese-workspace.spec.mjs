@@ -8,7 +8,7 @@ import {
 
 async function openJapaneseWorkspace(page) {
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
   await page.getByRole("button", { name: "日本語" }).click();
   await expect(page.getByRole("button", { name: "日本語" })).toHaveAttribute("aria-pressed", "true");
 }
@@ -23,6 +23,8 @@ test("Notes remains default and workspace switching preserves the active ordinar
   await expect(japaneseButton).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("#japaneseDashboard")).toBeHidden();
 
+  await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await closeNoteEditor(page);
   const initialTitle = await page.locator("#titleInput").inputValue();
   await japaneseButton.click();
 
@@ -128,8 +130,11 @@ test("rating persistence failure remains visible and retryable without advancing
   });
 
   await page.getByRole("button", { name: "Easy" }).click();
-  await expect(page.getByText("Save failed; retry rating")).toBeVisible();
+  await expect(page.locator("#reviewStatus")).toHaveText(
+    "Rating wasn't saved. This review item is unchanged. Try again.",
+  );
   await expect(page.getByRole("button", { name: "Easy" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Easy" })).toBeFocused();
   await expect(page.locator("#reviewContent")).toBeVisible();
 
   await page.evaluate(() => globalThis.__restoreStudyPut());

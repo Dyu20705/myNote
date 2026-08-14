@@ -7,7 +7,7 @@ import {
 
 async function openJapaneseWorkspace(page) {
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
   await page.getByRole("button", { name: "日本語" }).click();
   await expect(page.getByRole("button", { name: "日本語" })).toHaveAttribute("aria-pressed", "true");
 }

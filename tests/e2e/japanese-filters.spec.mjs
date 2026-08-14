@@ -21,7 +21,7 @@ async function clickCommonFilter(page, common, name) {
 
 test("Japanese filters compose with search, validate ranges, and stay workspace-local", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
   await expect(page.getByRole("region", { name: "Japanese note filters" })).toBeHidden();
 
   await page.getByRole("button", { name: "日本語", exact: true }).click();

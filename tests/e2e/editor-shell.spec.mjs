@@ -7,6 +7,13 @@ const VIEWPORTS = [
   { width: 1024, height: 768 },
 ];
 
+async function createInitialNote(page) {
+  await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+}
+
 async function expectBoardInInitialViewport(page) {
   const geometry = await page.evaluate(() => {
     const navigation = globalThis.document.querySelector("#noteNavigationRegion").getBoundingClientRect();
@@ -48,8 +55,9 @@ for (const viewport of VIEWPORTS) {
   test(`board and centered overlay remain bounded in both workspaces at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/");
-    await expect(page.locator("#noteCount")).toHaveText("1 note");
+    await expect(page.locator("#noteCount")).toHaveText("0 notes");
     await expectBoardInInitialViewport(page);
+    await createInitialNote(page);
     await page.locator("#noteList .note-item").first().click();
     await expectOpenOverlayBounded(page);
     await page.getByRole("button", { name: "Close note editor" }).click();
@@ -79,6 +87,7 @@ test("shell exposes coherent application and editor-context landmarks without te
   await expect(page.getByRole("navigation", { name: "Workspace" })).toHaveCount(1);
   await expect(page.getByRole("complementary", { name: "Note navigation" })).toHaveCount(1);
   await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+  await createInitialNote(page);
   const card = page.locator("#noteList .note-item").first();
   await card.click();
   await expect(page.getByRole("dialog", { name: "Edit note" })).toBeVisible();
@@ -124,6 +133,7 @@ test("search shortcut and ordinary create remain truthful to the active workspac
   await expect(shortcut).toHaveText("/");
   await expect(shortcut).toHaveAttribute("aria-hidden", "true");
 
+  await createInitialNote(page);
   const card = page.locator("#noteList .note-item").first();
   await card.click();
   await editor.focus();
@@ -148,6 +158,7 @@ test("search shortcut and ordinary create remain truthful to the active workspac
 
 test("keyboard traversal includes editor context actions and reaches the shell deterministically", async ({ page }) => {
   await page.goto("/");
+  await createInitialNote(page);
   const card = page.locator("#noteList .note-item").first();
   await card.click();
   await expect(page.locator("#titleInput")).toBeFocused();

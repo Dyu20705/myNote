@@ -6,6 +6,7 @@ import {
   KANJI_PAPER_PATTERN,
   createKanjiPaperGeometry,
 } from "../core/kanjiPaper.js";
+import { presentDrawingState } from "./statePresentation.js";
 
 const PRIMARY_VISIBLE_ENTRIES = 1;
 const EXPANDED_WINDOW_ENTRIES = 64;
@@ -56,7 +57,8 @@ function createDialog() {
       <footer class="kanji-ink-footer">
         ${iconButton("saveKanjiButton", "Save drawing", "kanji-save.svg", "kanji-icon-button kanji-save-button")}
       </footer>
-      <p id="kanjiInkStatus" class="kanji-ink-status" role="status" aria-live="polite"></p>
+      <p id="kanjiInkStatus" class="kanji-ink-status"></p>
+      <span id="kanjiInkAnnouncement" class="visually-hidden" aria-live="polite"></span>
       <section id="kanjiDiscardConfirmation" class="kanji-discard-confirmation" aria-label="Discard handwriting draft" hidden>
         <strong>Discard this unsaved drawing?</strong>
         <div class="kanji-discard-actions">
@@ -93,8 +95,10 @@ function createSupplementaryRegion() {
   const status = document.createElement("p");
   status.id = "kanjiInkRegionStatus";
   status.className = "hint";
-  status.setAttribute("role", "status");
-  status.setAttribute("aria-live", "polite");
+  const announcement = document.createElement("span");
+  announcement.id = "kanjiInkRegionAnnouncement";
+  announcement.className = "visually-hidden";
+  announcement.setAttribute("aria-live", "polite");
   const recovery = document.createElement("div");
   recovery.id = "kanjiInkRecovery";
   recovery.className = "kanji-ink-recovery";
@@ -108,8 +112,8 @@ function createSupplementaryRegion() {
   undo.setAttribute("aria-label", "Undo handwriting deletion");
   undo.textContent = "Undo delete";
   recovery.append(recoveryText, undo);
-  region.append(header, entries, loadMore, status, recovery);
-  return { region, count, entries, loadMore, status, recovery, undo };
+  region.append(header, entries, loadMore, status, announcement, recovery);
+  return { region, count, entries, loadMore, status, announcement, recovery, undo };
 }
 
 ensureStylesheet();
@@ -130,6 +134,7 @@ const elements = {
   clear: document.getElementById("clearKanjiButton"),
   save: document.getElementById("saveKanjiButton"),
   status: document.getElementById("kanjiInkStatus"),
+  announcement: document.getElementById("kanjiInkAnnouncement"),
   discardConfirmation: document.getElementById("kanjiDiscardConfirmation"),
   keepDrawing: document.getElementById("keepKanjiDrawingButton"),
   discardDrawing: document.getElementById("discardKanjiDrawingButton"),
@@ -152,6 +157,8 @@ let visibleEntryNoteId = null;
 let visibleEntryCount = PRIMARY_VISIBLE_ENTRIES;
 let projectionError = "";
 let pendingEntryFocus = null;
+let lastDrawingAnnouncementKey = "";
+let lastRegionAnnouncementKey = "";
 const previewLayoutTargets = new Map();
 const previewRenderFrames = new Map();
 let previewLayoutObserver = null;
@@ -309,18 +316,35 @@ function drawEntryPreview(canvas, entry) {
   canvas.dataset.paperRendered = "true";
 }
 
-function statusText(snapshot) {
-  if (snapshot.status === "saving") return "Saving drawing locally…";
-  if (snapshot.errorCode === "KANJI_SAVE_FAILED") return "Save failed. Your drawing is preserved; retry save.";
+function visualStatus(snapshot, presentation) {
+  if (presentation.message) return presentation.message;
   if (pointerLimitMessage) return pointerLimitMessage;
-  if (snapshot.strokes.length > 0) return `${snapshot.strokes.length} stroke${snapshot.strokes.length === 1 ? "" : "s"}`;
+  if (snapshot.strokes.length > 0) {
+    return `${snapshot.strokes.length} stroke${snapshot.strokes.length === 1 ? "" : "s"}`;
+  }
   return "";
+}
+
+function announceDrawing(presentation) {
+  if (presentation.announce === "off" || !presentation.message) {
+    elements.announcement.textContent = "";
+    lastDrawingAnnouncementKey = "";
+    return;
+  }
+  const key = `${presentation.kind}:${presentation.message}`;
+  if (key === lastDrawingAnnouncementKey) return;
+  lastDrawingAnnouncementKey = key;
+  elements.announcement.textContent = presentation.message;
 }
 
 function renderController() {
   if (!controller) return;
   const snapshot = controller.snapshot();
   const saving = snapshot.status === "saving";
+  const presentation = presentDrawingState({
+    status: snapshot.status,
+    errorCode: snapshot.errorCode || "",
+  });
   for (const [name, button] of [["pen", elements.pen], ["marker", elements.marker], ["eraser", elements.eraser]]) {
     button.setAttribute("aria-pressed", String(snapshot.tool === name));
     button.disabled = saving;
@@ -333,7 +357,8 @@ function renderController() {
   elements.canvas.setAttribute("aria-disabled", String(saving));
   elements.save.setAttribute("aria-label", snapshot.errorCode === "KANJI_SAVE_FAILED" ? "Retry save drawing" : "Save drawing");
   elements.save.title = elements.save.getAttribute("aria-label");
-  elements.status.textContent = statusText(snapshot);
+  elements.status.textContent = visualStatus(snapshot, presentation);
+  announceDrawing(presentation);
   elements.discardConfirmation.hidden = snapshot.status !== "confirm-discard";
   renderCanvas();
 }
@@ -387,7 +412,8 @@ function clearPointerSession() {
   const pointerId = activePointerId;
   try {
     if (pointerId !== null && pointerCaptureActive) elements.canvas.releasePointerCapture(pointerId);
-  } catch { /* pointer capture may already be released */
+  } catch {
+    // Pointer capture may already be released.
   } finally {
     activePointerId = null;
     pointerCaptureActive = false;
@@ -417,7 +443,11 @@ function beginPointerStroke(event) {
   activePointerId = event.pointerId;
   strokeStartedAt = event.timeStamp;
   const point = pointFromPointer(event, true);
-  liveStroke = { tool: snapshot.tool, width: KANJI_INK_WIDTHS[snapshot.tool] ?? KANJI_INK_WIDTHS.pen, points: [point] };
+  liveStroke = {
+    tool: snapshot.tool,
+    width: KANJI_INK_WIDTHS[snapshot.tool] ?? KANJI_INK_WIDTHS.pen,
+    points: [point],
+  };
   try {
     controller.beginGesture(point);
     try {
@@ -466,6 +496,9 @@ function closeDialogCleanly() {
   dialogNoteId = null;
   clearPointerSession();
   pointerLimitMessage = "";
+  elements.status.textContent = "";
+  elements.announcement.textContent = "";
+  lastDrawingAnnouncementKey = "";
   restoreDialogFocus();
 }
 
@@ -497,6 +530,7 @@ async function openDialog(entry = null, opener = document.activeElement) {
   controller = kanjiInkApplication.createEntryController(entry);
   elements.title.textContent = entry ? "Edit Kanji drawing" : "Draw Kanji";
   elements.discardConfirmation.hidden = true;
+  lastDrawingAnnouncementKey = "";
   dialog.showModal();
   requestAnimationFrame(() => {
     renderController();
@@ -525,7 +559,9 @@ async function saveEntry() {
       if (refreshedEditButton instanceof HTMLElement) dialogOpener = refreshedEditButton;
     }
     closeDialogCleanly();
-  } catch { renderController(); }
+  } catch {
+    renderController();
+  }
 }
 
 function detachSupplementaryRegion() {
@@ -571,6 +607,17 @@ function restoreEntryFocus(noteId) {
   if (control instanceof HTMLElement) control.focus();
 }
 
+function announceRegion(message) {
+  if (!message) {
+    supplementary.announcement.textContent = "";
+    lastRegionAnnouncementKey = "";
+    return;
+  }
+  if (message === lastRegionAnnouncementKey) return;
+  lastRegionAnnouncementKey = message;
+  supplementary.announcement.textContent = message;
+}
+
 function makeEntryCard(entry) {
   const legacy = entry.schemaVersion === 1;
   const label = legacy ? entry.character : "Kanji drawing";
@@ -614,10 +661,10 @@ function makeEntryCard(entry) {
       const deleted = await kanjiInkApplication.deleteEntry(entry.id);
       if (deleted) lastDeletedEntry = deleted;
       projectionError = "";
+      announceRegion("");
       await synchronizeActiveNote();
-      supplementary.undo.focus();
     } catch {
-      projectionError = "Delete failed. The saved drawing is unchanged.";
+      projectionError = "Drawing couldn't be deleted. The saved drawing is unchanged. Try again.";
       pendingEntryFocus = { noteId: activeNoteId(), target: entry.id };
       await synchronizeActiveNote();
     }
@@ -637,13 +684,16 @@ async function synchronizeActiveNote() {
     visibleEntryNoteId = null;
     visibleEntryCount = PRIMARY_VISIBLE_ENTRIES;
     projectionError = "";
+    announceRegion("");
     return detachSupplementaryRegion();
   }
   const result = await kanjiInkApplication.loadNoteContext(noteId);
   if (viewDestroyed) return;
   if (sequence !== syncSequence || noteId !== activeNoteId()) return;
   const hasRecovery = lastDeletedEntry?.noteId === noteId;
-  if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) return detachSupplementaryRegion();
+  if (result.entries.length === 0 && result.invalidCount === 0 && !hasRecovery) {
+    return detachSupplementaryRegion();
+  }
   if (!supplementary.region.isConnected) drawingHost.append(supplementary.region);
   drawingHost.hidden = false;
   const sortedEntries = newestFirstEntries(result.entries);
@@ -653,10 +703,17 @@ async function synchronizeActiveNote() {
   supplementary.count.textContent = `${result.entries.length} entr${result.entries.length === 1 ? "y" : "ies"}`;
   const messages = [];
   supplementary.loadMore.hidden = visibleEntries.length >= sortedEntries.length;
-  if (!supplementary.loadMore.hidden) messages.push(`Showing newest ${visibleEntries.length} of ${sortedEntries.length} entries.`);
-  if (result.invalidCount > 0) messages.push(`${result.invalidCount} invalid stored entr${result.invalidCount === 1 ? "y was" : "ies were"} isolated.`);
+  if (!supplementary.loadMore.hidden) {
+    messages.push(`Showing newest ${visibleEntries.length} of ${sortedEntries.length} entries.`);
+  }
+  if (result.invalidCount > 0) {
+    messages.push(`${result.invalidCount} invalid stored entr${result.invalidCount === 1 ? "y was" : "ies were"} isolated.`);
+  }
   if (projectionError) messages.push(projectionError);
   supplementary.status.textContent = messages.join(" ");
+  if (projectionError) announceRegion(projectionError);
+  else if (result.invalidCount > 0) announceRegion("Some saved drawing data could not be displayed.");
+  else announceRegion("");
   supplementary.recovery.hidden = !hasRecovery;
   restoreEntryFocus(noteId);
 }
@@ -664,7 +721,10 @@ async function synchronizeActiveNote() {
 function scheduleSynchronization() {
   if (viewDestroyed || syncScheduled) return;
   syncScheduled = true;
-  queueMicrotask(() => { syncScheduled = false; void synchronizeActiveNote(); });
+  queueMicrotask(() => {
+    syncScheduled = false;
+    void synchronizeActiveNote();
+  });
 }
 
 supplementary.undo.addEventListener("click", async () => {
@@ -673,6 +733,7 @@ supplementary.undo.addEventListener("click", async () => {
   await kanjiInkApplication.restoreEntry(restoredEntry);
   lastDeletedEntry = null;
   projectionError = "";
+  announceRegion("");
   pendingEntryFocus = { noteId: restoredEntry.noteId, target: restoredEntry.id };
   await synchronizeActiveNote();
 });
@@ -689,49 +750,98 @@ elements.canvas.addEventListener("pointerup", finishPointerStroke);
 elements.canvas.addEventListener("pointercancel", finishPointerStroke);
 elements.canvas.addEventListener("lostpointercapture", finishPointerStroke);
 for (const [tool, button] of [["pen", elements.pen], ["marker", elements.marker], ["eraser", elements.eraser]]) {
-  button.addEventListener("click", () => { pointerLimitMessage = ""; controller?.selectTool(tool); renderController(); });
+  button.addEventListener("click", () => {
+    pointerLimitMessage = "";
+    controller?.selectTool(tool);
+    renderController();
+  });
 }
-elements.undo.addEventListener("click", () => { pointerLimitMessage = ""; controller?.undo(); renderController(); });
-elements.redo.addEventListener("click", () => { pointerLimitMessage = ""; controller?.redo(); renderController(); });
-elements.clear.addEventListener("click", () => { pointerLimitMessage = ""; controller?.clear(); renderController(); });
+elements.undo.addEventListener("click", () => {
+  pointerLimitMessage = "";
+  controller?.undo();
+  renderController();
+});
+elements.redo.addEventListener("click", () => {
+  pointerLimitMessage = "";
+  controller?.redo();
+  renderController();
+});
+elements.clear.addEventListener("click", () => {
+  pointerLimitMessage = "";
+  controller?.clear();
+  renderController();
+});
 elements.save.addEventListener("click", () => void saveEntry());
 elements.close.addEventListener("click", requestDialogClose);
-elements.keepDrawing.addEventListener("click", () => { controller?.keepDrawing(); renderController(); elements.canvas.focus(); });
-elements.discardDrawing.addEventListener("click", () => { controller?.discardDraft(); closeDialogCleanly(); });
-dialog.addEventListener("cancel", (event) => { event.preventDefault(); requestDialogClose(); });
-dialog.addEventListener("click", (event) => { if (event.target === dialog) requestDialogClose(); });
+elements.keepDrawing.addEventListener("click", () => {
+  controller?.keepDrawing();
+  renderController();
+  elements.canvas.focus();
+});
+elements.discardDrawing.addEventListener("click", () => {
+  controller?.discardDraft();
+  closeDialogCleanly();
+});
+dialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  requestDialogClose();
+});
+dialog.addEventListener("click", (event) => {
+  if (event.target === dialog) requestDialogClose();
+});
 dialog.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") { event.preventDefault(); requestDialogClose(); }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    requestDialogClose();
+  }
   event.stopPropagation();
 }, true);
-window.addEventListener("resize", () => { if (dialog.open) renderCanvas(); });
+window.addEventListener("resize", () => {
+  if (dialog.open) renderCanvas();
+});
 
 const noteObserver = new MutationObserver(scheduleSynchronization);
-noteObserver.observe(document.getElementById("noteList"), { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current"] });
+noteObserver.observe(document.getElementById("noteList"), {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ["aria-current"],
+});
 const saveObserver = new MutationObserver(scheduleSynchronization);
-saveObserver.observe(document.getElementById("saveState"), { childList: true, subtree: true, characterData: true });
+saveObserver.observe(document.getElementById("saveState"), {
+  childList: true,
+  subtree: true,
+  characterData: true,
+});
 
 const unregisterCommands = [
   commandRuntime.registry.register({
     id: "notes.kanji-ink",
     title: "Add drawing",
     description: "Draw a saved Kanji grid and attach it to the active note",
-    shortcuts: [], scope: "shell",
+    shortcuts: [],
+    scope: "shell",
     isAvailable: () => Boolean(activeNoteId()),
     unavailableReason: () => "No active note is available",
     run: (context) => openDialog(null, context.opener),
   }),
   commandRuntime.registry.register({
-    id: "export.kanji-json", title: "Export Kanji data as JSON",
+    id: "export.kanji-json",
+    title: "Export Kanji data as JSON",
     description: "Download lossless note-linked handwriting records",
-    shortcuts: [], scope: "shell", isAvailable: () => true,
+    shortcuts: [],
+    scope: "shell",
+    isAvailable: () => true,
     unavailableReason: () => "Kanji export is unavailable",
     run: async () => triggerDownload(await kanjiInkApplication.exportJson()),
   }),
   commandRuntime.registry.register({
-    id: "export.kanji-markdown", title: "Export Kanji data as Markdown",
+    id: "export.kanji-markdown",
+    title: "Export Kanji data as Markdown",
     description: "Download grid-backed handwriting previews",
-    shortcuts: [], scope: "shell", isAvailable: () => true,
+    shortcuts: [],
+    scope: "shell",
+    isAvailable: () => true,
     unavailableReason: () => "Kanji export is unavailable",
     run: async () => triggerDownload(await kanjiInkApplication.exportMarkdown()),
   }),

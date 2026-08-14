@@ -30,12 +30,22 @@ import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
+import {
+  presentApplicationRecoveryState,
+  presentBoardState,
+  presentDerivedState,
+  presentNoteState,
+} from "./ui/statePresentation.js";
 
 const AUTOSAVE_DEBOUNCE = 350;
 
 const els = {
   noteCount: document.getElementById("noteCount"),
   saveState: document.getElementById("saveState"),
+  retryNoteSaveButton: document.getElementById("retryNoteSaveButton"),
+  noteStatusAnnouncement: document.getElementById("noteStatusAnnouncement"),
+  boardStatusRegion: document.getElementById("boardStatusRegion"),
+  boardStatusMessage: document.getElementById("boardStatusMessage"),
   searchInput: document.getElementById("searchInput"),
   newNoteButton: document.getElementById("newNoteButton"),
   newJapaneseNoteButton: document.getElementById("newJapaneseNoteButton"),
@@ -54,6 +64,13 @@ const els = {
   commandInput: document.getElementById("commandInput"),
   commandList: document.getElementById("commandList"),
   reviewDialog: document.getElementById("reviewDialog"),
+  applicationRecovery: document.getElementById("applicationRecovery"),
+  applicationRecoveryMessage: document.getElementById("applicationRecoveryMessage"),
+  retryApplicationStorageButton: document.getElementById("retryApplicationStorageButton"),
+  resetApplicationDataButton: document.getElementById("resetApplicationDataButton"),
+  applicationResetDialog: document.getElementById("applicationResetDialog"),
+  cancelApplicationResetButton: document.getElementById("cancelApplicationResetButton"),
+  confirmApplicationResetButton: document.getElementById("confirmApplicationResetButton"),
 };
 
 const store = createStore({
@@ -64,6 +81,8 @@ const store = createStore({
   query: "",
   dirty: false,
   saveMessage: "Ready",
+  savePhase: "idle",
+  lastPersistenceFailure: "",
   emptyLabel: "Ready",
   backlinksMap: new Map(),
   saveRevision: 0,
@@ -89,6 +108,12 @@ let reconcileInFlight = false;
 let compositionActive = false;
 let palette = null;
 let noteEditorOverlay = null;
+let japaneseApp = null;
+let lastNoteAnnouncementKey = "";
+let applicationStorageUnavailable = false;
+let applicationResetFailed = false;
+let resetOpener = null;
+let applicationStartInFlight = null;
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat("en", {
@@ -130,24 +155,55 @@ function runAction(action) {
   return result;
 }
 
+function presentationState(tone) {
+  if (tone === "danger") return "error";
+  return tone || "";
+}
+
+function renderNoteAnnouncement(presentation) {
+  if (!els.noteStatusAnnouncement) return;
+  if (presentation.announce === "off" || !presentation.message) {
+    els.noteStatusAnnouncement.textContent = "";
+    lastNoteAnnouncementKey = "";
+    return;
+  }
+  const key = `${presentation.kind}:${presentation.message}`;
+  if (key === lastNoteAnnouncementKey) return;
+  lastNoteAnnouncementKey = key;
+  els.noteStatusAnnouncement.setAttribute(
+    "aria-live",
+    presentation.announce === "assertive" ? "assertive" : "polite",
+  );
+  els.noteStatusAnnouncement.textContent = presentation.message;
+}
+
 function renderTopline() {
   const state = store.getState();
   const count = state.notes.length;
   els.noteCount.textContent = `${count} note${count === 1 ? "" : "s"}`;
   els.activeNoteLabel.textContent = state.emptyLabel || "Ready";
-  const storageUnavailable = state.saveMessage === "Storage unavailable"
-    || state.saveMessage === "Safe mode: storage unavailable";
-  const savePresentation = storageUnavailable
-    ? { label: state.saveMessage, state: "error" }
-    : state.dirty
-      ? { label: "Unsaved", state: "warning" }
-      : state.saveMessage === "Saved locally"
-      ? { label: "Saved", state: "success" }
-      : state.saveMessage === "Saved locally; search index unavailable"
-        ? { label: "Saved · Search unavailable", state: "warning" }
-        : { label: state.saveMessage, state: "" };
-  els.saveState.textContent = savePresentation.label;
-  els.saveState.dataset.state = savePresentation.state;
+
+  const derivedUnavailable = state.saveMessage === "Saved locally; search index unavailable"
+    && !state.dirty
+    && state.savePhase === "idle";
+  const presentation = derivedUnavailable && !state.lastPersistenceFailure
+    ? presentDerivedState({ searchUnavailable: true })
+    : presentNoteState({
+        dirty: state.dirty,
+        phase: state.savePhase,
+        failureKind: state.lastPersistenceFailure,
+      });
+
+  els.saveState.textContent = presentation.message;
+  els.saveState.dataset.state = presentationState(presentation.tone);
+  els.retryNoteSaveButton.hidden = presentation.actionId !== "retry-save";
+  renderNoteAnnouncement(presentation);
+
+  const createFailure = state.lastPersistenceFailure === "create"
+    ? presentNoteState({ dirty: false, phase: "idle", failureKind: "create" })
+    : null;
+  els.boardStatusRegion.hidden = !createFailure;
+  els.boardStatusMessage.textContent = createFailure?.message || "";
 }
 
 function renderEditor() {
@@ -181,9 +237,7 @@ function renderBacklinks() {
   const byId = noteMap(state.notes);
   for (const id of ids) {
     const note = byId.get(id);
-    if (!note) {
-      continue;
-    }
+    if (!note) continue;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "backlink-item";
@@ -195,6 +249,16 @@ function renderBacklinks() {
   }
 }
 
+function boardPresentation(state) {
+  const japanese = state.workspace === "japanese";
+  const japaneseIds = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []);
+  const total = japanese ? japaneseIds.size : state.notes.length;
+  const visible = japanese
+    ? state.filteredIds.filter((id) => japaneseIds.has(id)).length
+    : state.filteredIds.length;
+  return presentBoardState({ total, visible, japanese });
+}
+
 const listView = createListView({
   container: els.noteList,
   onSelect(id, opener) {
@@ -204,9 +268,22 @@ const listView = createListView({
       }
     });
   },
-  onDelete(id) {
-    if (activeNote()?.id === id) {
-      runAction(() => executeCommand("notes.delete", { source: "list-control" }));
+  onEmptyAction(actionId, opener) {
+    if (actionId === "create-note") {
+      runAction(() => executeCommand("notes.create", {
+        source: "empty-state",
+        target: opener,
+        opener,
+      }));
+      return;
+    }
+    if (actionId === "clear-search") {
+      els.searchInput.value = "";
+      runAction(() => refreshSearch({ query: "" }));
+      return;
+    }
+    if (actionId === "create-japanese-note") {
+      japaneseApp?.openCreateMenu(opener);
     }
   },
   formatDate,
@@ -220,6 +297,7 @@ function renderList() {
     orderedIds: state.filteredIds,
     activeId: state.activeId,
     query: state.query,
+    emptyPresentation: boardPresentation(state),
   });
   updateMetrics({ renderMs: performance.now() - startedAt });
 }
@@ -369,10 +447,17 @@ const noteLifecycle = createNoteLifecycle({
   },
 });
 
+function classifyFailureKind(op, fallback = "edit") {
+  const value = String(op || fallback);
+  if (value.includes("create")) return "create";
+  if (value.includes("archive")) return "archive";
+  if (value.includes("pin")) return "pin";
+  if (value.includes("delete") || value.includes("remove")) return "delete";
+  return "edit";
+}
+
 function openNoteEditor({ opener = document.activeElement, mode = "edit" } = {}) {
-  if (!activeNote() || !noteEditorOverlay) {
-    return false;
-  }
+  if (!activeNote() || !noteEditorOverlay) return false;
   noteEditorOverlay.open({ opener, mode });
   return true;
 }
@@ -397,17 +482,20 @@ function markDirtyAndQueueSave() {
 
 async function applyUpsertNote(note, options = {}) {
   const { activeId = note.id, historyOp = null, revision = null } = options;
-  if (revision !== null && store.getState().saveRevision !== revision) {
-    return;
-  }
+  if (revision !== null && store.getState().saveRevision !== revision) return;
 
   const startedAt = performance.now();
   const previousNote = store.getState().notes.find((item) => item.id === note.id) ?? null;
   try {
-    await noteLifecycle.upsert(note, { activeId, revision, previousNote });
-    if (historyOp) {
-      history.record({ ...historyOp, timestamp: now() });
-    }
+    const outcome = await noteLifecycle.upsert(note, { activeId, revision, previousNote });
+    store.setState({ lastPersistenceFailure: "" });
+    if (historyOp) history.record({ ...historyOp, timestamp: now() });
+    return outcome;
+  } catch (error) {
+    store.setState({
+      lastPersistenceFailure: classifyFailureKind(historyOp?.op, "edit"),
+    });
+    throw error;
   } finally {
     renderTopline();
     updateMetrics({ autosaveMs: performance.now() - startedAt });
@@ -416,16 +504,19 @@ async function applyUpsertNote(note, options = {}) {
 
 async function applyRemoveNote(id, options = {}) {
   const { preferredActiveId = null, historyOp = null, revision = null } = options;
-  if (revision !== null && store.getState().saveRevision !== revision) {
-    return;
-  }
+  if (revision !== null && store.getState().saveRevision !== revision) return;
 
   const startedAt = performance.now();
   try {
-    await noteLifecycle.remove(id, { preferredActiveId, revision });
-    if (historyOp) {
-      history.record({ ...historyOp, timestamp: now() });
-    }
+    const outcome = await noteLifecycle.remove(id, { preferredActiveId, revision });
+    store.setState({ lastPersistenceFailure: "" });
+    if (historyOp) history.record({ ...historyOp, timestamp: now() });
+    return outcome;
+  } catch (error) {
+    store.setState({
+      lastPersistenceFailure: classifyFailureKind(historyOp?.op, "delete"),
+    });
+    throw error;
   } finally {
     renderTopline();
     updateMetrics({ autosaveMs: performance.now() - startedAt });
@@ -435,13 +526,11 @@ async function applyRemoveNote(id, options = {}) {
 async function saveCurrentNote() {
   const state = store.getState();
   const note = activeNote(state);
-  if (!note || !state.dirty) {
-    return;
-  }
+  if (!note || !state.dirty) return;
 
   const draft = readEditorDraft();
   if (note.title === draft.title && note.content === draft.content) {
-    store.setState({ dirty: false });
+    store.setState({ dirty: false, lastPersistenceFailure: "" });
     renderTopline();
     return;
   }
@@ -450,32 +539,35 @@ async function saveCurrentNote() {
   const patch = createNotePatch(note, next);
   const inversePatch = invertNotePatch(patch);
   const revision = state.saveRevision;
-  await commandStack.execute({
-    do: async () => {
-      const current = store.getState().notes.find((item) => item.id === note.id);
-      if (!current) {
-        return;
-      }
-      const patched = normalizeNote({ ...applyNotePatch(current, patch), id: current.id });
-      await applyUpsertNote(patched, {
-        activeId: patched.id,
-        revision,
-        historyOp: { op: "edit", noteId: patched.id, version: patched.version, patch },
-      });
-    },
-    undo: async () => {
-      const current = store.getState().notes.find((item) => item.id === note.id);
-      if (!current) {
-        return;
-      }
-      const restored = normalizeNote({ ...applyNotePatch(current, inversePatch), id: current.id });
-      await applyUpsertNote(restored, {
-        activeId: restored.id,
-        revision: bumpSaveRevision(),
-        historyOp: { op: "undo-edit", noteId: restored.id, version: restored.version, patch: inversePatch },
-      });
-    },
-  });
+  store.setState({ savePhase: "saving", lastPersistenceFailure: "" });
+  renderTopline();
+  try {
+    await commandStack.execute({
+      do: async () => {
+        const current = store.getState().notes.find((item) => item.id === note.id);
+        if (!current) return;
+        const patched = normalizeNote({ ...applyNotePatch(current, patch), id: current.id });
+        await applyUpsertNote(patched, {
+          activeId: patched.id,
+          revision,
+          historyOp: { op: "edit", noteId: patched.id, version: patched.version, patch },
+        });
+      },
+      undo: async () => {
+        const current = store.getState().notes.find((item) => item.id === note.id);
+        if (!current) return;
+        const restored = normalizeNote({ ...applyNotePatch(current, inversePatch), id: current.id });
+        await applyUpsertNote(restored, {
+          activeId: restored.id,
+          revision: bumpSaveRevision(),
+          historyOp: { op: "undo-edit", noteId: restored.id, version: restored.version, patch: inversePatch },
+        });
+      },
+    });
+  } finally {
+    store.setState({ savePhase: "idle" });
+    renderTopline();
+  }
 
   if (next.version % 10 === 0) {
     const notes = store.getState().notes;
@@ -501,10 +593,7 @@ noteEditorOverlay = createNoteEditorOverlay({
 });
 
 async function reconcileCurrentView() {
-  if (reconcileInFlight) {
-    return false;
-  }
-
+  if (reconcileInFlight) return false;
   const restoreFocus = document.activeElement === els.refreshButton;
   reconcileInFlight = true;
   els.refreshButton.disabled = true;
@@ -519,9 +608,7 @@ async function reconcileCurrentView() {
     els.refreshButton.removeAttribute("aria-busy");
     const focusWasLost = document.activeElement === document.body
       || document.activeElement === null;
-    if (restoreFocus && focusWasLost) {
-      els.refreshButton.focus();
-    }
+    if (restoreFocus && focusWasLost) els.refreshButton.focus();
   }
 }
 
@@ -549,6 +636,8 @@ noteWorkspace = createNoteWorkspaceController({
 
 async function createNote(seed = {}, options = {}) {
   await autosave.flush();
+  store.setState({ lastPersistenceFailure: "" });
+  renderTopline();
   const note = createEmptyNote(seed);
   const state = store.getState();
   const previousActiveId = state.activeId;
@@ -579,11 +668,22 @@ async function createNote(seed = {}, options = {}) {
 async function deleteActiveNote() {
   await autosave.flush();
   const note = activeNote();
-  if (!note) {
-    return;
-  }
-  if (enrolledDeleteHandler && await enrolledDeleteHandler(note.id)) {
-    return;
+  if (!note) return;
+  store.setState({ lastPersistenceFailure: "" });
+  renderTopline();
+
+  if (enrolledDeleteHandler) {
+    try {
+      if (await enrolledDeleteHandler(note.id)) {
+        store.setState({ lastPersistenceFailure: "" });
+        renderTopline();
+        return;
+      }
+    } catch (error) {
+      store.setState({ lastPersistenceFailure: "delete" });
+      renderTopline();
+      throw error;
+    }
   }
 
   const state = store.getState();
@@ -647,17 +747,32 @@ function exportJson() {
   triggerDownload(blob, "myNote-export.json");
 }
 
-async function resetLocalData() {
-  const shouldReset = window.confirm("This will clear local note data on this device. Continue?");
-  if (!shouldReset) {
-    return;
-  }
+function openResetConfirmation(opener = document.activeElement) {
+  resetOpener = opener instanceof HTMLElement ? opener : els.resetApplicationDataButton;
+  if (!els.applicationResetDialog.open) els.applicationResetDialog.showModal();
+  queueMicrotask(() => els.cancelApplicationResetButton.focus());
+  return true;
+}
+
+function closeResetConfirmation() {
+  if (els.applicationResetDialog.open) els.applicationResetDialog.close();
+  if (resetOpener instanceof HTMLElement && resetOpener.isConnected) resetOpener.focus();
+}
+
+async function performResetLocalData() {
+  els.confirmApplicationResetButton.disabled = true;
+  els.confirmApplicationResetButton.setAttribute("aria-busy", "true");
   try {
     await resetDatabase();
     window.location.reload();
   } catch {
-    store.setState({ saveMessage: "Recovery reset failed" });
-    renderTopline();
+    applicationResetFailed = true;
+    if (els.applicationResetDialog.open) els.applicationResetDialog.close();
+    renderApplicationRecovery();
+    els.resetApplicationDataButton.focus();
+  } finally {
+    els.confirmApplicationResetButton.disabled = false;
+    els.confirmApplicationResetButton.removeAttribute("aria-busy");
   }
 }
 
@@ -685,9 +800,9 @@ async function openDailyNote() {
 async function mutateActiveNote(mutator, opName) {
   await autosave.flush();
   const note = activeNote();
-  if (!note) {
-    return;
-  }
+  if (!note) return;
+  store.setState({ lastPersistenceFailure: "" });
+  renderTopline();
   const next = normalizeNote({ ...mutator(note), updatedAt: now(), version: note.version + 1 });
   const patch = createNotePatch(note, next);
   const inversePatch = invertNotePatch(patch);
@@ -695,9 +810,7 @@ async function mutateActiveNote(mutator, opName) {
   await commandStack.execute({
     do: async () => {
       const current = store.getState().notes.find((item) => item.id === note.id);
-      if (!current) {
-        return;
-      }
+      if (!current) return;
       const patched = normalizeNote({ ...applyNotePatch(current, patch), id: current.id });
       await applyUpsertNote(patched, {
         activeId: patched.id,
@@ -707,9 +820,7 @@ async function mutateActiveNote(mutator, opName) {
     },
     undo: async () => {
       const current = store.getState().notes.find((item) => item.id === note.id);
-      if (!current) {
-        return;
-      }
+      if (!current) return;
       const restored = normalizeNote({ ...applyNotePatch(current, inversePatch), id: current.id });
       await applyUpsertNote(restored, {
         activeId: restored.id,
@@ -722,44 +833,26 @@ async function mutateActiveNote(mutator, opName) {
 
 async function switchRecentNote() {
   const state = store.getState();
-  if (state.recentIds.length >= 2) {
-    await setActiveNote(state.recentIds[1]);
-  }
+  if (state.recentIds.length >= 2) await setActiveNote(state.recentIds[1]);
 }
 
 async function undoLastCommand() {
   await autosave.flush();
-  if (await commandStack.undo()) {
-    await refreshSearch();
-  }
+  if (await commandStack.undo()) await refreshSearch();
 }
 
 async function redoLastCommand() {
   await autosave.flush();
-  if (await commandStack.redo()) {
-    await refreshSearch();
-  }
+  if (await commandStack.redo()) await refreshSearch();
 }
 
 function targetKind(target) {
-  if (!(target instanceof HTMLElement)) {
-    return "other";
-  }
-  if (target.isContentEditable) {
-    return "contenteditable";
-  }
-  if (target.matches("textarea")) {
-    return "textarea";
-  }
-  if (target.matches("select")) {
-    return "select";
-  }
-  if (target.matches("input")) {
-    return "input";
-  }
-  if (target.matches("button")) {
-    return "button";
-  }
+  if (!(target instanceof HTMLElement)) return "other";
+  if (target.isContentEditable) return "contenteditable";
+  if (target.matches("textarea")) return "textarea";
+  if (target.matches("select")) return "select";
+  if (target.matches("input")) return "input";
+  if (target.matches("button")) return "button";
   return "other";
 }
 
@@ -992,9 +1085,9 @@ const unregisterApplicationCommands = [
   }),
   registerCommand({
     id: "recovery.reset",
-    title: "Safe mode: reset local database",
+    title: "Reset local database",
     description: "Clear local note data after explicit confirmation",
-    run: () => resetLocalData(),
+    run: (context) => openResetConfirmation(context.opener),
   }),
 ];
 
@@ -1014,6 +1107,29 @@ els.saveButton.addEventListener("click", () => {
     target: els.contentInput,
     activeScope: "editor",
   }));
+});
+els.retryNoteSaveButton.addEventListener("click", () => {
+  store.setState({ lastPersistenceFailure: "" });
+  renderTopline();
+  runAction(() => executeCommand("editor.save", {
+    source: "recovery",
+    target: els.contentInput,
+    activeScope: "editor",
+  }));
+});
+els.retryApplicationStorageButton.addEventListener("click", () => {
+  runAction(() => startApplication());
+});
+els.resetApplicationDataButton.addEventListener("click", () => {
+  openResetConfirmation(els.resetApplicationDataButton);
+});
+els.cancelApplicationResetButton.addEventListener("click", closeResetConfirmation);
+els.confirmApplicationResetButton.addEventListener("click", () => {
+  runAction(() => performResetLocalData());
+});
+els.applicationResetDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeResetConfirmation();
 });
 
 for (const field of [els.titleInput, els.contentInput]) {
@@ -1067,12 +1183,8 @@ window.addEventListener("keydown", (event) => {
     commandContext({ target: event.target, source: "shortcut" }),
   );
   const asynchronous = outcome && typeof outcome.then === "function";
-  if (asynchronous || outcome.handled) {
-    event.preventDefault();
-  }
-  if (asynchronous) {
-    outcome.catch(() => undefined);
-  }
+  if (asynchronous || outcome.handled) event.preventDefault();
+  if (asynchronous) outcome.catch(() => undefined);
 });
 
 window.addEventListener("beforeunload", (event) => {
@@ -1091,9 +1203,7 @@ document.addEventListener("visibilitychange", () => {
 if (typeof window !== "undefined") {
   window.setInterval(() => {
     const memory = performance.memory;
-    if (memory) {
-      updateMetrics({ memoryMb: memory.usedJSHeapSize / (1024 * 1024) });
-    }
+    if (memory) updateMetrics({ memoryMb: memory.usedJSHeapSize / (1024 * 1024) });
   }, 6000);
 }
 
@@ -1103,13 +1213,11 @@ function registerEnrolledDelete(handler) {
   }
   enrolledDeleteHandler = handler;
   return () => {
-    if (enrolledDeleteHandler === handler) {
-      enrolledDeleteHandler = null;
-    }
+    if (enrolledDeleteHandler === handler) enrolledDeleteHandler = null;
   };
 }
 
-createJapaneseApp({
+japaneseApp = createJapaneseApp({
   runtime: {
     store,
     commandStack,
@@ -1132,45 +1240,89 @@ async function bootstrap() {
     .map(normalizeNote)
     .filter(Boolean)
     .sort(sortByUpdatedAtDesc);
+  const previousDb = store.getState().db;
+  if (previousDb && previousDb !== db && typeof previousDb.close === "function") {
+    previousDb.close();
+  }
   store.setState({
     db,
     notes: loaded,
     activeId: loaded[0]?.id ?? null,
+    filteredIds: loaded.map((note) => note.id),
     saveMessage: "Saved locally",
+    savePhase: "idle",
+    lastPersistenceFailure: "",
     recentIds: loaded[0]?.id ? [loaded[0].id] : [],
   });
 
-  await searchClient.rebuild(loaded);
+  let searchUnavailable = false;
+  try {
+    await searchClient.rebuild(loaded);
+  } catch {
+    searchUnavailable = true;
+    store.setState({ saveMessage: "Saved locally; search index unavailable" });
+  }
   backlinkIndex.rebuild(loaded);
   setBacklinksFromIndex();
-  if (loaded.length === 0) {
-    await createNote({ title: "Untitled", content: "" }, { openEditor: false });
+
+  if (searchUnavailable) {
+    store.setState({
+      filteredIds: loaded.map((note) => note.id),
+      activeId: loaded[0]?.id ?? null,
+      emptyLabel: "No notes",
+    });
+    renderAll();
     return;
   }
-  await refreshSearch({ emptyLabel: "No notes" });
+
+  await refreshSearch({
+    preferredId: loaded[0]?.id ?? null,
+    emptyLabel: "No notes",
+  });
 }
 
-bootstrap().catch(() => {
-  store.setState({ saveMessage: "Safe mode: storage unavailable" });
-  renderTopline();
-  window.setTimeout(() => {
-    const shouldRecover = window.confirm(
-      "myNote failed to initialize local storage. Do you want to reset local database and restart in safe mode?"
-    );
-    if (shouldRecover) {
-      runAction(() => resetLocalData());
+function renderApplicationRecovery() {
+  const presentation = presentApplicationRecoveryState({
+    storageUnavailable: applicationStorageUnavailable,
+    resetConfirmationOpen: els.applicationResetDialog.open,
+    resetFailed: applicationResetFailed,
+  });
+  const visible = presentation.kind !== "ready" && presentation.kind !== "reset-confirmation";
+  els.applicationRecovery.hidden = !visible;
+  els.applicationRecoveryMessage.textContent = visible ? presentation.message : "";
+}
+
+async function startApplication() {
+  if (applicationStartInFlight) return applicationStartInFlight;
+  els.retryApplicationStorageButton.disabled = true;
+  els.retryApplicationStorageButton.setAttribute("aria-busy", "true");
+  applicationStartInFlight = (async () => {
+    try {
+      await bootstrap();
+      applicationStorageUnavailable = false;
+      applicationResetFailed = false;
+    } catch {
+      applicationStorageUnavailable = true;
+    } finally {
+      renderApplicationRecovery();
+      els.retryApplicationStorageButton.disabled = false;
+      els.retryApplicationStorageButton.removeAttribute("aria-busy");
+      applicationStartInFlight = null;
     }
-  }, 50);
-});
+  })();
+  return applicationStartInFlight;
+}
+
+renderApplicationRecovery();
+runAction(() => startApplication());
 
 export const commandRuntime = Object.freeze({
   registry: commandRegistry,
   execute: executeCommand,
   snapshot: () => commandRegistry.snapshot(commandContext()),
   destroy() {
-    for (const unregister of unregisterApplicationCommands) {
-      unregister();
-    }
+    for (const unregister of unregisterApplicationCommands) unregister();
+    japaneseApp?.destroy();
     palette.destroy();
     noteEditorOverlay.destroy();
     commandRegistry.destroy();
