@@ -1,55 +1,61 @@
 # Issue #72 State and Recovery UX Implementation Plan
 
-> **For implementation workers:** Execute this plan task-by-task with TDD. Keep the issue branch bounded to #72, stop on architecture conflicts, and wait for owner review after opening the pull request.
+> **For implementation workers:** Execute the tasks in order with TDD. Keep the branch bounded to #72, stop on architecture conflicts, and wait for owner review after the pull request is opened.
 
-**Goal:** Deliver the approved #72 state/recovery UX so healthy success stays quiet, failures are scoped and actionable, first run is a true empty state, and existing note/Japanese/drawing owners remain authoritative.
+**Goal:** Implement the approved #72 state/recovery UX so healthy success is quiet, failures are local and actionable, first run remains truly empty, and existing note/Japanese/drawing owners remain authoritative.
 
-**Architecture:** Add one pure `ui/statePresentation.js` mapper over existing owner state. Existing browser adapters render descriptors into their current local surfaces; no new persistence, scheduler, search, drawing, command, notification, or retry owner is introduced. The only intentional canonical behavior change is removing bootstrap's automatic placeholder note so a fresh database remains empty until explicit create intent.
+**Architecture:** Add one pure `ui/statePresentation.js` mapper. Existing browser adapters consume bounded descriptors and render them into existing task-local surfaces. No new persistence, scheduler, search, drawing, command, notification, or retry owner is introduced.
 
-**Tech Stack:** JavaScript ES modules, IndexedDB, Node 22, npm 11, Node test runner, Playwright 1.62, ESLint 10.
+**Tech Stack:** JavaScript ES modules, IndexedDB v3, Node 22, npm 11, Node test runner, Playwright 1.62, ESLint 10.
 
 ## Global Constraints
 
 - Authoritative design: `docs/design/issues/072-state-recovery.md`.
-- Accepted design baseline: `bc748b189bb70a212feefe5d006ece0608727171` on `dev`.
-- Implementation branch: `issue/72-state-recovery`, created from current `dev` after confirming the design commit is an ancestor.
-- Pull-request target: `dev`.
+- Accepted design commit: `bc748b189bb70a212feefe5d006ece0608727171`.
+- Create `issue/72-state-recovery` from the current `origin/dev` at implementation start.
+- Pull request target: `dev`.
 - Keep #73 blocked.
-- Maximum implementation commits: 8; this plan targets 6 bounded commits.
-- Healthy note save, drawing save, rating success, filter application, note open, and refresh completion produce no success toast.
+- Maximum implementation commits: 8; this plan targets 6 feature commits plus at most 1 final test/docs commit.
 - First run performs zero note writes until explicit create intent.
-- IndexedDB stays version 3; no migration or canonical-record rewrite.
-- No global notification queue, event bus, automatic retry loop, polling, background queue, or production failure-injection flag.
-- Do not modify core persistence/search/scheduler/drawing/history owners unless an accepted RED proves the approved adapter boundary cannot satisfy the contract; if that occurs, stop for architecture review.
-- Supported desktop evidence: 1024×768, 1280×720, 1440×900. Native 200% zoom is PASS only when directly validated in a real browser; otherwise record `UNKNOWN — REQUIRES VALIDATION`.
-- Debug locally. Remote CI is the final gate, not the debugging loop. Use one planned final remote push after the complete local gate is stable. Do not manually rerun unchanged failures.
-- Repository text must remain English-only and free of tool-specific provenance markers.
+- Healthy note save, drawing save, Japanese rating success, filtering, note open, and refresh completion produce no success toast.
+- IndexedDB stays version 3. No migration or canonical-record rewrite.
+- No global notification queue, feedback bus, automatic retry loop, polling, background queue, or production failure-injection switch.
+- Existing command registry remains the only command availability/disabled-reason owner.
+- Existing Kanji controller/application remains the only drawing lifecycle owner.
+- Existing Japanese scheduler/actions remain the only review-transition owner.
+- Do not modify core persistence/search/scheduler/drawing/history owners unless an accepted RED proves the approved adapter boundary cannot satisfy the contract. If that occurs, stop for architecture review before editing those owners.
+- Desktop evidence: 1024×768, 1280×720, 1440×900. Native 200% zoom is PASS only when directly validated in a real browser; otherwise record `UNKNOWN — REQUIRES VALIDATION`.
+- Debug locally. Use one planned final remote push after the complete local gate is stable. Do not manually rerun unchanged CI failures.
+- Repository text remains English-only and free of tool-specific provenance markers.
 
 ---
 
 ## File Map
 
-### New files
+### Create
 
-- `ui/statePresentation.js` — pure state-to-presentation mapping; no DOM, persistence, timers, mutable retained state, or raw error payloads.
-- `tests/unit/state-presentation.test.mjs` — authoritative mapper vocabulary tests.
-- `tests/e2e/state-recovery.spec.mjs` — focused browser owner for #72 state/recovery workflows and test-only failure injection.
+- `ui/statePresentation.js` — pure state-to-presentation vocabulary.
+- `tests/unit/state-presentation.test.mjs` — deterministic mapper contract.
+- `tests/e2e/state-recovery.spec.mjs` — focused browser evidence and test-only failure injection.
 
-### Existing files expected to change
+### Modify as needed
 
-- `package.json` — include the new unit test in the explicit `test:unit` script.
-- `app.js` — render note save/degradation descriptors, remove bootstrap placeholder creation, expose bounded retry/reset recovery intents, and wire empty-board creation.
-- `index.html` — add minimal note-status action/announcement semantics plus application recovery/reset-confirmation regions.
-- `ui/list.js` — distinguish zero-data vs no-match and render an explicit create/clear action without owning application state.
-- `ui/editorChrome.js` — keep deletion recovery bounded; only normalize copy/focus if a failing test requires it.
-- `ui/kanjiInkView.js` — map existing drawing truth to quiet/saving/failure/recovery presentation; preserve direct projection and durable-delete semantics.
-- `japaneseApp.js` — map Japanese availability/review presentation; keep a failed rating on the same item and expose retry through the same rating action.
-- `styles.css`, `editor.css`, `japanese.css` — scoped empty/warning/error/recovery styling only.
-- Existing integration tests — extend current lifecycle tests rather than creating duplicate core owners.
+- `package.json`
+- `app.js`
+- `index.html`
+- `ui/list.js`
+- `ui/editorChrome.js`
+- `ui/kanjiInkView.js`
+- `ui/japanese-filters.js`
+- `japaneseApp.js`
+- `styles.css`
+- `editor.css`
+- `japanese.css`
+- `kanji-ink.css`
+- `tests/integration/note-lifecycle.failure.test.mjs`
+- `tests/integration/japanese-lifecycle.test.mjs`
 
 ### Forbidden by default
-
-Do not modify these files unless an approved test proves a boundary defect and implementation stops for owner review first:
 
 ```text
 core/storage.js
@@ -68,21 +74,46 @@ core/history.js
 
 ---
 
-### Task 1: Pure state-presentation vocabulary
+### Task 1: Pure presentation vocabulary
 
 **Files:**
 - Create: `ui/statePresentation.js`
 - Create: `tests/unit/state-presentation.test.mjs`
 - Modify: `package.json`
 
-**Interfaces:**
-- Produces: `presentBoardState(input)`, `presentNoteSaveState(input)`, `presentDerivedState(input)`, `presentDrawingState(input)`, `presentJapaneseReviewState(input)`, `presentApplicationRecoveryState(input)`.
-- Every function returns a fresh plain descriptor with only bounded presentation fields.
-- No function accepts or returns a raw `Error`, note content, drawing vectors, review payloads, or callbacks.
+**Produces:**
 
-- [ ] **Step 1: Add the failing unit test file and register it in `test:unit`**
+```js
+presentBoardState(input)
+presentNoteState(input)
+presentDerivedState(input)
+presentDrawingState(input)
+presentJapaneseReviewState(input)
+presentApplicationRecoveryState(input)
+```
 
-Start `tests/unit/state-presentation.test.mjs` with deterministic table-driven assertions:
+Every function returns a fresh bounded descriptor containing only:
+
+```js
+{
+  kind,
+  tone,
+  message,
+  announce,
+  persistent,
+  actionId,
+}
+```
+
+No function accepts or returns `Error`, note content, search query text, review payloads, drawing vectors, callbacks, timers, or mutable retained state.
+
+- [ ] **Step 1: Register the new unit file in `package.json`**
+
+Add `tests/unit/state-presentation.test.mjs` exactly once to the explicit `test:unit` command.
+
+- [ ] **Step 2: Write mapper RED tests**
+
+Create `tests/unit/state-presentation.test.mjs` with these core assertions:
 
 ```js
 import test from "node:test";
@@ -93,109 +124,54 @@ import {
   presentDerivedState,
   presentDrawingState,
   presentJapaneseReviewState,
-  presentNoteSaveState,
+  presentNoteState,
 } from "../../ui/statePresentation.js";
 
-test("note save presentation distinguishes dirty, success, failure, and derived degradation", () => {
-  assert.deepEqual(
-    presentNoteSaveState({ dirty: true, phase: "idle", canonicalFailure: false }),
-    {
-      kind: "unsaved",
-      tone: "warning",
-      message: "Unsaved",
-      announce: "off",
-      persistent: false,
-      actionId: null,
-    },
-  );
-
-  assert.deepEqual(
-    presentNoteSaveState({ dirty: false, phase: "idle", canonicalFailure: false }),
-    {
-      kind: "saved",
-      tone: "success",
-      message: "Saved",
-      announce: "off",
-      persistent: false,
-      actionId: null,
-    },
-  );
-
-  assert.deepEqual(
-    presentNoteSaveState({ dirty: true, phase: "idle", canonicalFailure: true }),
-    {
-      kind: "failure",
-      tone: "danger",
-      message: "Save failed. Your draft is preserved.",
-      announce: "assertive",
-      persistent: true,
-      actionId: "retry-save",
-    },
-  );
+test("board state distinguishes empty from no-match", () => {
+  assert.equal(presentBoardState({ total: 0, visible: 0, japanese: false }).kind, "empty");
+  assert.equal(presentBoardState({ total: 3, visible: 0, japanese: false }).kind, "no-match");
+  assert.equal(presentBoardState({ total: 0, visible: 0, japanese: true }).actionId, "create-japanese-note");
 });
 
-test("derived degradation says canonical data is saved", () => {
+test("note state distinguishes edit, create, delete, and quiet success", () => {
   assert.deepEqual(
-    presentDerivedState({ searchUnavailable: true }),
-    {
-      kind: "degraded",
-      tone: "warning",
-      message: "Saved. Search is temporarily unavailable.",
-      announce: "polite",
-      persistent: true,
-      actionId: null,
-    },
+    presentNoteState({ dirty: false, phase: "idle", failureKind: "" }),
+    { kind: "saved", tone: "success", message: "Saved", announce: "off", persistent: false, actionId: null },
   );
+  assert.equal(presentNoteState({ dirty: true, phase: "idle", failureKind: "edit" }).actionId, "retry-save");
+  assert.match(presentNoteState({ dirty: false, phase: "idle", failureKind: "create" }).message, /No note was added/);
+  assert.match(presentNoteState({ dirty: false, phase: "idle", failureKind: "delete" }).message, /note is unchanged/);
 });
 
-test("board presentation distinguishes zero data from no match", () => {
-  assert.equal(presentBoardState({ total: 0, visible: 0, queryActive: false }).kind, "empty");
-  assert.equal(presentBoardState({ total: 3, visible: 0, queryActive: true }).kind, "no-match");
+test("derived degradation states that canonical data is saved", () => {
+  const result = presentDerivedState({ searchUnavailable: true });
+  assert.equal(result.kind, "degraded");
+  assert.match(result.message, /^Saved\./);
 });
 
-test("drawing success is silent while failure preserves retry semantics", () => {
-  assert.deepEqual(
-    presentDrawingState({ status: "saved", errorCode: "" }),
-    { kind: "saved", tone: "success", message: "", announce: "off", persistent: false, actionId: null },
-  );
-  assert.deepEqual(
-    presentDrawingState({ status: "error", errorCode: "KANJI_SAVE_FAILED" }),
-    {
-      kind: "failure",
-      tone: "danger",
-      message: "Save failed. Your drawing is preserved.",
-      announce: "assertive",
-      persistent: true,
-      actionId: "retry-drawing-save",
-    },
-  );
+test("drawing save failure preserves retry semantics while success is silent", () => {
+  assert.equal(presentDrawingState({ status: "saved", errorCode: "" }).message, "");
+  assert.equal(presentDrawingState({ status: "error", errorCode: "KANJI_SAVE_FAILED" }).actionId, "retry-drawing-save");
 });
 
-test("Japanese rating failure remains actionable without claiming progress", () => {
-  assert.deepEqual(
-    presentJapaneseReviewState({ phase: "rating-failed" }),
-    {
-      kind: "failure",
-      tone: "danger",
-      message: "Rating wasn't saved. This review item is unchanged. Try again.",
-      announce: "assertive",
-      persistent: true,
-      actionId: "retry-rating",
-    },
-  );
+test("rating failure says the same item is unchanged", () => {
+  const result = presentJapaneseReviewState({ phase: "rating-failed" });
+  assert.match(result.message, /item is unchanged/);
 });
 
-test("application recovery is non-destructive until reset is explicitly confirmed", () => {
-  assert.equal(presentApplicationRecoveryState({ storageUnavailable: true, resetConfirmationOpen: false }).kind, "storage-failure");
-  assert.equal(presentApplicationRecoveryState({ storageUnavailable: true, resetConfirmationOpen: true }).kind, "reset-confirmation");
+test("application recovery is non-destructive until reset confirmation", () => {
+  assert.equal(
+    presentApplicationRecoveryState({ storageUnavailable: true, resetConfirmationOpen: false, resetFailed: false }).kind,
+    "storage-failure",
+  );
+  assert.equal(
+    presentApplicationRecoveryState({ storageUnavailable: true, resetConfirmationOpen: true, resetFailed: false }).kind,
+    "reset-confirmation",
+  );
 });
 ```
 
-Update the explicit `test:unit` script in `package.json` to include `tests/unit/state-presentation.test.mjs` once.
-
-- [ ] **Step 2: Run the new test and verify RED**
-
-Run:
+- [ ] **Step 3: Verify RED**
 
 ```sh
 node --test tests/unit/state-presentation.test.mjs
@@ -203,16 +179,16 @@ node --test tests/unit/state-presentation.test.mjs
 
 Expected: FAIL because `ui/statePresentation.js` does not exist.
 
-- [ ] **Step 3: Implement the smallest pure mapper**
+- [ ] **Step 4: Implement the pure mapper**
 
-Create `ui/statePresentation.js` with fresh descriptors and bounded enums. Use a tiny constructor to keep outputs consistent:
+Use one descriptor constructor and bounded branching. The exact implementation must preserve these outputs:
 
 ```js
 function descriptor({ kind, tone = "", message = "", announce = "off", persistent = false, actionId = null }) {
   return Object.freeze({ kind, tone, message, announce, persistent, actionId });
 }
 
-export function presentBoardState({ total, visible, queryActive, japanese = false }) {
+export function presentBoardState({ total, visible, japanese }) {
   if (total === 0) {
     return descriptor({
       kind: "empty",
@@ -224,14 +200,14 @@ export function presentBoardState({ total, visible, queryActive, japanese = fals
     return descriptor({
       kind: "no-match",
       message: japanese ? "No Japanese notes match these filters" : "No notes match this search",
-      actionId: japanese ? "clear-japanese-filters" : "clear-search",
+      actionId: japanese ? null : "clear-search",
     });
   }
   return descriptor({ kind: "ready" });
 }
 
-export function presentNoteSaveState({ dirty, phase, canonicalFailure }) {
-  if (canonicalFailure) {
+export function presentNoteState({ dirty, phase, failureKind }) {
+  if (failureKind === "edit") {
     return descriptor({
       kind: "failure",
       tone: "danger",
@@ -241,12 +217,38 @@ export function presentNoteSaveState({ dirty, phase, canonicalFailure }) {
       actionId: "retry-save",
     });
   }
-  if (phase === "saving") {
-    return descriptor({ kind: "saving", message: "Saving…" });
+  if (failureKind === "create") {
+    return descriptor({
+      kind: "failure",
+      tone: "danger",
+      message: "Couldn't create note. No note was added. Try again.",
+      announce: "assertive",
+      persistent: true,
+      actionId: "create-note",
+    });
   }
-  if (dirty) {
-    return descriptor({ kind: "unsaved", tone: "warning", message: "Unsaved" });
+  if (failureKind === "delete") {
+    return descriptor({
+      kind: "failure",
+      tone: "danger",
+      message: "Delete failed. The note is unchanged. Try again.",
+      announce: "assertive",
+      persistent: true,
+      actionId: null,
+    });
   }
+  if (failureKind === "archive" || failureKind === "pin") {
+    return descriptor({
+      kind: "failure",
+      tone: "danger",
+      message: "Change couldn't be saved. The note is unchanged. Try again.",
+      announce: "assertive",
+      persistent: true,
+      actionId: null,
+    });
+  }
+  if (phase === "saving") return descriptor({ kind: "saving", message: "Saving…" });
+  if (dirty) return descriptor({ kind: "unsaved", tone: "warning", message: "Unsaved" });
   return descriptor({ kind: "saved", tone: "success", message: "Saved" });
 }
 
@@ -294,7 +296,17 @@ export function presentJapaneseReviewState({ phase }) {
   return descriptor({ kind: "ready" });
 }
 
-export function presentApplicationRecoveryState({ storageUnavailable, resetConfirmationOpen }) {
+export function presentApplicationRecoveryState({ storageUnavailable, resetConfirmationOpen, resetFailed }) {
+  if (resetFailed) {
+    return descriptor({
+      kind: "reset-failure",
+      tone: "danger",
+      message: "Reset failed. Local data was not cleared.",
+      announce: "assertive",
+      persistent: true,
+      actionId: "retry-storage",
+    });
+  }
   if (!storageUnavailable) return descriptor({ kind: "ready" });
   if (resetConfirmationOpen) {
     return descriptor({
@@ -316,11 +328,7 @@ export function presentApplicationRecoveryState({ storageUnavailable, resetConfi
 }
 ```
 
-Do not add runtime state to this module.
-
-- [ ] **Step 4: Run mapper tests and content contract**
-
-Run:
+- [ ] **Step 5: Verify GREEN and repository text contract**
 
 ```sh
 node --test tests/unit/state-presentation.test.mjs
@@ -329,7 +337,7 @@ npm run test:content
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 1**
+- [ ] **Step 6: Commit**
 
 ```sh
 git add ui/statePresentation.js tests/unit/state-presentation.test.mjs package.json
@@ -338,47 +346,47 @@ git commit -m "feat(ux): add state presentation vocabulary"
 
 ---
 
-### Task 2: True first-run empty board and explicit empty/no-match actions
+### Task 2: True first-run empty state and board actions
 
 **Files:**
 - Modify: `app.js`
 - Modify: `ui/list.js`
 - Modify: `styles.css`
-- Test: `tests/e2e/state-recovery.spec.mjs`
-- Regression: `tests/e2e/editor-list-contract.spec.mjs`, `tests/e2e/note-editor-overlay.spec.mjs`, `tests/e2e/japanese-filters.spec.mjs`
+- Extend: `tests/e2e/state-recovery.spec.mjs`
 
-**Interfaces:**
-- `createListView` gains `onCreate` and `onClear` callbacks; these emit UI intent only.
-- `render` continues consuming canonical `notesById`, ordered visible IDs, active ID, and query.
-- `app.js` owns mapping ordinary empty/no-match intent to existing command/search boundaries.
+**Produces:**
+- A fresh DB stays at zero notes.
+- Ordinary zero-data board has `New note`.
+- Ordinary no-match board has `Clear search`.
+- `ui/list.js` emits action IDs but does not read store/workspace state.
 
-- [ ] **Step 1: Write browser RED for a fresh database**
+- [ ] **Step 1: Write browser RED for zero-write first run**
 
-Create `tests/e2e/state-recovery.spec.mjs`. Reuse the repository's static-server setup pattern and ensure IndexedDB is cleared before navigation. Add:
+Use the repository's existing Playwright server fixture pattern. Add:
 
 ```js
 test("fresh database remains empty until explicit create", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator("#noteList .note-item")).toHaveCount(0);
   await expect(page.locator("#noteList .empty-state")).toContainText("No notes yet");
   await expect(page.locator("#noteList .empty-state button")).toHaveText("New note");
-  await expect(page.locator("#noteList .note-item")).toHaveCount(0);
 
-  const countBefore = await page.evaluate(async () => {
+  const count = await page.evaluate(async () => {
     const request = indexedDB.open("myNoteDB", 3);
     const db = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    const transaction = db.transaction("notes", "readonly");
-    const countRequest = transaction.objectStore("notes").count();
-    const count = await new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readonly");
+    const countRequest = tx.objectStore("notes").count();
+    const value = await new Promise((resolve, reject) => {
       countRequest.onsuccess = () => resolve(countRequest.result);
       countRequest.onerror = () => reject(countRequest.error);
     });
     db.close();
-    return count;
+    return value;
   });
-  expect(countBefore).toBe(0);
+  expect(count).toBe(0);
 
   await page.locator("#noteList .empty-state button").click();
   await expect(page.locator("#noteEditorOverlay")).toBeVisible();
@@ -386,14 +394,15 @@ test("fresh database remains empty until explicit create", async ({ page }) => {
 });
 ```
 
-Add a second RED:
+Add ordinary no-match:
 
 ```js
-test("no-match state is distinct and clear restores existing notes", async ({ page }) => {
+test("ordinary no-match is distinct and clear restores notes", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "New note" }).first().click();
   await page.locator("#titleInput").fill("Alpha note");
   await page.locator("#contentInput").fill("existing content");
+  await page.keyboard.press("Control+Enter");
   await page.locator("#closeNoteEditorButton").click();
 
   await page.locator("#searchInput").fill("does-not-match");
@@ -404,21 +413,17 @@ test("no-match state is distinct and clear restores existing notes", async ({ pa
 });
 ```
 
-- [ ] **Step 2: Run the two tests and verify RED**
-
-Run:
+- [ ] **Step 2: Verify RED**
 
 ```sh
-npx playwright test tests/e2e/state-recovery.spec.mjs --grep "fresh database|no-match"
+npx playwright test tests/e2e/state-recovery.spec.mjs --grep "fresh database|ordinary no-match"
 ```
 
-Expected: at least the fresh-database test fails because bootstrap auto-creates `Untitled`; action rendering also fails because current empty state is text-only.
+Expected: fresh DB test fails because current bootstrap creates `Untitled`; empty actions also fail because current empty state is text-only.
 
-- [ ] **Step 3: Remove bootstrap placeholder creation without changing persistence ownership**
+- [ ] **Step 3: Remove automatic placeholder creation**
 
-In `app.js`, replace the zero-note bootstrap branch that calls `createNote(...)` with a normal empty render/query initialization. The resulting logic must leave `notes: []`, `activeId: null`, and perform no note persistence.
-
-Use the existing workspace/render path, for example:
+In `app.js`, replace the zero-note branch that calls `createNote({ title: "Untitled" ... })` with the normal empty refresh/render path:
 
 ```js
 if (loaded.length === 0) {
@@ -427,17 +432,23 @@ if (loaded.length === 0) {
 }
 ```
 
-If the workspace controller already handles an empty canonical snapshot without a query, prefer that existing path. Do not synthesize a placeholder note.
+If the controller already requires a slightly different empty call, preserve the same result: no canonical write, `notes: []`, `activeId: null`, and rendered empty board.
 
-- [ ] **Step 4: Add explicit list actions without state ownership**
+- [ ] **Step 4: Make `ui/list.js` action-aware without state ownership**
 
 Change the constructor to:
 
 ```js
-export function createListView({ container, onSelect, onCreate, onClear, formatDate }) {
+export function createListView({ container, onSelect, onEmptyAction, formatDate }) {
 ```
 
-Replace `clearToEmpty(message)` with an action-aware renderer:
+Change `render` to accept an `emptyPresentation` descriptor:
+
+```js
+render({ notesById, orderedIds, activeId, query, emptyPresentation })
+```
+
+Render the descriptor only when `boardIds.length === 0`:
 
 ```js
 function clearToEmpty(presentation) {
@@ -449,33 +460,50 @@ function clearToEmpty(presentation) {
   empty.className = "empty-state";
   const message = document.createElement("p");
   message.textContent = presentation.message;
-  const action = document.createElement("button");
-  action.type = "button";
-  action.className = "primary-button";
-  action.textContent = presentation.kind === "empty" ? "New note" : "Clear search";
-  action.addEventListener("click", presentation.kind === "empty" ? onCreate : onClear);
-  empty.append(message, action);
+  empty.append(message);
+
+  if (presentation.actionId) {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "primary-button";
+    action.textContent = presentation.actionId === "create-note" ? "New note" : "Clear search";
+    action.addEventListener("click", () => onEmptyAction(presentation.actionId, action));
+    empty.append(action);
+  }
+
   container.append(empty);
 }
 ```
 
-Use `presentBoardState` to classify `notesById.size`, `boardIds.length`, and query state. Keep `ui/list.js` free of store access.
+- [ ] **Step 5: Supply ordinary board presentation from `app.js`**
 
-In `app.js`, pass:
+Import `presentBoardState`. For Notes workspace, pass:
 
 ```js
-onCreate() {
-  runAction(() => executeCommand("notes.create", { source: "empty-state", target: els.newNoteButton }));
-},
-onClear() {
-  els.searchInput.value = "";
-  runAction(() => refreshSearch({ query: "" }));
+const emptyPresentation = presentBoardState({
+  total: state.notes.length,
+  visible: state.filteredIds.length,
+  japanese: false,
+});
+```
+
+Handle action IDs through existing owners:
+
+```js
+onEmptyAction(actionId, opener) {
+  if (actionId === "create-note") {
+    runAction(() => executeCommand("notes.create", { source: "empty-state", target: opener, opener }));
+  }
+  if (actionId === "clear-search") {
+    els.searchInput.value = "";
+    runAction(() => refreshSearch({ query: "" }));
+  }
 },
 ```
 
-- [ ] **Step 5: Add bounded empty-state CSS**
+During Task 2, retain current Japanese empty rendering; Task 6 adds its explicit create-menu action after the Japanese adapter exposes a direct API.
 
-In `styles.css`, add only local layout rules; do not create a notification framework:
+- [ ] **Step 6: Add bounded empty-state CSS**
 
 ```css
 .empty-state {
@@ -494,19 +522,17 @@ In `styles.css`, add only local layout rules; do not create a notification frame
 }
 ```
 
-- [ ] **Step 6: Verify focused browser and list regressions**
-
-Run:
+- [ ] **Step 7: Verify focused regressions**
 
 ```sh
-npx playwright test tests/e2e/state-recovery.spec.mjs --grep "fresh database|no-match"
+npx playwright test tests/e2e/state-recovery.spec.mjs --grep "fresh database|ordinary no-match"
 npx playwright test tests/e2e/editor-list-contract.spec.mjs
 npx playwright test tests/e2e/note-editor-overlay.spec.mjs
 ```
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 2**
+- [ ] **Step 8: Commit**
 
 ```sh
 git add app.js ui/list.js styles.css tests/e2e/state-recovery.spec.mjs
@@ -515,23 +541,26 @@ git commit -m "feat(ux): add true empty board states"
 
 ---
 
-### Task 3: Note save failure, retry, and derived-degradation presentation
+### Task 3: Note mutation failure, save retry, delete safety, and derived degradation
 
 **Files:**
 - Modify: `index.html`
 - Modify: `app.js`
+- Modify: `ui/editorChrome.js`
 - Modify: `editor.css`
+- Extend: `tests/integration/note-lifecycle.failure.test.mjs`
 - Extend: `tests/e2e/state-recovery.spec.mjs`
-- Extend regression evidence: `tests/integration/note-lifecycle.failure.test.mjs`
 
-**Interfaces:**
-- Existing lifecycle callbacks remain canonical truth.
-- `app.js` may add presentation-only save phase/error flags to the existing shared store only if they are bounded scalar state and do not replace lifecycle truth.
-- Retry uses existing `editor.save`/autosave flush behavior; no new persistence action.
+**Produces:**
+- `savePhase: "idle" | "saving"` presentation-only scalar.
+- `lastPersistenceFailure: "" | "edit" | "create" | "delete" | "archive" | "pin"` presentation-only scalar.
+- Canonical failure never reports success.
+- Derived search failure explicitly says the note is saved.
+- Failed delete leaves the note/editor/action available and never shows Undo.
 
-- [ ] **Step 1: Add integration assertions for existing canonical ordering**
+- [ ] **Step 1: Confirm canonical ordering in integration tests**
 
-Extend `tests/integration/note-lifecycle.failure.test.mjs` with explicit assertions that a failed note upsert:
+Extend `tests/integration/note-lifecycle.failure.test.mjs` to assert on failed upsert:
 
 ```js
 assert.equal(state.notes[0].content, originalContent);
@@ -539,7 +568,7 @@ assert.equal(state.dirty, true);
 assert.equal(history.listOperations().some((entry) => entry.op === "edit"), false);
 ```
 
-For an injected derived update failure after successful persistence, assert the persisted note contains the new content while the derived-failure callback records degradation rather than canonical failure.
+For a derived update failure after successful persistence, assert the persisted note contains the new value and the derived callback fires without canonical rollback.
 
 Run:
 
@@ -547,11 +576,11 @@ Run:
 node --test tests/integration/note-lifecycle.failure.test.mjs
 ```
 
-Expected: PASS if the invariant is already correctly implemented. If already GREEN, record the evidence and do not modify core lifecycle code.
+If already GREEN, do not modify `core/noteLifecycle.js`.
 
-- [ ] **Step 2: Add browser RED with test-only IndexedDB failure injection**
+- [ ] **Step 2: Add a test-only IndexedDB failure harness**
 
-At the top of `tests/e2e/state-recovery.spec.mjs`, add a helper that installs before navigation and wraps `IDBDatabase.prototype.transaction` only inside the Playwright page. The wrapper must fail exactly one matching readwrite transaction and must not exist in production code:
+In `tests/e2e/state-recovery.spec.mjs`, install before navigation:
 
 ```js
 async function installDatabaseFailureHarness(page) {
@@ -561,9 +590,7 @@ async function installDatabaseFailureHarness(page) {
 
     Object.defineProperty(window, "__stateRecoveryDbTest", {
       configurable: true,
-      value: {
-        failNext(storeName) { failure = storeName; },
-      },
+      value: { failNext(storeName) { failure = storeName; } },
     });
 
     IDBDatabase.prototype.transaction = function(storeNames, mode, options) {
@@ -578,16 +605,15 @@ async function installDatabaseFailureHarness(page) {
 }
 ```
 
-The test-only global is injected by Playwright before app code and is never committed to runtime modules.
+This helper exists only in the Playwright test page; do not add any corresponding production global.
 
-Add:
+- [ ] **Step 3: Add browser RED for failed edit then retry**
 
 ```js
-test("note save failure preserves draft and retry succeeds without success toast", async ({ page }) => {
+test("note save failure preserves exact draft and retry succeeds quietly", async ({ page }) => {
   await installDatabaseFailureHarness(page);
   await page.goto("/");
   await page.getByRole("button", { name: "New note" }).first().click();
-  await page.locator("#titleInput").fill("Durability test");
   await page.locator("#contentInput").fill("first durable value");
   await page.keyboard.press("Control+Enter");
   await expect(page.locator("#saveState")).toHaveText("Saved");
@@ -607,131 +633,134 @@ test("note save failure preserves draft and retry succeeds without success toast
 });
 ```
 
-- [ ] **Step 3: Add non-spamming note status semantics**
+- [ ] **Step 4: Add browser RED for failed delete**
 
-In `index.html`, keep the visual `#saveState` out of an always-live region and add one action plus one bounded announcement node:
+Use the same one-shot `notes` failure. Open More actions, click Delete, then assert:
+
+```js
+await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+await expect(page.locator("#noteActionsPopover")).toBeVisible();
+await expect(page.locator("#saveState")).toContainText("Delete failed");
+await expect(page.locator("#undoNotice")).toBeHidden();
+```
+
+Click the same Delete action again after the one-shot failure is consumed and assert durable deletion then exposes exactly one Undo notice.
+
+- [ ] **Step 5: Add note status markup without autosave live-region spam**
+
+In `index.html`, replace the standalone live `#saveState` with:
 
 ```html
 <div id="noteStatusRegion" class="editor-save-region">
   <span id="saveState" class="editor-save-state">Saved</span>
   <button id="retryNoteSaveButton" class="quiet-button" type="button" hidden>Retry save</button>
-  <span id="noteStatusAnnouncement" class="visually-hidden" role="status" aria-live="polite"></span>
+  <span id="noteStatusAnnouncement" class="visually-hidden" aria-live="polite"></span>
 </div>
 ```
 
-Do not announce every `Unsaved → Saving → Saved` mutation.
+Add a board-level failure region near the note list for create failures:
 
-- [ ] **Step 4: Map existing save truth in `app.js`**
-
-Import mapper functions and add element references for the retry/announcement controls. Rework `renderTopline()` so canonical failure and derived degradation are distinct.
-
-Use the existing `saveMessage` values as compatibility inputs during #72 rather than changing lifecycle callbacks:
-
-```js
-const canonicalFailure = state.saveMessage === "Storage unavailable"
-  || state.saveMessage === "Safe mode: storage unavailable";
-const derivedFailure = state.saveMessage === "Saved locally; search index unavailable";
-
-const savePresentation = canonicalFailure
-  ? presentNoteSaveState({ dirty: true, phase: "idle", canonicalFailure: true })
-  : derivedFailure
-    ? presentDerivedState({ searchUnavailable: true })
-    : presentNoteSaveState({ dirty: state.dirty, phase: "idle", canonicalFailure: false });
+```html
+<div id="boardStatusRegion" class="board-status" role="alert" hidden>
+  <span id="boardStatusMessage"></span>
+</div>
 ```
 
-Render the descriptor:
+Do not create a global message queue.
+
+- [ ] **Step 6: Track bounded operation context in `app.js`**
+
+Add to the existing store:
 
 ```js
-els.saveState.textContent = savePresentation.message;
-els.saveState.dataset.state = savePresentation.tone;
-els.retryNoteSaveButton.hidden = savePresentation.actionId !== "retry-save";
+savePhase: "idle",
+lastPersistenceFailure: "",
 ```
 
-Only copy attention-required messages into `#noteStatusAnnouncement`. Clear the announcement after the state is rendered, not with a success timer; use a remembered last announced descriptor key in `app.js` if necessary so repeated rerenders of the same failure do not re-announce.
+Before awaiting the real edit save, set `savePhase: "saving"`; clear it in `finally`. Do not use a timer to determine completion.
 
-Wire retry to the existing command boundary:
+In `applyUpsertNote`, classify a caught canonical failure from the existing `historyOp?.op`:
 
 ```js
-els.retryNoteSaveButton.addEventListener("click", () => {
-  runAction(() => executeCommand("editor.save", {
-    source: "recovery-control",
-    target: els.contentInput,
-    activeScope: "editor",
-  }));
-});
-```
-
-- [ ] **Step 5: Add derived-search browser failure injection**
-
-Extend the page harness with a test-only `Worker.prototype.postMessage` wrapper that fails exactly one `upsert` by delivering a synthetic bounded worker error response with the same request ID:
-
-```js
-const originalPostMessage = Worker.prototype.postMessage;
-let failSearchUpsert = false;
-window.__stateRecoverySearchTest = { failNextUpsert() { failSearchUpsert = true; } };
-Worker.prototype.postMessage = function(message, transfer) {
-  if (failSearchUpsert && message?.type === "upsert") {
-    failSearchUpsert = false;
-    queueMicrotask(() => this.onmessage?.({ data: { id: message.id, ok: false, error: "TEST_SEARCH_FAILURE" } }));
-    return;
-  }
-  return originalPostMessage.call(this, message, transfer);
-};
-```
-
-Add a browser test that saves a note, injects the next search upsert failure, edits/saves again, and asserts:
-
-```js
-await expect(page.locator("#saveState")).toContainText("Search");
-await expect(page.locator("#saveState")).not.toContainText("Save failed");
-```
-
-Then reload/reopen and assert the newly edited canonical note content remains present.
-
-- [ ] **Step 6: Add scoped note-state CSS**
-
-In `editor.css`, style only descriptor tones and retry placement. Reuse existing design tokens:
-
-```css
-.editor-save-region {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--mn-space-2);
-}
-
-.editor-save-state[data-state="danger"] {
-  color: var(--mn-danger-text);
-}
-
-.editor-save-state[data-state="warning"] {
-  color: var(--mn-warning-text);
+function classifyFailureKind(op, fallback = "edit") {
+  const value = String(op || fallback);
+  if (value.includes("create")) return "create";
+  if (value.includes("archive")) return "archive";
+  if (value.includes("pin")) return "pin";
+  if (value.includes("delete")) return "delete";
+  return "edit";
 }
 ```
 
-Do not add toast animation, timers, or fixed global banners.
+On catch, set `lastPersistenceFailure` and rethrow. In `applyRemoveNote`, set `delete`. If an enrolled Japanese delete handler throws inside `deleteActiveNote`, set `delete`, render, and rethrow there as well.
 
-- [ ] **Step 7: Run focused note state tests**
+Clear `lastPersistenceFailure` only after a successful canonical operation or when the user starts a new explicit retry.
 
-Run:
+- [ ] **Step 7: Render note and board failure descriptors**
+
+Use `presentNoteState({ dirty, phase: state.savePhase, failureKind: state.lastPersistenceFailure })` unless the current message represents derived degradation; derived degradation uses `presentDerivedState`.
+
+Render:
+
+```js
+els.saveState.textContent = presentation.message;
+els.saveState.dataset.state = presentation.tone;
+els.retryNoteSaveButton.hidden = presentation.actionId !== "retry-save";
+```
+
+`#boardStatusRegion` is visible only for `failureKind === "create"`; the existing New note action remains the retry control.
+
+Announce only attention-required descriptors. Keep a composition-root string key such as `lastNoteAnnouncementKey`; repeated rerenders of the same failure must not re-announce it. Healthy `Unsaved`, `Saving…`, and `Saved` remain visual only.
+
+Wire `#retryNoteSaveButton` to the existing `editor.save` command; do not call storage directly.
+
+- [ ] **Step 8: Keep failed action-menu operations retryable**
+
+In `ui/editorChrome.js`, wrap the existing action execution:
+
+```js
+let outcome;
+try {
+  outcome = await commandRuntime.execute(action.commandId, {
+    source: "note-actions",
+    target: elements.actionsButton,
+  });
+} catch {
+  renderActions();
+  elements.actionsList.querySelector(`[data-command-id="${action.commandId}"]`)?.focus();
+  return;
+}
+```
+
+Only close the actions popover after successful command execution. Failed delete/archive must keep the same action available and must not expose Undo.
+
+- [ ] **Step 9: Add derived-search failure harness and browser evidence**
+
+In the Playwright page only, wrap `Worker.prototype.postMessage` before navigation. When a test flag requests the next `upsert` failure, deliver one synthetic worker failure response using the original request ID, then resume normal worker behavior.
+
+The test must save an edited note with the injected search failure, assert `#saveState` contains `Search` but not `Save failed`, reload, reopen the note, and assert the edited canonical content survived.
+
+- [ ] **Step 10: Verify focused note flows**
 
 ```sh
 node --test tests/integration/note-lifecycle.failure.test.mjs
-npx playwright test tests/e2e/state-recovery.spec.mjs --grep "note save failure|derived"
+npx playwright test tests/e2e/state-recovery.spec.mjs --grep "note save failure|failed delete|derived"
 npx playwright test tests/e2e/note-editor-overlay.spec.mjs
+npx playwright test tests/e2e/editor-shell.spec.mjs
 ```
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit Task 3**
+- [ ] **Step 11: Commit**
 
 ```sh
-git add index.html app.js editor.css tests/e2e/state-recovery.spec.mjs tests/integration/note-lifecycle.failure.test.mjs
+git add index.html app.js ui/editorChrome.js editor.css tests/integration/note-lifecycle.failure.test.mjs tests/e2e/state-recovery.spec.mjs
 git commit -m "feat(ux): add scoped note recovery states"
 ```
 
 ---
 
-### Task 4: Non-destructive application storage recovery and reset confirmation
+### Task 4: Non-destructive application storage recovery
 
 **Files:**
 - Modify: `index.html`
@@ -739,14 +768,15 @@ git commit -m "feat(ux): add scoped note recovery states"
 - Modify: `styles.css`
 - Extend: `tests/e2e/state-recovery.spec.mjs`
 
-**Interfaces:**
-- `bootstrap()` becomes safely retryable after an initial open failure.
-- Application recovery UI calls existing `openDatabase`/`resetDatabase` boundaries; it never owns storage logic.
-- Reset is performed only after explicit confirmation.
+**Produces:**
+- Persistent storage failure region.
+- Retry without destructive action.
+- Explicit reset dialog.
+- Cancel performs zero storage mutation and restores focus.
 
-- [ ] **Step 1: Write bootstrap-failure RED using a one-shot `indexedDB.open` injection**
+- [ ] **Step 1: Add one-shot bootstrap-open failure test**
 
-Before navigation, override only the first `indexedDB.open` call in the Playwright page:
+Install after seeding is not needed for the basic failure case:
 
 ```js
 await page.addInitScript(() => {
@@ -762,54 +792,42 @@ await page.addInitScript(() => {
 });
 ```
 
-Add:
+Assert after navigation:
 
 ```js
-test("bootstrap storage failure is persistent and non-destructive before explicit reset", async ({ page }) => {
-  let dialogs = 0;
-  page.on("dialog", async (dialog) => {
-    dialogs += 1;
-    await dialog.dismiss();
-  });
-
-  await page.goto("/");
-  await expect(page.locator("#applicationRecovery")).toBeVisible();
-  await expect(page.locator("#applicationRecovery")).toContainText("has not been reset");
-  await page.waitForTimeout(150);
-  expect(dialogs).toBe(0);
-
-  await page.locator("#retryApplicationStorageButton").click();
-  await expect(page.locator("#applicationRecovery")).toBeHidden();
-});
+await expect(page.locator("#applicationRecovery")).toBeVisible();
+await expect(page.locator("#applicationRecovery")).toContainText("has not been reset");
 ```
 
-Add reset cancellation:
+Register a Playwright `dialog` listener, wait 150 ms, and assert zero dialogs occurred. Click Retry and assert the recovery region hides after the one-shot failure is consumed.
 
-```js
-test("reset cancellation performs no mutation and restores focus", async ({ page }) => {
-  // Seed one note through the normal UI, then expose the recovery surface through the test harness.
-  // Open the explicit reset confirmation, click Cancel, and assert the note still exists after reload.
-  await expect(page.locator("#cancelApplicationResetButton")).toBeFocused();
-  await page.locator("#cancelApplicationResetButton").click();
-  await expect(page.locator("#resetApplicationDataButton")).toBeFocused();
-});
-```
+- [ ] **Step 2: Add exact reset-cancel browser test**
 
-Implement the seed/exposure using the same test-only page harness; do not add a production debug switch.
+Use this sequence:
 
-- [ ] **Step 2: Run the two recovery tests and verify RED**
+1. navigate normally and create a note titled `Preserve me`;
+2. call `page.addInitScript(...)` with the one-shot `indexedDB.open` failure helper;
+3. reload so the existing database remains intact but bootstrap enters recovery once;
+4. click `#resetApplicationDataButton`;
+5. assert `#applicationResetDialog` is open and `#cancelApplicationResetButton` is focused;
+6. click Cancel;
+7. assert focus returns to `#resetApplicationDataButton`;
+8. click Retry so normal bootstrap resumes;
+9. assert the note titled `Preserve me` is still present.
 
-Run:
+This proves cancellation performs zero data mutation without introducing a production test switch.
+
+- [ ] **Step 3: Verify RED**
 
 ```sh
 npx playwright test tests/e2e/state-recovery.spec.mjs --grep "bootstrap storage|reset cancellation"
 ```
 
-Expected: FAIL because current bootstrap uses a delayed destructive confirmation and no persistent recovery region exists.
+Expected: FAIL because current bootstrap uses a delayed destructive confirmation and has no persistent recovery region.
 
-- [ ] **Step 3: Add shell recovery markup**
+- [ ] **Step 4: Add recovery and reset-confirmation markup**
 
-Add to `index.html` outside the note overlay but inside the app shell:
+Add:
 
 ```html
 <section id="applicationRecovery" class="application-recovery" role="alert" hidden>
@@ -830,49 +848,45 @@ Add to `index.html` outside the note overlay but inside the app shell:
 </dialog>
 ```
 
-- [ ] **Step 4: Replace delayed destructive bootstrap behavior**
+- [ ] **Step 5: Refactor bootstrap failure into retryable composition-root behavior**
 
-In `app.js`, remove the timeout/`window.confirm` bootstrap failure path. Add bounded presentation state in the composition root:
+Replace the delayed `window.confirm` catch path with:
 
 ```js
 let applicationStorageUnavailable = false;
+let applicationResetFailed = false;
 let resetOpener = null;
-```
 
-On bootstrap failure:
-
-```js
-applicationStorageUnavailable = true;
-renderApplicationRecovery();
-```
-
-`renderApplicationRecovery()` uses `presentApplicationRecoveryState(...)`, sets the message, shows the recovery region, and never mutates storage.
-
-Retry:
-
-```js
-async function retryApplicationStorage() {
-  els.retryApplicationStorageButton.disabled = true;
+async function startApplication() {
   try {
     await bootstrap();
     applicationStorageUnavailable = false;
-    renderApplicationRecovery();
+    applicationResetFailed = false;
   } catch {
     applicationStorageUnavailable = true;
-    renderApplicationRecovery();
-  } finally {
-    els.retryApplicationStorageButton.disabled = false;
   }
+  renderApplicationRecovery();
 }
 ```
 
-Reset trigger opens the dialog and remembers focus. Cancel closes the dialog and restores focus to `#resetApplicationDataButton`. Confirm calls the existing `resetLocalData` path only after explicit user action; refactor `resetLocalData` so its storage mutation is separate from confirmation and no nested `window.confirm` remains.
+Initial startup calls `startApplication()` once. Retry calls the same function. No automatic retry loop.
 
-- [ ] **Step 5: Add bounded shell CSS**
+Split the current reset function into storage mutation and confirmation ownership:
 
-In `styles.css` add a single scoped recovery block. It must remain in normal DOM flow or a bounded fixed region without queueing multiple messages. No transition timer is required.
+```js
+async function performResetLocalData() {
+  await resetDatabase();
+  window.location.reload();
+}
+```
 
-- [ ] **Step 6: Verify recovery and baseline reset behavior**
+Only `#confirmApplicationResetButton` calls `performResetLocalData()`. On reset failure, keep the recovery surface visible and render `presentApplicationRecoveryState({ ..., resetFailed: true })`.
+
+Cancel closes only the dialog and focuses `resetOpener`, which is the Reset trigger.
+
+- [ ] **Step 6: Add bounded recovery CSS and verify**
+
+Use existing surface/border/danger tokens. Do not add message queues, timers, or success animations.
 
 Run:
 
@@ -883,7 +897,7 @@ npx playwright test tests/e2e/editor-shell.spec.mjs
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 4**
+- [ ] **Step 7: Commit**
 
 ```sh
 git add index.html app.js styles.css tests/e2e/state-recovery.spec.mjs
@@ -892,78 +906,71 @@ git commit -m "feat(ux): add non-destructive storage recovery"
 
 ---
 
-### Task 5: Drawing save/delete/recovery presentation without changing drawing ownership
+### Task 5: Drawing save/delete/recovery presentation
 
 **Files:**
 - Modify: `ui/kanjiInkView.js`
-- Modify: `editor.css` or `kanji-ink.css` only if the existing drawing stylesheet owns these states
+- Modify only if needed: `kanji-ink.css`
 - Extend: `tests/e2e/state-recovery.spec.mjs`
-- Regression: `tests/e2e/kanji-handwriting.spec.mjs`, `tests/e2e/note-drawing-projection.spec.mjs`
-- Existing unit regression: `tests/unit/kanji-ink-controller.test.mjs`, `tests/unit/kanji-ink-application.test.mjs`
 
-**Interfaces:**
-- Consume `controller.snapshot().status` and `errorCode`; never add a second drawing state machine.
-- `kanjiInkApplication.deleteEntry/restoreEntry/loadNoteContext` remain canonical lifecycle owners.
-- Direct projection above title/body remains success evidence.
+**Constraints:**
+- Do not modify Kanji persistence/controller/application owners.
+- Save success is the direct projection, not a toast.
+- Visual stroke counts must not be repeatedly live-announced.
 
-- [ ] **Step 1: Confirm existing controller failure guarantees are GREEN**
-
-Run:
+- [ ] **Step 1: Confirm controller/application failure guarantees**
 
 ```sh
 node --test tests/unit/kanji-ink-controller.test.mjs tests/unit/kanji-ink-application.test.mjs
 ```
 
-Confirm existing tests cover failed save preserving draft/retry intent. If GREEN, do not change core drawing files.
+Expected: PASS. If failed-save draft/retry guarantees are already GREEN, do not change core drawing modules.
 
-- [ ] **Step 2: Add browser RED for failed drawing save then retry**
+- [ ] **Step 2: Add failed-save then retry browser RED**
 
-Reuse the test-only IndexedDB harness and fail the next `kanjiInkEntries` readwrite transaction. Add a test that:
-
-1. creates/opens a note;
-2. opens Add drawing;
-3. draws a valid stroke;
-4. injects failure for `kanjiInkEntries`;
-5. clicks Save;
-6. asserts dialog remains open, canvas still represents the draft, status says `Save failed. Your drawing is preserved.`, and Save is exposed as Retry;
-7. clicks Retry;
-8. asserts dialog closes and `#noteDrawingRegion` contains the saved projection;
-9. asserts no generic success notification exists.
-
-- [ ] **Step 3: Normalize `statusText(snapshot)` through the pure mapper**
-
-In `ui/kanjiInkView.js` import `presentDrawingState` and replace save-state wording with the descriptor:
+Use the test-only DB harness to fail the next `kanjiInkEntries` write. Create/open a note, draw a valid stroke, click Save, then assert:
 
 ```js
-function statusText(snapshot) {
-  const presentation = presentDrawingState({
-    status: snapshot.status === "saving" ? "saving" : snapshot.savedEntry ? "saved" : "ready",
-    errorCode: snapshot.errorCode || "",
-  });
-  if (presentation.message) return presentation.message;
-  if (pointerLimitMessage) return pointerLimitMessage;
-  if (snapshot.strokes.length > 0) return `${snapshot.strokes.length} stroke${snapshot.strokes.length === 1 ? "" : "s"}`;
-  return "";
-}
+await expect(page.locator("#kanjiInkDialog")).toBeVisible();
+await expect(page.locator("#kanjiInkStatus")).toContainText("Save failed. Your drawing is preserved.");
+await expect(page.locator("#saveKanjiButton")).toHaveAttribute("aria-label", "Retry save drawing");
 ```
 
-Keep successful save silent: after canonical save and projection synchronization, close the dialog as today; do not render `Drawing saved`.
+Click Retry. Assert the dialog closes, the direct drawing projection is visible in `#noteDrawingRegion`, and no generic success notification exists.
 
-- [ ] **Step 4: Normalize delete failure and durable Undo copy**
+- [ ] **Step 3: Add failed-delete browser RED**
 
-Keep delete ordering unchanged. In the existing delete catch, derive the bounded error copy from presentation vocabulary or a small drawing-delete descriptor extension. Required message:
+With a saved drawing visible, inject the next `kanjiInkEntries` write failure and click its Delete control. Assert:
+
+```js
+await expect(page.locator("#noteDrawingRegion .kanji-entry")).toHaveCount(1);
+await expect(page.locator("#kanjiInkRegionStatus")).toContainText("saved drawing is unchanged");
+await expect(page.locator("#kanjiInkRecovery")).toBeHidden();
+```
+
+Click Delete again after the one-shot failure is consumed. Assert the projection is removed only after durable success and exactly one drawing Undo recovery surface appears.
+
+- [ ] **Step 4: Split visual drawing status from live announcement**
+
+In the generated dialog markup, change `#kanjiInkStatus` to a visual-only paragraph and add:
+
+```html
+<span id="kanjiInkAnnouncement" class="visually-hidden" aria-live="polite"></span>
+```
+
+Add it to the collected element set. Use `presentDrawingState(...)` inside `renderController()`. Update `#kanjiInkAnnouncement` only when the descriptor requests attention and the bounded announcement key changed. Do not announce stroke counts or successful save.
+
+- [ ] **Step 5: Normalize delete failure copy without optimistic removal**
+
+Keep the existing `deleteEntry` ordering. The catch path must retain the projection and render:
 
 ```text
 Drawing couldn't be deleted. The saved drawing is unchanged. Try again.
 ```
 
-Do not hide/remove the projection before `deleteEntry` succeeds. On success, show the existing bounded drawing Undo surface only after `synchronizeActiveNote()` confirms the committed state.
+The existing Undo recovery is shown only after successful delete and synchronization. If restore fails, keep the recovery opportunity visible and show a bounded recovery error; do not change storage semantics.
 
-If the current Undo action lacks failure handling, add only adapter-level catch/presentation so a failed restore keeps the recovery opportunity visible; do not change storage semantics.
-
-- [ ] **Step 5: Run drawing focused regressions**
-
-Run:
+- [ ] **Step 6: Verify focused drawing regressions**
 
 ```sh
 npx playwright test tests/e2e/state-recovery.spec.mjs --grep "drawing"
@@ -973,35 +980,39 @@ npx playwright test tests/e2e/note-drawing-projection.spec.mjs
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 5**
+- [ ] **Step 7: Commit**
 
 ```sh
-git add ui/kanjiInkView.js editor.css kanji-ink.css tests/e2e/state-recovery.spec.mjs
+git add ui/kanjiInkView.js kanji-ink.css tests/e2e/state-recovery.spec.mjs
+git diff --cached --check
 git commit -m "feat(ux): normalize drawing recovery states"
 ```
 
-Only add the stylesheet that actually changed.
+If `kanji-ink.css` did not change, it may remain staged with no diff; do not add unrelated edits.
 
 ---
 
-### Task 6: Japanese empty/no-result/degraded/review-rating recovery
+### Task 6: Japanese empty/no-result/degraded/rating recovery
 
 **Files:**
 - Modify: `japaneseApp.js`
+- Modify: `ui/japanese-filters.js`
+- Modify: `index.html`
 - Modify: `japanese.css`
-- Modify: `ui/list.js` only if Japanese empty action requires a reusable presentation hook not completed in Task 2
+- Modify: `app.js`
+- Extend: `tests/integration/japanese-lifecycle.test.mjs`
 - Extend: `tests/e2e/state-recovery.spec.mjs`
-- Regression: `tests/e2e/japanese-filters.spec.mjs`, `tests/e2e/japanese-degraded-mode.spec.mjs`, `tests/e2e/japanese-progressive-disclosure.spec.mjs`, `tests/e2e/japanese-release-gate.spec.mjs`
-- Existing integration regression: `tests/integration/japanese-lifecycle.test.mjs`
 
-**Interfaces:**
-- Existing coordinator/actions own workspace and canonical review transitions.
-- `japaneseApp.js` may retain one bounded presentation-only variable for the current rating failure, e.g. `let reviewFailurePhase = ""`.
-- Same rating buttons are the retry surface; do not add a parallel rating action.
+**Produces:**
+- Japanese zero-data board action opens the existing create menu through a direct adapter API.
+- Filter/no-result copy uses presentation vocabulary without resetting query/chips.
+- Study-data degradation is visible only in Japanese scope.
+- Rating failure keeps the same item and same rating controls available for retry.
+- Routine filter counts and review state changes are not repeatedly live-announced.
 
-- [ ] **Step 1: Extend integration evidence for rating failure ordering**
+- [ ] **Step 1: Confirm/extend rating persistence ordering in integration**
 
-In `tests/integration/japanese-lifecycle.test.mjs`, use the existing injected persistence boundary to reject a review update and assert:
+Using the existing injected Japanese persistence seam, reject one review update and assert:
 
 ```js
 assert.equal(state.reviewSession.currentNoteId, originalCurrentNoteId);
@@ -1009,7 +1020,7 @@ assert.equal(state.reviewSession.index, originalIndex);
 assert.equal(state.reviewSession.status, "active");
 ```
 
-Then allow persistence and retry the same rating; assert the session advances exactly once.
+Allow the next write and retry the same rating; assert the session advances exactly once.
 
 Run:
 
@@ -1017,11 +1028,11 @@ Run:
 node --test --test-concurrency=1 tests/integration/japanese-lifecycle.test.mjs
 ```
 
-If already GREEN, keep core actions unchanged.
+Do not modify scheduler or storage semantics if this is already GREEN.
 
-- [ ] **Step 2: Add browser RED for Japanese no-result context**
+- [ ] **Step 2: Add Japanese no-result browser RED**
 
-In `tests/e2e/state-recovery.spec.mjs`, create at least one Japanese Grammar note, select Grammar, enter a text query that matches nothing, and assert:
+Create a Grammar note, select Grammar, enter a text query that matches nothing, and assert:
 
 ```js
 await expect(page.locator("#japaneseFilterStatus")).toContainText("No Japanese notes match these filters");
@@ -1029,83 +1040,102 @@ await expect(page.getByRole("button", { name: "Grammar" })).toHaveAttribute("ari
 await expect(page.locator("#searchInput")).not.toHaveValue("");
 ```
 
-Clear via the scoped action, then assert the Grammar/query state changes only according to the control explicitly invoked.
+Clear only the control explicitly chosen by the test and assert unrelated filter/query context is preserved.
 
-- [ ] **Step 3: Add browser RED for failed rating staying on the same item**
+- [ ] **Step 3: Add rating-failure browser RED**
 
-Use the test-only IndexedDB harness to fail the next `studyReviews` write. Capture title/progress before rating:
+Use the DB harness to fail the next `studyReviews` write. Capture `#reviewNoteTitle` and `#reviewProgress`, click Good, and assert both remain unchanged while `#reviewStatus` says:
 
-```js
-const beforeTitle = await page.locator("#reviewNoteTitle").textContent();
-const beforeProgress = await page.locator("#reviewProgress").textContent();
+```text
+Rating wasn't saved. This review item is unchanged. Try again.
 ```
 
-After clicking `Good`, assert:
+Assert focus remains on the Good rating button after the failure. Click Good again after the one-shot failure is consumed and assert advance/completion happens once.
+
+- [ ] **Step 4: Move filter result copy into the existing filter adapter**
+
+`ui/japanese-filters.js` is the current owner of `#japaneseFilterStatus`, so do not overwrite it from `japaneseApp.js`.
+
+Import `presentBoardState` and replace only the final count branch:
 
 ```js
-await expect(page.locator("#reviewNoteTitle")).toHaveText(beforeTitle);
-await expect(page.locator("#reviewProgress")).toHaveText(beforeProgress);
-await expect(page.locator("#reviewStatus")).toContainText("Rating wasn't saved");
+const total = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []).size;
+const visible = resultCount(state);
+const presentation = presentBoardState({ total, visible, japanese: true });
+
+elements.status.textContent = presentation.kind === "no-match"
+  ? presentation.message
+  : total === 0
+    ? "No Japanese notes yet"
+    : `Showing ${visible} of ${total} Japanese ${total === 1 ? "note" : "notes"}`;
 ```
 
-Click `Good` again after the one-shot failure is consumed and assert the session advances or completes exactly once.
+Keep the existing invalid-date-range error as the higher-priority branch.
 
-- [ ] **Step 4: Normalize review presentation in `japaneseApp.js`**
+Remove `role="status" aria-live="polite"` from the visible count element in `index.html`; routine count changes must not spam announcements.
 
-Add:
+- [ ] **Step 5: Add one Japanese announcement/availability region**
 
-```js
-let reviewFailurePhase = "";
+Add near Japanese controls:
+
+```html
+<p id="japaneseAvailabilityStatus" class="japanese-availability-status" hidden></p>
+<span id="japaneseStateAnnouncement" class="visually-hidden" aria-live="polite"></span>
 ```
 
-In `submitRating`:
+Remove `aria-live` from visible `#reviewStatus`. `japaneseApp.js` uses `#japaneseStateAnnouncement` only for attention-required messages such as study-data unavailability and rating failure. Keep a last-announcement key so rerenders do not repeat identical failures.
+
+- [ ] **Step 6: Keep rating failure in presentation-only adapter state**
+
+Add in `createJapaneseApp`:
 
 ```js
-reviewFailurePhase = "";
+let reviewPhase = "ready";
+let lastJapaneseAnnouncementKey = "";
+```
+
+In `submitRating(rating)`, identify the clicked rating button, set `reviewPhase = "rating-pending"`, render, and disable rating buttons. On persistence failure:
+
+```js
+reviewPhase = "rating-failed";
 renderReview();
-try {
-  await actions.rateReview(session.currentNoteId, rating, currentContext().nowIso);
-} catch {
-  reviewFailurePhase = "rating-failed";
-  renderReview();
-  return;
-} finally {
-  for (const button of buttons) button.disabled = false;
-}
-renderReview();
+retryButton?.focus();
+return;
 ```
 
-In `renderReview()`, when `reviewFailurePhase === "rating-failed"`, use `presentJapaneseReviewState({ phase: "rating-failed" })` for `#reviewStatus`. Do not call `advanceReviewSession` from the catch path. Clear the failure on a successful retry, when opening a different session, or when the session completes.
+On success, set `reviewPhase = "ready"` and render the advanced session. Do not call `advanceReviewSession` in the catch path.
 
-Keep focus on the relevant rating control after failure; do not move it to the dialog close button.
+`renderReview()` uses `presentJapaneseReviewState({ phase: reviewPhase })` for pending/failure copy. Successful rating has no success message.
 
-- [ ] **Step 5: Normalize degraded and zero-due copy without exposing internal payloads**
+- [ ] **Step 7: Render Japanese study degradation as scoped capability truth**
 
-When `state.studyDataUnavailable` is true, render one bounded Japanese-only warning using safe copy such as:
+When `state.studyDataUnavailable` is true and workspace is Japanese, show:
 
 ```text
 Japanese study data is unavailable. Ordinary Notes are still available.
 ```
 
-Do not surface raw error objects. In the visible repair region, keep only bounded codes/counts needed by the accepted diagnostics contract; do not add note body/title/review payloads.
+Keep ordinary Notes fully usable. Do not display raw errors, note content, review payloads, or drawing data.
 
-Zero due remains healthy copy:
+Zero due remains healthy; use existing Review 0/disabled-reason semantics or quiet `No reviews due` copy without danger/warning tone.
 
-```text
-No reviews due
+- [ ] **Step 8: Expose a direct create-menu API for Japanese empty state**
+
+Extend the returned Japanese adapter with:
+
+```js
+openCreateMenu(opener) {
+  if (elements.newJapaneseNote.disabled) return false;
+  elements.japaneseCreateMenu.hidden = false;
+  elements.newJapaneseNote.setAttribute("aria-expanded", "true");
+  elements.quickCreateButtons[0]?.focus();
+  return true;
+}
 ```
 
-and must not use danger/warning tone.
+In `app.js`, retain the returned adapter instance instead of discarding it. When workspace is Japanese, compute `presentBoardState` using `state.japaneseNoteIds` as total. If its action is `create-japanese-note`, `onEmptyAction` calls `japaneseApp.openCreateMenu(opener)`. This is a direct composition-root API call, not a synthetic click or DOM bridge.
 
-- [ ] **Step 6: Wire Japanese empty action through the existing create boundary**
-
-When the Japanese workspace has zero canonical Japanese notes, render `No Japanese notes yet` plus `New Japanese note`. The button must open the existing `#japaneseCreateMenu`/registered create commands; it must not create a note directly.
-
-If Task 2's `createListView` empty-action interface needs workspace-specific labels, extend the render payload with a pure `emptyPresentation` descriptor supplied by `app.js`/`japaneseApp.js`; do not have `ui/list.js` read `document.body.dataset.workspace` as application truth.
-
-- [ ] **Step 7: Run Japanese focused regressions**
-
-Run:
+- [ ] **Step 9: Verify Japanese focused regressions**
 
 ```sh
 node --test --test-concurrency=1 tests/integration/japanese-lifecycle.test.mjs
@@ -1118,51 +1148,41 @@ npx playwright test tests/e2e/japanese-release-gate.spec.mjs
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit Task 6**
+- [ ] **Step 10: Commit**
 
 ```sh
-git add japaneseApp.js japanese.css ui/list.js tests/e2e/state-recovery.spec.mjs tests/integration/japanese-lifecycle.test.mjs
+git add japaneseApp.js ui/japanese-filters.js index.html japanese.css app.js tests/integration/japanese-lifecycle.test.mjs tests/e2e/state-recovery.spec.mjs
 git commit -m "feat(ux): unify Japanese recovery states"
 ```
 
-Only include files that changed.
-
 ---
 
-### Task 7: Accessibility, bounded-resource audit, full verification, and pull request
+### Task 7: Accessibility, resource bounds, complete verification, and PR handoff
 
 **Files:**
-- Modify only if RED requires: `index.html`, `styles.css`, `editor.css`, `japanese.css`, `ui/statePresentation.js`, `tests/e2e/state-recovery.spec.mjs`
-- Documentation update if behavior text exists: `docs/cheatsheet.md` or current user-flow documentation only; do not create duplicate architecture authority.
+- Modify only if a focused RED requires it: `index.html`, `styles.css`, `editor.css`, `japanese.css`, `kanji-ink.css`, `ui/statePresentation.js`, `tests/e2e/state-recovery.spec.mjs`, `docs/cheatsheet.md`
 
-**Interfaces:**
-- No new runtime owners.
-- One presentation per scope: note, drawing, Japanese review, shell recovery.
+- [ ] **Step 1: Add final accessibility/resource assertions**
 
-- [ ] **Step 1: Add accessibility assertions to the focused browser suite**
-
-Add assertions that:
+The focused browser suite must verify:
 
 ```js
 await expect(page.locator("#saveState")).not.toHaveAttribute("aria-live");
 await expect(page.locator("#noteStatusAnnouncement")).toHaveAttribute("aria-live", "polite");
+await expect(page.locator("#japaneseFilterStatus")).not.toHaveAttribute("aria-live");
+await expect(page.locator("#reviewStatus")).not.toHaveAttribute("aria-live");
 ```
 
-For save failure, assert the title/body control that had focus still has focus after the failure. For reset cancellation, assert focus returns to `#resetApplicationDataButton`. For rating failure, assert focus remains inside `#reviewRatings` and the same item remains current.
+Also assert:
 
-For repeated identical failures, assert only one scoped error/recovery node exists:
+- note save failure does not steal title/body focus;
+- drawing save failure stays in the drawing workflow;
+- rating failure keeps focus on the selected rating button;
+- reset cancellation returns focus to `#resetApplicationDataButton`;
+- repeated identical failures leave exactly one `#applicationRecovery`, one `#noteStatusRegion`, one drawing region, and one Japanese announcement region;
+- durable delete produces one Undo surface; failed delete produces none.
 
-```js
-await expect(page.locator("#applicationRecovery")).toHaveCount(1);
-await expect(page.locator("#noteStatusRegion")).toHaveCount(1);
-await expect(page.locator("#kanjiInkRegion")).toHaveCount(1);
-```
-
-Do not add timing-based assertions for success notifications; successful state is validated by final DOM/canonical projection.
-
-- [ ] **Step 2: Run the complete focused #72 suite**
-
-Run:
+- [ ] **Step 2: Run the complete focused #72 package**
 
 ```sh
 node --test tests/unit/state-presentation.test.mjs
@@ -1173,9 +1193,7 @@ npx playwright test tests/e2e/state-recovery.spec.mjs
 
 Expected: PASS.
 
-- [ ] **Step 3: Run affected regression suites before the full gate**
-
-Run:
+- [ ] **Step 3: Run affected regression suites**
 
 ```sh
 npx playwright test tests/e2e/note-editor-overlay.spec.mjs
@@ -1189,30 +1207,25 @@ npx playwright test tests/e2e/japanese-progressive-disclosure.spec.mjs
 npx playwright test tests/e2e/japanese-release-gate.spec.mjs
 ```
 
-Expected: PASS. If a regression fails, debug locally and fix only #72-owned behavior. Do not push to use CI as a debugger.
+Expected: PASS. Fix only #72-owned behavior locally; do not push to use remote CI as a debugger.
 
-- [ ] **Step 4: Audit forbidden ownership and resource growth**
-
-Run:
+- [ ] **Step 4: Audit ownership and retained resources**
 
 ```sh
 git diff --name-only origin/dev...HEAD
 git diff --check
-git grep -n "setInterval\|setTimeout\|NotificationManager\|ToastStore\|FeedbackBus" -- app.js japaneseApp.js ui/statePresentation.js ui/list.js ui/kanjiInkView.js || true
+git grep -n "NotificationManager\|ToastStore\|FeedbackBus" -- app.js japaneseApp.js ui || true
+git grep -n "__stateRecoveryDbTest\|__stateRecoverySearchTest" -- ':!tests/e2e/state-recovery.spec.mjs' || true
 ```
 
 Expected:
 
 - no forbidden core-owner file changed;
-- no new retry loop/polling/global notification manager;
-- no raw error logging added;
-- no production test flag added.
+- no production failure harness exists;
+- no generic notification/event bus exists;
+- no payload/error logging was added.
 
-Also inspect `git diff origin/dev...HEAD` manually for content/query/vector/review payload leakage.
-
-- [ ] **Step 5: Run the complete local verification gate exactly once after focused stability**
-
-Run:
+- [ ] **Step 5: Run the complete local gate once after focused stability**
 
 ```sh
 npm ci
@@ -1225,24 +1238,28 @@ npm run test:e2e
 git diff --check
 ```
 
-Expected: all repository-owned gates PASS.
+Expected: PASS.
 
-If the Playwright OS dependency install alone fails because the local root filesystem is read-only, record the exact command/error and stop for reviewer authorization before treating it as environment-only. Do not retry `apt`, use `sudo`, or rerun remote CI.
+If only the Playwright OS dependency provisioning command fails because the local root filesystem is read-only, record the exact error and stop for reviewer authorization before classifying it as environment-only. Do not retry system package installation or use remote CI as a workaround loop.
 
-- [ ] **Step 6: Commit any final bounded test/docs adjustment only if needed**
+- [ ] **Step 6: Commit a final test/docs-only adjustment only if Step 1 changed files**
 
-The plan targets six feature commits. If Step 1 required a final test/docs-only change not already included, use at most one seventh commit:
+Use this bounded staging set:
 
 ```sh
-git add <only-the-actual-final-files>
+git add tests/e2e/state-recovery.spec.mjs index.html styles.css editor.css japanese.css kanji-ink.css ui/statePresentation.js docs/cheatsheet.md
+git diff --cached --check
+```
+
+If `git diff --cached --quiet` reports no staged difference, do not create a commit. Otherwise:
+
+```sh
 git commit -m "test(ux): complete state recovery evidence"
 ```
 
-Never create an empty commit. Total branch commits must remain at or below 8.
+Total implementation commits must remain at or below 8.
 
-- [ ] **Step 7: Final branch audit before remote push**
-
-Run:
+- [ ] **Step 7: Final branch audit**
 
 ```sh
 git status --short
@@ -1251,72 +1268,71 @@ git diff --stat origin/dev...HEAD
 git diff --check
 ```
 
-Expected: clean working tree; bounded #72 files only; at most 8 commits.
+Expected: clean working tree, bounded #72 files only, at most 8 commits.
 
-- [ ] **Step 8: Perform the single planned remote push and open one draft pull request**
-
-Push once after local verification is stable:
+- [ ] **Step 8: Perform one planned remote push**
 
 ```sh
 git push -u origin issue/72-state-recovery
 ```
 
-Open exactly one draft PR targeting `dev`. The PR body must record:
+Do not make a trial/empty push.
+
+- [ ] **Step 9: Open exactly one draft PR targeting `dev`**
+
+The PR body records the values returned by:
+
+```sh
+git rev-parse origin/dev
+git rev-parse HEAD
+git diff --name-only origin/dev...HEAD
+```
+
+It must also record:
 
 - issue #72;
 - authoritative design path;
-- current `dev` base SHA;
-- head SHA;
-- exact changed files;
-- TDD RED→GREEN evidence;
+- RED→GREEN evidence;
 - first-run zero-write evidence;
 - note canonical-failure vs derived-degradation evidence;
-- drawing save/delete/retry and direct-projection evidence;
+- create/delete/save recovery behavior;
+- drawing save/delete/retry/direct-projection evidence;
 - Japanese no-result/rating/degraded evidence;
-- storage recovery/reset-cancel evidence;
-- accessibility and retained-resource evidence;
-- full local gate results;
+- bootstrap recovery/reset-cancel evidence;
+- accessibility and O(1) retained-presentation evidence;
+- complete local gate results;
 - native 200% status;
 - migration/security/privacy/rollback statements.
 
 Do not merge.
 
-- [ ] **Step 9: Let one automatic PR CI run, then stop**
+- [ ] **Step 10: Let one automatic PR CI run, then stop**
 
-Do not manually dispatch or rerun workflows. Do not push an empty/trial commit to retrigger CI.
+Do not manually dispatch or rerun workflows. Do not push whitespace or empty commits to retrigger CI.
 
 If automatic CI passes, report the current-head run and stop for owner review.
 
-If automatic CI fails, report the exact step, command, and failure evidence and stop. A subsequent fix/push iteration requires explicit reviewer authorization.
+If automatic CI fails, report the exact failed step and evidence and stop. Any later fix/push iteration requires explicit reviewer authorization.
 
 ---
 
-## Final Acceptance Mapping
+## Acceptance Mapping
 
-Before marking the PR review-ready, verify every approved requirement maps to evidence:
-
-- True first run: Task 2 browser + IndexedDB count evidence.
-- Empty vs no-match: Task 2 mapper/browser evidence.
-- Silent note success: Tasks 1/3 mapper + browser evidence.
-- Note failure preserves draft: Task 3 integration/browser evidence.
-- Derived degradation does not claim save failure: Task 3 integration/browser evidence.
-- Drawing success via direct projection and no toast: Task 5 browser regression.
-- Drawing failure/delete recovery: Task 5 controller/browser evidence.
-- Japanese no-result context: Task 6 browser evidence.
-- Rating failure stays on same item: Task 6 integration/browser evidence.
-- Japanese degradation remains scoped: Task 6 degraded-mode regression.
-- Durable delete-only Undo: existing editor/drawing lifecycle plus Tasks 3/5 regressions.
-- Non-destructive bootstrap recovery/reset cancel: Task 4 browser evidence.
-- Existing command availability owner: no registry duplication; regression suites remain green.
-- Bounded live announcements/focus: Task 7 accessibility assertions.
-- Content-free errors/privacy: mapper tests + diff audit.
-- O(1) presentation resources: Task 7 repeated-failure DOM assertions and diff audit.
-- No schema/owner/mobile scope change: file audit + full gate.
-- Full repository verification: Task 7 complete gate and one automatic PR CI run.
+- True first run and zero-write DB: Task 2.
+- Empty vs no-match: Tasks 1–2.
+- Silent healthy note success: Tasks 1 and 3.
+- Edit/create/delete/pin/archive failure truth: Task 3.
+- Derived search degradation distinct from persistence failure: Task 3.
+- Drawing save success via direct projection; save/delete failure recovery: Task 5.
+- Japanese no-result context, scoped degradation, rating failure/no optimistic advance: Task 6.
+- Persistent non-destructive storage recovery and reset cancellation: Task 4.
+- Bounded live announcements/focus/O(1) presentation resources: Task 7.
+- No schema, persistence-owner, scheduler-owner, drawing-owner, command-owner, or mobile-scope change: file audit + complete gate.
+- Full repository verification and one automatic remote CI gate: Task 7.
 
 ## Stop Conditions
 
-Stop immediately and report exact evidence instead of expanding scope if any accepted test appears to require:
+Stop and report exact evidence instead of expanding scope if any accepted test appears to require:
 
 - IndexedDB version/store/schema change;
 - persistence transaction semantic change;
@@ -1324,7 +1340,7 @@ Stop immediately and report exact evidence instead of expanding scope if any acc
 - search ranking/index architecture change;
 - parser ownership change;
 - drawing controller/application ownership change;
-- a second command-availability owner;
+- a second command availability owner;
 - a global notification/event bus;
 - automatic retry/polling/background work;
 - production failure-injection switches;
