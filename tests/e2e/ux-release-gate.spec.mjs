@@ -1,10 +1,16 @@
 import { expect, test } from "@playwright/test";
+import {
+  closeNoteEditor,
+  createJapaneseNoteFromMenu,
+  openJapaneseCreateMenu,
+  openJapaneseReview,
+} from "./japanese-helpers.mjs";
 
 const APP_ORIGIN = "http://127.0.0.1:4173";
 const DEFERRED_DESTINATIONS = ["Reminders", "Labels", "Archive", "Trash"];
-const FORBIDDEN_COMMAND_IDS = /^(reminders?|labels?|trash|analytics|attachments?|formatting|recognition)(\.|$)/i;
+const FORBIDDEN_COMMAND_IDS = /^(?:reminders?|labels?|trash|analytics|attachments?|formatting|recognition|candidates?|(?:remote[.-]?)?models?|rich[.-]?format(?:ting)?|handwriting[.-]?recognition)(?:[.-]|$)/i;
 const FORBIDDEN_HEALTHY_CONTROL_FAMILY = /\b(?:recognition|recognize|candidates?|remote[-\s]?model|analytics?|reminders?|labels?(?:[-\s]?(?:management|manager))?|trash|attachments?|rich[-\s]?(?:format|formatting)|handwriting[-\s]?recognition)\b/i;
-const CONTROL_SELECTOR = [
+const NATIVE_CONTROL_SELECTOR = [
   "button",
   "a[href]",
   "area[href]",
@@ -13,6 +19,9 @@ const CONTROL_SELECTOR = [
   "textarea",
   "summary",
   "details",
+].join(", ");
+const CONTROL_SELECTOR = [
+  NATIVE_CONTROL_SELECTOR,
   "[role]",
   "[tabindex]",
   "[contenteditable]",
@@ -39,7 +48,7 @@ async function installOneShotBootstrapOpenFailure(page) {
 }
 
 async function countForbiddenHealthyControls(page) {
-  return page.evaluate(({ selector, patternSource }) => {
+  return page.evaluate(({ selector, nativeControlSelector, patternSource }) => {
     const forbidden = new RegExp(patternSource, "i");
     return [...globalThis.document.querySelectorAll(selector)].reduce((count, control) => {
       if (!(control instanceof globalThis.HTMLElement) || control.hidden || control.getAttribute("aria-hidden") === "true") {
@@ -51,9 +60,8 @@ async function countForbiddenHealthyControls(page) {
       const isNonnegativeTabIndex = tabIndex !== null && Number(tabIndex) >= 0;
       const contentEditable = control.getAttribute("contenteditable");
       const isEditable = contentEditable === "" || ["true", "plaintext-only"].includes(contentEditable?.toLowerCase());
-      const isNativeOrRoleControl = control.matches(
-        "button, a[href], area[href], input:not([type='hidden']), select, textarea, summary, details, [role], [onclick], audio[controls], video[controls], iframe, embed, object",
-      );
+      const isNativeOrRoleControl = control.matches(nativeControlSelector)
+        || control.matches("[role], [onclick], audio[controls], video[controls], iframe, embed, object");
       if (!isNativeOrRoleControl && !isNonnegativeTabIndex && !isEditable) return count;
       const accessibleReferenceText = (attribute) => (control.getAttribute(attribute) || "")
         .split(/\s+/)
@@ -83,7 +91,11 @@ async function countForbiddenHealthyControls(page) {
       ].filter(Boolean).join(" ");
       return count + Number(forbidden.test(metadata));
     }, 0);
-  }, { selector: CONTROL_SELECTOR, patternSource: FORBIDDEN_HEALTHY_CONTROL_FAMILY.source });
+  }, {
+    selector: CONTROL_SELECTOR,
+    nativeControlSelector: NATIVE_CONTROL_SELECTOR,
+    patternSource: FORBIDDEN_HEALTHY_CONTROL_FAMILY.source,
+  });
 }
 
 async function expectVisibleWithinViewport(page, locator) {
@@ -144,8 +156,61 @@ test("release shell exposes only owner-backed navigation and bounded commands", 
   ))).toBe(true);
 });
 
+test("healthy release surfaces expose no forbidden controls", async ({ page }) => {
+  await page.goto("/");
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect(palette).toBeVisible();
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+
+  await page.locator("#japaneseWorkspaceButton").click();
+  await expect(page.locator("#japaneseWorkspaceButton")).toHaveAttribute("aria-pressed", "true");
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+
+  const createMenu = await openJapaneseCreateMenu(page);
+  await expect(createMenu).toBeVisible();
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(createMenu).toBeHidden();
+
+  await createJapaneseNoteFromMenu(page, "Create vocabulary note");
+  await closeNoteEditor(page);
+  const reviewEntry = await openJapaneseReview(page);
+  const reviewDialog = page.getByRole("dialog", { name: "Japanese review session" });
+  await expect(reviewDialog).toBeVisible();
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(reviewDialog).toBeHidden();
+  await expect(reviewEntry).toBeFocused();
+
+  await page.locator("#notesWorkspaceButton").click();
+  await expect(page.locator("#notesWorkspaceButton")).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#noteList .note-item").first().click();
+  const actions = page.getByRole("menu", { name: "Note actions" });
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  await expect(actions).toBeVisible();
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(actions).toBeHidden();
+
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Add drawing/ }).click();
+  const drawingDialog = page.getByRole("dialog", { name: "Draw Kanji" });
+  await expect(drawingDialog).toBeVisible();
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
+  await drawingDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(drawingDialog).toBeHidden();
+});
+
 test("workspace transitions preserve ordinary context and keyboard return", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+  await closeNoteEditor(page);
 
   const search = page.locator("#searchInput");
   await search.fill("synthetic-release-query");
@@ -179,7 +244,9 @@ for (const viewport of [
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
 
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const overflow = await page.evaluate(() => (
+      globalThis.document.documentElement.scrollWidth - globalThis.document.documentElement.clientWidth
+    ));
     expect(overflow).toBeLessThanOrEqual(1);
     await expect(page.getByRole("button", { name: "New note", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
@@ -192,7 +259,9 @@ for (const viewport of [
     await expectVisibleWithinViewport(page, recovery);
     await expectVisibleWithinViewport(page, retry);
     await expectVisibleWithinViewport(page, reset);
-    const recoveryOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const recoveryOverflow = await page.evaluate(() => (
+      globalThis.document.documentElement.scrollWidth - globalThis.document.documentElement.clientWidth
+    ));
     expect(recoveryOverflow).toBeLessThanOrEqual(1);
     await retry.click();
     await expect(recovery).toBeHidden();
