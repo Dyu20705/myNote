@@ -73,6 +73,7 @@ npm run test:e2e
 - [Governance](docs/GOVERNANCE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
+- [Desktop UX release gate](docs/UX_RELEASE_GATE.md)
 - [User-flow and beta-test guide](docs/USER_FLOW_BETA_TEST.md)
 - [Security policy](SECURITY.md)
 
