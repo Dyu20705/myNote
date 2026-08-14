@@ -11,14 +11,14 @@ Decision: **BLOCKED**
 | Accepted implementation base | `320fcc31942cc32fbb1401584c51c7ddf2573bed` |
 | Focused evidence commit | `eaf113312cb7ff60a664067dc7fb6aac860eb0f1` (`test(ux): add final release gate evidence`) |
 | Privacy-safe evidence correction | `3acab3045a218a2d5efa069918bdb757f6a70b53` (`test(ux): redact external request diagnostics`) |
-| Product evidence revision | `3acab3045a218a2d5efa069918bdb757f6a70b53`; this document changes documentation only |
+| Product evidence revision | `3105a445c8a55b7c6bc8b8629c0cc08828bfc9d0` (`test(ux): close final release evidence gaps`); this document changes documentation only |
 | Supported repository toolchain | Node.js `>=22.13 <23`; npm `11.7.0`; Playwright `1.62.0` |
 | Local audit toolchain | Node.js `24.19.0`; npm `11.9.0` — unsupported for release certification |
 | Local dependency install | `npm ci --cache /tmp/mynote-issue73-npm-cache` passed; 73 packages installed |
 | Local Chromium provisioning | `npx --no-install playwright install --with-deps chromium` — ENVIRONMENT BLOCKED before process spawn |
 | Local grouped repository checks | content, lint, unit, and integration command — ENVIRONMENT BLOCKED before process spawn |
 | Focused issue #73 browser check | `npx --no-install playwright test tests/e2e/ux-release-gate.spec.mjs --project=chromium` — ENVIRONMENT BLOCKED after the web server started; no assertion result and no product RED observed |
-| Focused issue #73 lint | `npx --no-install eslint tests/e2e/ux-release-gate.spec.mjs` — ENVIRONMENT BLOCKED before ESLint spawned; `node --check` passed after the count-only correction |
+| Focused issue #73 lint | `npx --no-install eslint tests/e2e/ux-release-gate.spec.mjs` — ENVIRONMENT BLOCKED before ESLint spawned; `node --check` passed after the recovery/control-count correction |
 | Integrated-base CI reference | GitHub Actions PR #96 run #331 was green at head `f84a688ef6484d6c16b464db194be3231ff7bc46`; historical evidence only |
 | Integrated-base CI execution | Workflow `CI`, job `verify`, `pull_request` context; GitHub-hosted runner label `ubuntu-24.04`; `npm run test:e2e` invokes `node scripts/run-e2e.mjs`, Playwright's static web server, and the configured Chromium projects with one worker, zero retries, and default headless execution |
 | Integrated-base CI toolchain | Node.js `22.20.0`; npm `11.7.0`; `@playwright/test`, `playwright`, and `playwright-core` `1.62.0` |
@@ -110,7 +110,7 @@ Scoring uses only `0`, half, or full credit for every named measure in [UX quali
 | Named measure | Credit | Evidence, result, and exact command |
 | --- | ---: | --- |
 | Shared patterns | 2/2 | [`board-first shell has one application header and one shared editor overlay header`](../tests/unit/application-composition.test.mjs) via `npm run test:unit`, plus [`ordinary and Japanese notes share the direct drawing projection`](../tests/e2e/note-drawing-projection.spec.mjs) via `npm run test:e2e`; integrated-base GREEN. |
-| No dead/duplicate controls | 2/2 | [`editor overlay owns drawing projection, title, save status, Details, and More without permanent Save`](../tests/e2e/editor-list-contract.spec.mjs), [`explicit save and delete remain discoverable through the shared command registry`](../tests/e2e/editor-list-contract.spec.mjs), and direct shell inventory `rg -n "notesWorkspaceButton|japaneseWorkspaceButton|Reminders|Labels|Archive|Trash" index.html`; existing tests were integrated-base GREEN via `npm run test:e2e`. |
+| No dead/duplicate controls | 2/2 | [`editor overlay owns drawing projection, title, save status, Details, and More without permanent Save`](../tests/e2e/editor-list-contract.spec.mjs), [`explicit save and delete remain discoverable through the shared command registry`](../tests/e2e/editor-list-contract.spec.mjs), and direct shell inventory `rg -n "notesWorkspaceButton|japaneseWorkspaceButton|Reminders|Labels|Archive|Trash" index.html`; existing tests were integrated-base GREEN via `npm run test:e2e`. The final focused count-only healthy-control audit is pending and adds no score credit. |
 | Honest boundaries | 1/1 | Direct source inventory confirms two owner-backed workspace controls, no deferred destination controls, and one owned Archive action. Reproduce with `rg -n "notesWorkspaceButton|japaneseWorkspaceButton|notes.archive|Reminders|Labels|Trash" index.html app.js`. The broader [`release shell exposes only owner-backed navigation and bounded commands`](../tests/e2e/ux-release-gate.spec.mjs) remains pending and is not used for this point. |
 
 ## Evidence map
@@ -132,7 +132,7 @@ The evidence map was built in four steps:
 | Saved-grid | `saved-grid canvas supports tools, history, durable editing, recovery, and export`; `delete, restore, export, and import remain atomic service operations`; `npm run test:e2e`; `npm run test:unit` | Integrated-base GREEN | Saved-grid application service |
 | Persistence/migration | `valid legacy fixture commits canonical notes and returns a bounded outcome`; `a source changed during normalization is rejected before any legacy write`; `canonical upsert failure rejects before memory or derived commit`; `npm run test:integration` | Integrated-base GREEN | Storage/lifecycle owners |
 | Content contract | `tracked repository text is English-only`; `tracked repository text contains no tool-specific provenance markers`; `npm run test:content` | Integrated-base GREEN | Final branch pending |
-| Focused #73 cross-package | `release shell exposes only owner-backed navigation and bounded commands`; `workspace transitions preserve ordinary context and keyboard return`; `minimum desktop keeps the document and primary actions contained`; `wide desktop keeps the document and primary actions contained`; `reference desktop keeps the document and primary actions contained`; `200 percent layout proxy keeps the document and primary actions contained`; `saved-grid drawing stays local and outside canonical note content`; `npx --no-install playwright test tests/e2e/ux-release-gate.spec.mjs --project=chromium` | ENVIRONMENT BLOCKED | No product RED observed; no score credit |
+| Focused #73 cross-package | `release shell exposes only owner-backed navigation and bounded commands` (including a count-only healthy-control audit); `workspace transitions preserve ordinary context and keyboard return`; all four named viewport cases (healthy containment plus a one-shot bootstrap storage failure, reachable Retry/Reset recovery controls, recovery containment, and Retry recovery); `saved-grid drawing stays local and outside canonical note content` (including the count-only audit with the drawing dialog open); `npx --no-install playwright test tests/e2e/ux-release-gate.spec.mjs --project=chromium` | ENVIRONMENT BLOCKED | No product RED observed; no score credit |
 
 ## Workflow matrix
 
@@ -148,6 +148,7 @@ The evidence map was built in four steps:
 | Undo | `More actions resolves current registry metadata and labelled recoverable delete`; `npm run test:e2e` | Integrated-base GREEN | Command stack and lifecycle capture |
 | Export | `generic Notes create, edit, search, navigation, pin, archive, export, and recovery remain operational`; `npm run test:e2e` | Integrated-base GREEN | Markdown/JSON download owners |
 | Reload | `edited synthetic note survives a save-triggered reload`; `npm run test:e2e` | Integrated-base GREEN | IndexedDB canonical note storage |
+| Bootstrap recovery reachability | The final focused #73 viewport cases use a one-shot IndexedDB-open failure, assert visible in-viewport `#applicationRecovery`, Retry, and Reset local data controls, assert recovery horizontal containment, then assert Retry hides recovery; focused #73 browser command | ENVIRONMENT BLOCKED | Count-only/synthetic diagnostic; no execution credit |
 | Japanese five note types | `fresh database completes all five templates, duplicate guards, dashboard metrics, close/resume, and all rating controls`; `npm run test:e2e` | Integrated-base GREEN | Vocabulary, Kanji, grammar, output, planner canonical templates |
 | Japanese filters | `Japanese filters compose with search, validate ranges, and stay workspace-local`; `npm run test:e2e` | Integrated-base GREEN | Filter controller/result policy |
 | Japanese Review | `review content stays hidden, close resumes, and all ratings are keyboard reachable`; `npm run test:e2e` | Integrated-base GREEN | Reveal-first modal and scheduler lifecycle |
@@ -167,6 +168,7 @@ The evidence map was built in four steps:
 | IME precedence | `IME composition suppresses shell navigation commands`; `npm run test:e2e` | Integrated-base GREEN | Composition suppresses application navigation |
 | Modal isolation | `palette and review-modal scopes isolate background commands`; `npm run test:unit` | Integrated-base GREEN | Palette, editor, and Review keep distinct scope |
 | Focus return | `keyboard traversal includes editor context actions and reaches the shell deterministically`; `npm run test:e2e` | Integrated-base GREEN | Logical opener/card/control receives focus |
+| Focused forbidden-control audit | The final focused suite scans visible button/link/menuitem controls by visible text, accessibility metadata, and ID, returns only a numeric count, and asserts zero for the forbidden release families on the healthy shell and with drawing open | ENVIRONMENT BLOCKED | No matched text, user content, URL, path, or identifier leaves the browser context |
 | Release inventory | Static registration count: 21 application commands, 5 Japanese create commands, 3 saved-grid commands, and 1 saved-grid import command | 30 registered definitions | Source command: `rg -n 'id: "[a-z].*\.' app.js japaneseApp.js ui/kanjiInkView.js ui/kanjiInkImportCommand.js` |
 
 ## Viewport, zoom, input, focus, and motion matrix
@@ -177,6 +179,7 @@ The evidence map was built in four steps:
 | `1280×720` | `board and centered overlay remain bounded in both workspaces at 1280x720`; `readable editor and long mixed content remain bounded at 1280x720`; `board overlay and note transient surfaces stay contained at 1280x720`; `npm run test:e2e` | Integrated-base GREEN | Supported Chromium CSS viewport |
 | `1440×900` | `board and centered overlay remain bounded in both workspaces at 1440x900`; `readable editor and long mixed content remain bounded at 1440x900`; `board overlay and note transient surfaces stay contained at 1440x900`; `npm run test:e2e` | Integrated-base GREEN | Supported Chromium CSS viewport |
 | `720×450` layout proxy | `note and command transient surfaces stay contained during 720x450 narrow-layout stress`; `npm run test:e2e` | Integrated-base GREEN | Responsive-layout proxy only |
+| Focused recovery reachability at all four viewports | The final focused viewport cases reload into a one-shot IndexedDB-open failure, keep recovery, Retry, and Reset local data controls within the CSS viewport, preserve horizontal containment, and verify Retry restores the ready shell | ENVIRONMENT BLOCKED | Responsive evidence only when executed; it is not native Windows/200% credit |
 | Live resize | `live desktop resize preserves query draft overlay and logical focus`; `npm run test:e2e` | Integrated-base GREEN | Query, draft, selection, scroll, and focus retained |
 | Keyboard | `keyboard traversal includes editor context actions and reaches the shell deterministically`; `npm run test:e2e` | Integrated-base GREEN | Non-drawing journeys covered |
 | Desktop mouse | `generic Notes create, edit, search, navigation, pin, archive, export, and recovery remain operational` and `saved-grid canvas supports tools, history, durable editing, recovery, and export`; `npm run test:e2e` | Integrated-base GREEN | Automated pointer input, not physical pen |
@@ -244,6 +247,7 @@ The focused resource command is `npx --no-install playwright test tests/e2e/kanj
 | Explicit reset confirmation | `application recovery is non-destructive until reset confirmation`; `npm run test:unit` | Integrated-base GREEN | No automatic destructive bootstrap action |
 | No V2 recognizer/model/dataset path | `controller persistence is recognizer-free and preserves V2 edit identity`; `V2 human-readable export does not invent recognition data`; `npm run test:unit` | Integrated-base GREEN | Historical V1 attribution remains compatibility data only |
 | No normal-product telemetry surface | `shell exposes coherent application and editor-context landmarks without telemetry`; `npm run test:e2e` | Integrated-base GREEN | Local diagnostic measurements are not normal UI |
+| Focused forbidden-control diagnostic | Final focused evidence returns only the numeric count of visible forbidden-family controls in the healthy shell and open drawing dialog; focused #73 browser command | PENDING | It does not serialize matched text, user content, URLs, paths, or fixture identifiers |
 | Focused release request diagnostic | `saved-grid drawing stays local and outside canonical note content`; focused #73 browser command | PENDING | Commit `3acab30` uses a count-only external-request assertion; no paths, methods, query text, or user identifiers can appear in its custom diagnostic |
 | Release document artifacts | Static tables contain only test titles, counts, synthetic fixture shapes, commands, and aggregate measurements | PASS | No user note text, imported source data, raw vectors, browser-profile material, authentication material, or content-bearing failure output is stored here |
 
@@ -267,6 +271,7 @@ Counts are source-level, healthy-state interaction counts at the audited evidenc
 | --- | --- | --- | --- |
 | Workspace navigation | `shell exposes coherent application and editor-context landmarks without telemetry`; `npm run test:e2e` | 2 controls | Notes and 日本語 only; 0 deferred destinations |
 | Global shell task row | Direct `index.html` inventory | 5 interactive controls | 2 workspace buttons, Search, 1 contextual create trigger, Refresh; note count/save state are status-only |
+| Bootstrap recovery (active failure state) | Final focused #73 viewport cases | 2 actions | Retry and Reset local data are asserted reachable only while recovery is active; focused execution remains ENVIRONMENT BLOCKED |
 | Ordinary editor header | `editor overlay owns drawing projection, title, save status, Details, and More without permanent Save`; `npm run test:e2e` | 4 buttons | Pin, Details, More, Close; Save remains a command, not a duplicate permanent button |
 | Ordinary More menu | `More actions resolves current registry metadata and labelled recoverable delete`; `npm run test:e2e` | 3 actions | Archive, Add drawing, Delete |
 | Japanese primary entry | `Japanese Notes exposes Filter A and starts Review from one compact board action`; `npm run test:e2e` | 1 create trigger; 1 Review entry | Five create actions appear only in the disclosure/palette |
