@@ -1,120 +1,111 @@
-# <Issue Number> — <Bounded Work Package> Design
+# Issue Design Template
+
+Use this template for the next dependency-safe implementation package. The design is authored and accepted before implementation begins.
 
 ## Status
 
-- **Issue:** #<number>
-- **Design status:** accepted / draft
-- **Implementation target:** `dev`
-- **Source commit:** `<sha>`
-- **Evidence date:** `YYYY-MM-DD`
-- **Parent:** #<number>
-- **Depends on:** #<numbers>
-- **Blocks:** #<numbers>
+- Issue:
+- Design status:
+- Implementation target: `dev`
+- Runtime baseline SHA:
+- Evidence date:
+- Parent:
+- Depends on:
+- Blocks:
+- Review authority: owner + architecture reviewer
 
 ## Goal
 
-One sentence describing the bounded outcome.
+State one bounded product/engineering outcome.
 
 ## User outcome
 
-Describe the observable user result without prescribing an implementation shortcut.
+Describe the observable user result without implementation detail.
 
 ## Current verified baseline
 
-List only behavior verified against the source commit. Include exact files/modules and separate facts from inference.
+Record the exact runtime/code/test behavior inspected on the baseline SHA. Separate verified facts from assumptions.
 
 ## Design decisions
 
-State the selected approach and the rejected alternatives that materially constrain implementation.
+For each decision record:
+
+- accepted behavior;
+- ownership;
+- why the boundary exists;
+- explicitly rejected alternatives when ambiguity would otherwise remain.
 
 ## Architecture and ownership
 
-Define which existing owner handles each responsibility. State forbidden duplicate authorities explicitly.
-
-## Data / state / presentation flow
+Preserve repository dependency direction:
 
 ```text
-intent
-→ approved owner
-→ state/core boundary
-→ persistence when applicable
-→ derived presentation
+UI → Actions → State → Core → Persistence
 ```
 
-State exactly what may and may not mutate canonical data.
+Identify existing canonical owners that must be reused. New ownership requires an explicit architecture decision.
 
-## Interaction and presentation contract
+## State/data flow
 
-Define the accepted UI behavior, focus, keyboard, overflow, responsive/zoom behavior, and transient-surface rules where applicable.
-
-## Failure and recovery contract
-
-Define canonical failure, derived degradation, user-visible state, retry/recovery, and focus/draft preservation.
+Document the required flow when the issue changes state, persistence, concurrency, focus, or cross-module coordination.
 
 ## In scope
 
-- bounded item
+List exact behaviors and interfaces authorized to change.
 
-## Non-goals
+## Out of scope
 
-- explicit exclusion
+List adjacent capabilities that must not be implemented.
 
 ## Expected files and interfaces
 
-### Expected modifications
+### Allowed runtime files
 
-- `path`
+List exact files or module boundaries.
 
-### Allowed new files
+### Allowed tests/docs
 
-- `path`
+List exact evidence owners.
 
-### Forbidden interfaces
+### Forbidden boundaries
 
-- explicit interfaces/modules/owners that this package must not change
+List modules/interfaces that must not change without an accepted design amendment.
 
-## RED test contract
+## RED regression contract
 
-List the exact failing behaviors that must be demonstrated before runtime fixes. State which existing tests are extended and which focused test file may be created.
+Define behavior-first failing assertions before production changes. A test that is already GREEN is valid regression evidence; do not manufacture runtime changes to force RED.
 
 ## Implementation sequence
 
-1. RED.
-2. Minimal implementation.
-3. Focused GREEN.
-4. Regression package.
-5. Full verification.
-6. Diff self-review.
+Define minimal RED → GREEN task order. Keep task boundaries independently reviewable.
 
-## Acceptance criteria
+## Failure and recovery
 
-- [ ] observable criterion
+Specify durable commit points, retryability, data-safety wording, degraded behavior, and stop conditions.
 
 ## Security and privacy
 
-State relevant data/logging/untrusted-input boundaries. Use `Not applicable beyond existing invariant` only when genuinely true.
+State trust boundaries, prohibited content in logs/artifacts, and any network/credential implications.
 
 ## Performance and resource bounds
 
-State the expected complexity/resource behavior and any benchmark or retained-resource requirement.
+State complexity, memory/listener/timer/cache limits, and benchmark requirements where relevant.
 
 ## Accessibility
 
-State focus, keyboard, names/states, live-region, zoom, reduced-motion, and unsupported assistive-technology boundaries as applicable.
+State keyboard/focus/name/state/announcement/zoom requirements that are in scope.
 
-## Compatibility and unsupported environments
+## Compatibility and migration
 
-State supported environment and explicit `UNKNOWN — REQUIRES VALIDATION` cases.
-
-## Migration
-
-State `none` when no stored-data migration is allowed. Otherwise define exact versioning/interruption behavior.
+State schema/version/environment compatibility. Unsupported environments remain `UNKNOWN — REQUIRES VALIDATION`.
 
 ## Rollback
 
-Define the independently revertible boundary and any forward-compatibility requirements.
+Define a deterministic revert path and any data compatibility constraints.
 
 ## Verification
+
+Default complete gate:
 
 ```sh
 npm ci
@@ -127,23 +118,16 @@ npm run test:e2e
 git diff --check
 ```
 
-Add exact focused commands for the issue.
+Add focused commands specific to the issue.
 
-## Manual evidence
+## Acceptance criteria
 
-List only evidence that automation cannot faithfully establish. Never substitute an emulation for a native-environment claim without saying so.
+Use observable checkboxes mapped to automated, measured, or recorded evidence.
 
-## Codex stop conditions
+## Stop conditions
 
-Codex must stop and report instead of guessing when:
+The implementation agent stops instead of guessing when the accepted design conflicts with architecture/invariants, requires unauthorized scope, or cannot be evidenced in the available environment.
 
-- a material requirement conflicts with `docs/ARCHITECTURE.md` or `docs/INVARIANTS.md`;
-- the design requires a file/interface that does not exist at the source/base commit and no allowed equivalent is stated;
-- satisfying the design requires a schema/dependency/framework/roadmap change not explicitly authorized;
-- a required acceptance criterion cannot be tested or observed as designed;
-- implementation would require expanding into another issue;
-- a material `UNKNOWN — REQUIRES VALIDATION` remains unresolved.
+## Completion rule
 
-## Definition of Done
-
-Define completion as reviewed evidence, not implementation intent.
+Define exactly when the issue may move to review, be accepted/integrated, and unblock downstream work.

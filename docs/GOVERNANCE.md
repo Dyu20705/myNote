@@ -1,214 +1,132 @@
 # myNote Governance
 
-## Project mode
+## Repository purpose
 
-`myNote` is maintained as an internal personal-development project.
+`myNote` is an internal personal-development project. Repository work is planned, implemented, reviewed, and integrated through owner-controlled work packages.
 
-- Unsolicited external issues, pull requests, feature requests, and contribution proposals are not accepted.
-- Repository issues are the internal source of truth for roadmap relationships, dependency state, review state, and completion evidence.
-- Accepted per-issue design documents are the source of truth for exact implementation behavior and boundaries.
-- Completed issues and pull requests are preserved as audit evidence; they are closed and may be locked, not deleted.
-- The current repository tree uses English for documentation, comments, templates, test descriptions, and user-facing text.
-- Tool-specific provenance markers are not stored as runtime product data.
+Unsolicited external issues, pull requests, feature proposals, and automated changes are not part of the accepted execution model unless the owner explicitly adopts them.
 
-AI-assisted delivery follows `docs/engineering/AI_DELIVERY_MODEL.md`.
+Closed historical issues and pull requests are retained as audit evidence. Completed records are closed and may be locked, not deleted.
 
-## Authority hierarchy
+## Authority model
 
-```text
-Product direction / owner decisions
-        ↓
-Roadmap and domain epics
-        ↓
-Accepted per-issue design document
-        ↓
-Bounded child work package
-        ↓
-Implementation plan
-        ↓
-Implementation PR → dev
-        ↓
-Duy + ChatGPT review
-```
+Repository authority is ordered as follows:
 
-For implementation details, the authority order is:
+1. architecture and technical invariants;
+2. accepted product/architecture decisions;
+3. the authoritative issue design under `docs/design/issues/`;
+4. the approved implementation plan referenced by that design;
+5. GitHub issue lifecycle/dependency metadata;
+6. accepted visual evidence referenced by the design;
+7. runtime code;
+8. test and CI evidence.
 
-```text
-1. docs/ARCHITECTURE.md + docs/INVARIANTS.md
-2. accepted architecture/product decisions referenced by the design
-3. docs/design/issues/<issue>-*.md
-4. approved implementation plan referenced by that design
-5. GitHub issue tracking metadata
-6. accepted Figma evidence explicitly referenced by the design
-7. runtime implementation
-8. automated/manual verification evidence
-```
+The issue body is a coordination record once an authoritative design exists. Historical issue prose cannot override the accepted design.
 
-A GitHub issue remains the coordination record. After it links an accepted design, stale or superseded issue prose must not be treated as a competing implementation specification.
+## Work-package relationships
 
-## Roles
+Every executable child records:
 
-### Owner / architecture / review
+- Parent:
+- Depends on:
+- Blocks:
 
-Duy + ChatGPT own:
+Relationships are reconciled after integration so downstream readiness is based on current repository state rather than stale prose.
 
-- product decisions;
-- architecture and ownership boundaries;
-- per-issue design;
-- dependency and issue sequencing;
-- acceptance criteria;
-- review disposition;
-- integration/release decisions.
+## Lifecycle labels
 
-### Codex implementation role
+Use exactly one execution-state label for an executable child:
 
-Codex implements one accepted design, verifies it, opens one PR to `dev`, then stops.
+- `status/blocked` — a direct dependency or required design decision is unresolved;
+- `status/ready` — direct dependencies are satisfied and an accepted design exists;
+- `status/in-progress` — one implementation branch/package is active;
+- `status/review` — implementation is complete enough for owner/reviewer review and the required current-head verification gate is green;
+- completed/closed — accepted and integrated according to the package completion rule.
 
-Codex does not own product design, architecture, roadmap sequencing, Figma mutation, issue decomposition, PR merge, or next-issue selection.
+Only one child issue may be `status/in-progress` at a time.
 
-## Branch policy
+Design/review work may occur while no runtime child is active. A downstream runtime child never starts merely because it is open.
 
-Codex/runtime implementation branches start from current `dev` and target `dev`:
+## Branch model
 
 ```text
 main
-  ↑ reviewed promotion/release
+  ↑ reviewed release/promotion
   ↑
 dev
   ↑
 issue/<number>-<bounded-name>
 ```
 
-Rules:
+- `dev` is the integration branch for reviewed issue work.
+- `main` is the release/promotion branch.
+- implementation work starts from current `dev`;
+- one issue uses one bounded implementation branch and one pull request to `dev`;
+- implementation commits are not pushed directly to `dev` or `main`;
+- the implementation agent never merges its own pull request.
 
-- one implementation issue = one bounded branch = one PR;
-- no Codex implementation push directly to `dev`;
-- no Codex implementation directly on `main`;
-- no merge by Codex;
-- no next issue after PR creation until review/integration disposition.
+Owner-maintained governance/design corrections may be committed directly to `dev` when they do not contain runtime implementation and when doing so avoids creating a competing runtime work package.
 
-Design/governance documents may be maintained directly on `dev` by the architecture authority when no runtime completion claim is being made.
+## Docs-first design gate
 
-## Issue hierarchy
+A child becomes `status/ready` only after the owner/reviewer has created and accepted an issue design under `docs/design/issues/`.
 
-```text
-Roadmap
-└── Epic or milestone parent
-    └── Child work package
-        └── Authoritative design
-            └── Pull request
-```
+The design records at minimum:
 
-A child work package represents one independently reviewable change. Parent issues provide context and remain open until every accepted child and completion criterion is satisfied.
+- goal and user outcome;
+- verified baseline;
+- product and architecture decisions;
+- ownership boundaries;
+- state/data flow where relevant;
+- in-scope and out-of-scope behavior;
+- allowed/forbidden interfaces;
+- RED regression contract;
+- acceptance criteria;
+- failure/recovery behavior;
+- security/privacy;
+- performance/resource bounds;
+- accessibility;
+- compatibility/migration;
+- rollback;
+- verification;
+- stop conditions.
 
-## Required relationship fields
+Detailed future designs are created just in time. Open future issues do not become implementation-ready by default.
 
-Every active bounded child issue states:
+## Implementation contract
 
-- **Parent:** roadmap/epic ownership.
-- **Depends on:** issues, pull requests, release gates, or repository contracts required first.
-- **Blocks:** downstream work packages.
-- **Current status:** one execution status label.
-- **Authoritative design:** exact `docs/design/issues/...` path once designed.
-- **Implementation PR:** link when created.
-- **Review authority:** Duy + ChatGPT.
+The implementation agent must:
 
-Exact behavior, architecture, ordered implementation steps, acceptance criteria, verification, migration, rollback, and stop conditions belong in the authoritative design and implementation plan rather than being duplicated across multiple issue bodies.
+1. start from current `dev`;
+2. read all authoritative docs in repository order;
+3. implement only the active issue;
+4. write the required regression evidence;
+5. observe genuine RED before runtime changes;
+6. make the smallest authorized implementation;
+7. run focused and complete verification;
+8. inspect the final diff;
+9. push the bounded branch;
+10. open/update one pull request to `dev`;
+11. stop for review.
 
-## Execution status
+If an accepted regression is already GREEN, the agent records regression evidence and does not invent a runtime change.
 
-Use exactly one execution status label on each open bounded child:
+If an unrelated baseline defect blocks the complete gate, the agent reports it and stops instead of silently repairing another owner's subsystem.
 
-- `status/blocked`: a dependency, decision, evidence gate, or higher-priority work package prevents implementation.
-- `status/ready`: dependencies are satisfied, an accepted design exists, verification is executable, and implementation may be assigned.
-- `status/in-progress`: the single selected implementation work package is actively being implemented.
-- `status/review`: implementation is complete to its documented boundary and a reviewable PR exists.
+## Review and integration
 
-Architecture/design/review work may occur while zero runtime issues are `status/in-progress`.
+The owner/reviewer decides:
 
-Only one runtime implementation child may be `status/in-progress` at a time. A maintenance/reliability blocker takes precedence over feature expansion.
+- whether findings are in scope;
+- whether the design must change;
+- whether a baseline defect needs owner maintenance;
+- whether the package advances to `status/review`;
+- whether the pull request is accepted/integrated;
+- when a downstream package becomes ready.
 
-Issue closure is separate from execution status. Close a child as `completed` only after its accepted PR is integrated into the required target and required verification is green. Close rejected or obsolete work as `not planned` with a concise reason.
+No P0/P1 correctness, data-integrity, privacy, accessibility, migration, security, or release-claim defect may remain unresolved at a package gate that claims those properties.
 
-## Milestone sequence
-
-Work proceeds through these product gates:
-
-1. **M0 — Governance**
-2. **M1 — Reliable Core**
-3. **M2 — Daily Driver**
-4. **M3 — Workflows**
-5. **M4 — Scale**
-6. **M5 — Advanced Platform**
-
-A later milestone does not bypass an unmet earlier release gate. Research may occur early only when it supports a concrete near-term decision; runtime implementation remains dependency-gated.
-
-## Design readiness check
-
-A bounded child becomes `status/ready` only when:
-
-1. Parent, dependencies, and blocked downstream work are explicit.
-2. Direct dependencies are merged/accepted according to the current integration target.
-3. `docs/design/issues/<issue>-*.md` exists and is accepted.
-4. The design contains no material placeholder, contradiction, or unresolved implementation-blocking unknown.
-5. Goal, scope, and non-goals form one reviewable unit.
-6. Acceptance criteria are observable and testable.
-7. RED/focused/full verification paths are defined.
-8. Data migration, rollback, security/privacy, performance, memory, accessibility, and compatibility risks are addressed where applicable.
-9. The implementation can preserve `docs/ARCHITECTURE.md` and `docs/INVARIANTS.md`, or an explicit architecture decision is part of the approved scope.
-10. No other runtime child is already `status/in-progress`.
-
-## Work-package selection
-
-At the start of a work cycle:
-
-1. Inspect current `dev`, `main`, recent merged/integrated PRs, roadmap parents, and candidate children.
-2. Reconcile stale checkboxes/labels against current repository evidence.
-3. Identify the earliest incomplete milestone/release gate.
-4. Select the highest-impact dependency-safe bounded child.
-5. Design it completely under `docs/design/issues/`.
-6. Self-review the design for placeholders, contradiction, ambiguity, ownership duplication, and scope inflation.
-7. Mark it `status/ready` only after the design gate passes.
-8. When an implementer is assigned, move only that child to `status/in-progress`.
-9. Implement, verify, and open one PR to `dev`.
-10. Move to `status/review` only when the PR is reviewable to the documented boundary.
-11. Duy + ChatGPT review the PR against the accepted design.
-12. Merge/promote only through the current owner/release decision.
-13. Reconcile parent/downstream state before designing the next runtime package.
-
-## Just-in-time design and research
-
-Do not pre-create a detailed implementation tree for distant work.
-
-Use:
-
-```text
-eligible capability
-→ identify material unknowns
-→ bounded research/audit only if necessary
-→ adopt/adapt/defer/reject
-→ complete next issue design
-→ implementation
-→ review
-→ reconcile
-```
-
-Historical research issues remain reusable reference material but are not automatic prerequisites unless a current design explicitly depends on them.
-
-## Test-driven implementation
-
-Runtime behavior changes follow:
-
-```text
-RED
-→ confirm expected failure
-→ minimal implementation
-→ GREEN
-→ focused regression
-→ complete verification
-→ diff self-review
-→ PR to dev
-```
+## Verification gate
 
 Default complete verification:
 
@@ -223,53 +141,63 @@ npm run test:e2e
 git diff --check
 ```
 
-Documentation-only packages may define a narrower gate when explicitly designed as documentation-only.
+A command is PASS only when it actually exits successfully in the claimed environment. Unsupported native environments remain `UNKNOWN — REQUIRES VALIDATION`.
 
-## Definition of Done
+## CI usage and anti-spam policy
 
-A work package is complete when all applicable conditions hold:
+Remote CI is a verification gate, not an interactive debugger.
 
-- acceptance criteria are satisfied without speculative scope expansion;
-- focused regression tests cover changed contracts;
-- the required verification gate is green;
-- migration and rollback behavior are verified where applicable;
-- review covers correctness, data integrity, architecture, security/privacy, performance/memory, failure handling, accessibility, compatibility, and documentation;
-- no unresolved P0/P1 finding remains;
-- the PR references the authoritative design and records exact verification evidence;
-- Duy + ChatGPT have reviewed the implementation;
-- parent and downstream dependency states are reconciled after accepted integration.
+Required behavior:
 
-Codex may report a PR as ready for review; it does not declare the work package/release complete.
+- run focused/local checks before pushing where the environment permits;
+- batch related verified changes before remote push;
+- prefer one CI run per review iteration;
+- do not create repeated trial commits or empty commits merely to trigger Actions;
+- do not repeatedly rerun an unchanged deterministic failure;
+- rerun only when the failure is plausibly transient or the tested commit/environment changed;
+- use concurrency cancellation already configured by the workflow;
+- keep failure artifacts short-lived and bounded;
+- do not create duplicate PRs, duplicate automation comments, or label churn.
 
-## Risk levels
+## Milestones
 
-- **P0:** active or imminent data loss, security compromise, or unrecoverable corruption. Stop unrelated work.
-- **P1:** serious correctness, privacy, migration, availability, accessibility, or release-contract defect. Resolve before completion.
-- **P2:** bounded behavior or process risk with a clear rollback.
-- **P3:** low-impact documentation, polish, or maintainability risk.
+### M0 — Governance
 
-## Issue maintenance
+Repository lifecycle, authority, issue relationships, verification, and review rules.
 
-Perform backlog reconciliation after every accepted integration and at each milestone checkpoint:
+### M1 — Reliable Core
 
-1. Close accepted completed children when their completion rule is satisfied.
-2. Close rejected/superseded work as `not planned` with a reason.
-3. Update parent checklists and release-gate evidence.
-4. Remove stale status labels and apply one current execution status to each bounded open child.
-5. Validate `Depends on` and `Blocks` in both directions.
-6. Ensure zero or one runtime child is `status/in-progress`.
-7. Ensure implementation-ready issues link one accepted design document.
-8. Lock completed conversations when no follow-up is needed.
-9. Keep roadmap, governance, design docs, current tree, and repository evidence consistent.
+Local-first persistence, parser/model/state/history, migration, deterministic testing, and failure-safe mutation ordering.
 
-## Completion rule
+### M2 — Desktop Daily Driver
 
-Governance is healthy when a human or agent can determine, without reconciling competing instructions:
+Board-first desktop Notes/Japanese Notes, centered editing overlay, command/focus/accessibility quality, saved-grid Kanji workflow, resize/zoom resilience, failure/recovery UX, and final evidence gate.
 
-- what product/architecture authority applies;
-- which bounded issue is eligible next;
-- where its exact implementation contract lives;
-- what Codex is allowed to do;
-- which branch receives its PR;
-- who reviews it;
-- what evidence is required before the project proceeds.
+### M3 — Workflows
+
+Accepted higher-level workflows such as Japanese learning expansion only after M2 dependency gates and dedicated data/identity/deletion/export contracts.
+
+### M4 — Scale
+
+Bounded performance, memory, storage, indexes, history, drawings, and long-session behavior using reproducible benchmarks.
+
+### M5 — Advanced Platform
+
+Cross-device, protected-data, remote-trust, optional intelligence, and extension work only after prior milestone gates and dedicated architecture/security decisions.
+
+## Current M2 sequence
+
+```text
+completed foundations + saved-grid drawing + board/overlay reconciliation
+→ #71 desktop resilience
+→ #72 state/recovery UX
+→ #73 final desktop release evidence
+```
+
+Only direct dependency-safe work advances.
+
+## Completion and rollback
+
+A child closes only after its accepted integration/completion rule is satisfied and downstream relationship/status metadata is reconciled.
+
+Every package must have a bounded rollback. Schema changes require explicit forward/rollback compatibility. Code-only presentation changes must not invent data migrations.

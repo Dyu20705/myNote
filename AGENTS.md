@@ -1,123 +1,118 @@
-# Repository Execution Instructions
+# Repository Agent Contract
 
-## Delivery role
+This repository uses a docs-first delivery model. Product intent, architecture, issue design, implementation, review, and integration are separate responsibilities.
 
-The repository uses the asymmetric AI delivery model defined in:
+## Authority
 
-```text
-docs/engineering/AI_DELIVERY_MODEL.md
-```
+Read and obey sources in this order:
 
-For Codex and other implementation agents, the role is implementation-only.
-
-Duy + ChatGPT own product intent, architecture, per-issue design, roadmap sequencing, and review. An implementation agent translates one accepted design into tested code and opens one PR to `dev`, then stops.
-
-## Required reading
-
-Before any implementation task, read these files in order:
-
-1. `AGENTS.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/INVARIANTS.md`
-4. `docs/engineering/AI_DELIVERY_MODEL.md`
-5. the authoritative `docs/design/issues/<issue>-*.md` referenced by the active issue
-6. the implementation plan referenced by that design, when present
-7. any additional exact repository/Figma evidence explicitly referenced by the design
-
-Do not begin runtime implementation when:
-
-- the issue does not reference an accepted authoritative design;
-- the design says the package is blocked;
-- a dependency is unmerged/unaccepted;
-- another conflicting runtime package is already `status/in-progress`;
-- a material design/invariant conflict exists.
-
-## Source-of-truth order
-
-Use this authority order:
-
-```text
-1. docs/ARCHITECTURE.md + docs/INVARIANTS.md
-2. accepted architecture/product decisions referenced by the design
-3. docs/design/issues/<issue>-*.md
-4. approved implementation plan referenced by the design
+1. `docs/ARCHITECTURE.md` and `docs/INVARIANTS.md`
+2. accepted architecture/product decisions referenced by the active design
+3. `docs/design/issues/<issue>-*.md`
+4. the approved implementation plan referenced by that design
 5. GitHub issue tracking metadata
-6. accepted Figma nodes referenced by the design
-7. runtime implementation
-8. automated and recorded manual evidence
-```
+6. accepted visual evidence referenced by the design
+7. current runtime implementation
+8. verification evidence
 
-The GitHub issue is coordination state after an authoritative design is linked. Do not treat older prose in issue history as permission to contradict the accepted design.
+A lower source never overrides a higher source.
 
-Figma is presentation and interaction evidence only when the design references it. Figma is not a second owner for persistence, search, command dispatch, review scheduling, recognition, canonical note state, or drawing persistence.
+## Roles
 
-## Branch and PR contract
+The owner and architecture reviewer own:
 
-Implementation work uses:
+- product decisions;
+- architecture;
+- UX design;
+- issue decomposition;
+- roadmap priority;
+- acceptance criteria;
+- review;
+- integration decisions.
+
+The implementation agent owns only:
+
+- reading the accepted contract;
+- creating one bounded branch from current `dev`;
+- writing the specified tests;
+- implementing the minimum change required by the contract;
+- running verification;
+- opening one pull request to `dev`;
+- stopping for review.
+
+The implementation agent must not redesign requirements, reinterpret architecture, expand scope, reprioritize the backlog, create future packages, mutate visual design sources, merge its own pull request, or begin the next issue.
+
+## Branch model
 
 ```text
+main
+  ↑ reviewed release promotion
+  ↑
 dev
-  ↑ PR target
+  ↑
 issue/<number>-<bounded-name>
 ```
 
-Rules:
+Implementation always starts from the current `dev` head.
 
-- branch from the current `dev` head;
-- one issue = one bounded branch = one PR;
-- PR target is `dev`;
-- do not push implementation directly to `dev`;
-- do not implement directly on `main`;
-- do not merge the PR;
-- do not begin another issue after opening the PR.
+Never push implementation directly to `dev` or `main`.
 
-`main` promotion is an owner/release decision outside the implementation-agent role.
+Pull requests from issue branches target `dev`.
 
-## Architecture constraints
+## One active package
 
-- Keep `app.js` as the single browser composition root.
-- Preserve dependency direction: `UI → Actions → State → Core → Persistence`.
-- Use vanilla HTML, CSS, and ES modules unless an accepted design explicitly changes that contract.
-- UI modules must not open IndexedDB directly.
-- Canonical writes complete before state, history, derived indexes, or success presentation.
-- Parser metadata, search, backlinks, review scheduling, commands, persistence, and drawing lifecycle retain one owner each.
-- Ordinary Notes and Japanese Notes share the accepted shell/runtime boundaries.
-- Do not create a second viewport/presentation-state authority merely to handle layout.
-- Mobile/tablet navigation, touch-first behavior, virtual keyboards, native wrappers, and PWA scope are excluded unless a later accepted design explicitly changes the product boundary.
+Only one runtime implementation package may be active at a time. A ready package becomes active only when implementation begins. Downstream packages remain blocked until their direct dependency is accepted and integrated.
 
-## Implementation-agent prohibitions
+## Required implementation workflow
 
-Do not:
+1. fetch current repository state;
+2. verify the exact `dev` head;
+3. verify there is no conflicting active package;
+4. create one bounded issue branch;
+5. read architecture, invariants, delivery model, issue design, and approved plan;
+6. create or extend the specified regression evidence;
+7. observe genuine RED before changing runtime behavior;
+8. implement the minimum authorized change;
+9. run focused verification;
+10. run the complete repository gate;
+11. inspect the entire diff for scope and ownership violations;
+12. push once after local verification is complete where practical;
+13. open or update one pull request targeting `dev`;
+14. stop for owner/reviewer review.
 
-- redesign the feature;
-- expand the issue;
-- reprioritize the backlog;
-- create downstream/future work packages;
-- mutate Figma;
-- invent new acceptance criteria;
-- change roadmap authority;
-- perform unrelated refactoring;
-- introduce speculative abstractions;
-- change schema, dependencies, framework, or canonical ownership unless explicitly authorized by the design;
-- weaken a test or substitute a looser proxy for an acceptance requirement;
-- claim native browser/OS evidence from an emulation that the design labels only as supplemental.
+If a required regression is already GREEN on the accepted baseline, record that fact. Do not manufacture runtime changes merely to create a RED result.
 
-If satisfying the design requires any prohibited action, stop and report the exact conflict. `UNKNOWN` means stop and report, not guess.
+## Stop conditions
 
-## Test-driven workflow
+Stop and report instead of guessing when:
 
-For every behavior change:
+- authoritative sources materially conflict;
+- the accepted design requires a boundary forbidden by architecture/invariants;
+- satisfying the issue appears to require scope outside the accepted design;
+- a runtime fix requires a new canonical owner;
+- a required environment is unavailable and equivalence cannot be proven;
+- another runtime issue becomes conflicting/active;
+- verification reveals an unrelated owner defect.
 
-1. Add the focused failing assertion required by the design/plan.
-2. Run it and record the expected RED evidence.
-3. Implement the minimum bounded change.
-4. Run the focused test and record GREEN.
-5. Run relevant regression packages.
-6. Run the complete verification gate.
-7. Inspect the final diff against design scope and ownership boundaries.
-8. Open one PR to `dev` and stop.
+Unrelated baseline defects are reported to the owner/reviewer. They are not authorization to widen the implementation pull request.
 
-Required final commands:
+## Architecture invariants
+
+Preserve:
+
+```text
+UI → Actions → State → Core → Persistence
+```
+
+Do not create duplicate owners for parsing, search, scheduling, commands, review state, drawing state, or persistence.
+
+Canonical persistence succeeds before visible/history success. Derived search/backlink degradation is separate from canonical storage failure.
+
+Kanji saved-grid data remains in its existing canonical relation and is never copied into note Markdown merely for presentation.
+
+## Verification
+
+Unless a narrower accepted design explicitly adds more checks, the complete gate is:
 
 ```sh
 npm ci
@@ -130,49 +125,18 @@ npm run test:e2e
 git diff --check
 ```
 
-No command may be reported as passing unless it actually executed successfully in the declared environment.
+Do not claim PASS for a command that was not actually executed successfully.
 
-## UI verification
+Environment limitations must be reported as `UNKNOWN — REQUIRES VALIDATION` when direct evidence is unavailable.
 
-For UI work, the authoritative issue design defines the exact supported matrix. Current desktop baseline contracts commonly include:
+## CI and repository hygiene
 
-- `1024×768`;
-- `1280×720`;
-- `1440×900`;
-- keyboard and desktop mouse;
-- long English/Japanese/code content;
-- no horizontal document overflow;
-- visible focus and logical focus return;
-- draft/query/filter/review preservation where relevant;
-- bounded transient surfaces;
-- native 200% browser zoom only when directly evidenced or explicitly left `UNKNOWN — REQUIRES VALIDATION`.
+Use local/focused verification before remote CI.
 
-Do not award native-environment claims from screenshots or synthetic CSS viewport reduction alone.
+Do not repeatedly push trial fixes merely to use Actions as a debugger. Batch verified changes and prefer a single remote verification run per review iteration. Re-run a failed workflow only when the failure is plausibly transient or the exact failing condition has changed.
 
-## Pull-request evidence
+Do not create empty commits, duplicate pull requests, repeated labels/comments, or automated activity with no engineering value.
 
-Every implementation PR must include:
+## Review boundary
 
-- issue number;
-- authoritative design path;
-- implementation-plan path when present;
-- base/head SHA;
-- changed files;
-- RED/GREEN evidence;
-- focused and full verification results;
-- acceptance-criteria mapping;
-- security/privacy review;
-- performance/resource review;
-- accessibility review;
-- compatibility review;
-- migration impact;
-- rollback boundary;
-- remaining explicit unknowns.
-
-After opening the PR, stop and wait for Duy + ChatGPT review.
-
-## Completion claims
-
-An implementation agent may say the implementation PR is ready for review only when the documented implementation boundary is complete and the required verification has actually passed.
-
-The agent must not claim the GitHub issue, milestone, `dev`, or `main` release is complete. Those are review/integration decisions owned by Duy + ChatGPT and current repository governance.
+A pull request remains unmerged until the owner/reviewer explicitly accepts it. Review findings are classified by severity and owner. The implementation agent fixes only findings inside the assigned contract unless the design is explicitly amended.
