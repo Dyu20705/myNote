@@ -96,6 +96,12 @@ function actionLabel(actionId) {
   return "";
 }
 
+function actionAccessibleLabel(actionId) {
+  if (actionId === "create-note") return "Create first note";
+  if (actionId === "create-japanese-note") return "Create first Japanese note";
+  return "";
+}
+
 export function createListView({ container, onSelect, onEmptyAction = () => {}, formatDate }) {
   const viewId = nextListViewId;
   nextListViewId += 1;
@@ -205,6 +211,8 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
         ? "secondary-button"
         : "primary-button";
       action.textContent = label;
+      const accessibleLabel = actionAccessibleLabel(presentation.actionId);
+      if (accessibleLabel) action.setAttribute("aria-label", accessibleLabel);
       action.addEventListener("click", () => onEmptyAction(presentation.actionId, action));
       empty.append(action);
     }

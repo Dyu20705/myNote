@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+const legacyBaselineState = "tests/e2e/fixtures/legacy-baseline-storage-state.json";
+const legacyRegressionSuites = /(?:desktop-resilience|note-drawing-projection|visual-system|kanji-resource)\.spec\.mjs/;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
@@ -18,13 +21,28 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: /kanji-handwriting\.spec\.mjs/,
+      testIgnore: [
+        /kanji-handwriting\.spec\.mjs/,
+        /state-recovery\.spec\.mjs/,
+        legacyRegressionSuites,
+      ],
+    },
+    {
+      name: "chromium-state-recovery",
+      testMatch: /state-recovery\.spec\.mjs/,
+    },
+    {
+      name: "chromium-legacy-regression",
+      testMatch: legacyRegressionSuites,
+      use: {
+        storageState: legacyBaselineState,
+      },
     },
     {
       name: "chromium-kanji-legacy-baseline",
       testMatch: /kanji-handwriting\.spec\.mjs/,
       use: {
-        storageState: "tests/e2e/fixtures/legacy-baseline-storage-state.json",
+        storageState: legacyBaselineState,
       },
     },
   ],

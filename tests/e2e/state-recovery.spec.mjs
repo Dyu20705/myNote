@@ -26,33 +26,21 @@ async function installDatabaseFailureHarness(page) {
   });
 }
 
-async function installSearchFailureHarness(page) {
-  await page.addInitScript(() => {
-    const originalPostMessage = globalThis.Worker.prototype.postMessage;
-    let failNextUpsert = false;
-    Object.defineProperty(globalThis, "__stateRecoverySearchTest", {
-      configurable: true,
-      value: {
-        failNextUpsert() {
-          failNextUpsert = true;
-        },
-      },
-    });
-    globalThis.Worker.prototype.postMessage = function postMessage(message, transfer) {
-      if (failNextUpsert && message?.type === "upsert") {
-        failNextUpsert = false;
-        queueMicrotask(() => {
-          this.onmessage?.({
-            data: {
-              id: message.id,
-              ok: false,
-              error: "Injected derived search failure",
-            },
-          });
-        });
-        return;
+async function failNextSearchUpsert(page) {
+  await page.evaluate(async () => {
+    const { getActiveSearchClient } = await import("/core/searchClient.js");
+    const searchClient = getActiveSearchClient();
+    if (!searchClient) throw new Error("Active search client is unavailable");
+
+    const originalUpsert = searchClient.upsert.bind(searchClient);
+    let pendingFailure = true;
+    searchClient.upsert = async (...args) => {
+      if (pendingFailure) {
+        pendingFailure = false;
+        searchClient.upsert = originalUpsert;
+        throw new Error("Injected derived search failure");
       }
-      return originalPostMessage.call(this, message, transfer);
+      return originalUpsert(...args);
     };
   });
 }
@@ -177,12 +165,11 @@ test("failed delete stays retryable and only durable delete exposes Undo without
 });
 
 test("derived search failure reports saved canonical data and survives reload", async ({ page }) => {
-  await installSearchFailureHarness(page);
   await page.goto("/");
   await openOrCreateNote(page);
   await saveDraft(page, { title: "Canonical survives", content: "before derived failure" });
 
-  await page.evaluate(() => globalThis.__stateRecoverySearchTest.failNextUpsert());
+  await failNextSearchUpsert(page);
   await page.locator("#contentInput").fill("persisted despite search failure");
   await page.locator("#contentInput").press("Control+Enter");
   await expect(page.locator("#saveState")).toContainText("Search");

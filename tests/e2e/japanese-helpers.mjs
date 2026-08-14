@@ -17,6 +17,7 @@ async function ensureLegacyOrdinaryBaseline(page) {
   }
 
   await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await page.locator("#noteEditorOverlay").waitFor({ state: "visible" });
   await closeNoteEditor(page);
 
   if (wasJapanese) {

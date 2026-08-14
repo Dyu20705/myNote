@@ -1278,6 +1278,7 @@ async function bootstrap() {
   await refreshSearch({
     preferredId: loaded[0]?.id ?? null,
     emptyLabel: "No notes",
+    synchronizeEditor: true,
   });
 }
 
