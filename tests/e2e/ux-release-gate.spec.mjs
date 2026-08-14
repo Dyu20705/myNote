@@ -4,7 +4,25 @@ const APP_ORIGIN = "http://127.0.0.1:4173";
 const DEFERRED_DESTINATIONS = ["Reminders", "Labels", "Archive", "Trash"];
 const FORBIDDEN_COMMAND_IDS = /^(reminders?|labels?|trash|analytics|attachments?|formatting|recognition)(\.|$)/i;
 const FORBIDDEN_HEALTHY_CONTROL_FAMILY = /\b(?:recognition|recognize|candidates?|remote[-\s]?model|analytics?|reminders?|labels?(?:[-\s]?(?:management|manager))?|trash|attachments?|rich[-\s]?(?:format|formatting)|handwriting[-\s]?recognition)\b/i;
-const CONTROL_SELECTOR = "button, a, [role='button'], [role='link'], [role='menuitem']";
+const CONTROL_SELECTOR = [
+  "button",
+  "a[href]",
+  "area[href]",
+  "input:not([type='hidden'])",
+  "select",
+  "textarea",
+  "summary",
+  "details",
+  "[role]",
+  "[tabindex]",
+  "[contenteditable]",
+  "[onclick]",
+  "audio[controls]",
+  "video[controls]",
+  "iframe",
+  "embed",
+  "object",
+].join(", ");
 
 async function installOneShotBootstrapOpenFailure(page) {
   await page.addInitScript(() => {
@@ -29,13 +47,39 @@ async function countForbiddenHealthyControls(page) {
       }
       const style = globalThis.getComputedStyle(control);
       if (control.getClientRects().length === 0 || style.visibility === "hidden") return count;
+      const tabIndex = control.getAttribute("tabindex");
+      const isNonnegativeTabIndex = tabIndex !== null && Number(tabIndex) >= 0;
+      const contentEditable = control.getAttribute("contenteditable");
+      const isEditable = contentEditable === "" || ["true", "plaintext-only"].includes(contentEditable?.toLowerCase());
+      const isNativeOrRoleControl = control.matches(
+        "button, a[href], area[href], input:not([type='hidden']), select, textarea, summary, details, [role], [onclick], audio[controls], video[controls], iframe, embed, object",
+      );
+      if (!isNativeOrRoleControl && !isNonnegativeTabIndex && !isEditable) return count;
+      const accessibleReferenceText = (attribute) => (control.getAttribute(attribute) || "")
+        .split(/\s+/)
+        .map((reference) => globalThis.document.getElementById(reference)?.innerText || "")
+        .filter(Boolean)
+        .join(" ");
+      const associatedLabelText = [...globalThis.document.querySelectorAll("label")]
+        .filter((label) => label.control === control)
+        .map((label) => label.innerText)
+        .filter(Boolean)
+        .join(" ");
+      const relevantText = control.matches("input, textarea, select, [contenteditable]") ? "" : control.innerText;
       const metadata = [
-        control.innerText,
+        relevantText,
         control.getAttribute("aria-label"),
         control.getAttribute("aria-labelledby"),
+        accessibleReferenceText("aria-labelledby"),
         control.getAttribute("aria-describedby"),
+        accessibleReferenceText("aria-describedby"),
+        associatedLabelText,
         control.getAttribute("title"),
         control.id,
+        control.getAttribute("name"),
+        control.getAttribute("placeholder"),
+        control.getAttribute("type"),
+        control.getAttribute("value"),
       ].filter(Boolean).join(" ");
       return count + Number(forbidden.test(metadata));
     }, 0);
