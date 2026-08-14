@@ -3,6 +3,56 @@ import { expect, test } from "@playwright/test";
 const APP_ORIGIN = "http://127.0.0.1:4173";
 const DEFERRED_DESTINATIONS = ["Reminders", "Labels", "Archive", "Trash"];
 const FORBIDDEN_COMMAND_IDS = /^(reminders?|labels?|trash|analytics|attachments?|formatting|recognition)(\.|$)/i;
+const FORBIDDEN_HEALTHY_CONTROL_FAMILY = /\b(?:recognition|recognize|candidates?|remote[-\s]?model|analytics?|reminders?|labels?(?:[-\s]?(?:management|manager))?|trash|attachments?|rich[-\s]?(?:format|formatting)|handwriting[-\s]?recognition)\b/i;
+const CONTROL_SELECTOR = "button, a, [role='button'], [role='link'], [role='menuitem']";
+
+async function installOneShotBootstrapOpenFailure(page) {
+  await page.addInitScript(() => {
+    const originalOpen = globalThis.indexedDB.open.bind(globalThis.indexedDB);
+    let failOnce = true;
+    globalThis.indexedDB.open = function open(...args) {
+      if (failOnce) {
+        failOnce = false;
+        throw new globalThis.DOMException("Injected bootstrap failure", "InvalidStateError");
+      }
+      return originalOpen(...args);
+    };
+  });
+}
+
+async function countForbiddenHealthyControls(page) {
+  return page.evaluate(({ selector, patternSource }) => {
+    const forbidden = new RegExp(patternSource, "i");
+    return [...globalThis.document.querySelectorAll(selector)].reduce((count, control) => {
+      if (!(control instanceof globalThis.HTMLElement) || control.hidden || control.getAttribute("aria-hidden") === "true") {
+        return count;
+      }
+      const style = globalThis.getComputedStyle(control);
+      if (control.getClientRects().length === 0 || style.visibility === "hidden") return count;
+      const metadata = [
+        control.innerText,
+        control.getAttribute("aria-label"),
+        control.getAttribute("aria-labelledby"),
+        control.getAttribute("aria-describedby"),
+        control.getAttribute("title"),
+        control.id,
+      ].filter(Boolean).join(" ");
+      return count + Number(forbidden.test(metadata));
+    }, 0);
+  }, { selector: CONTROL_SELECTOR, patternSource: FORBIDDEN_HEALTHY_CONTROL_FAMILY.source });
+}
+
+async function expectVisibleWithinViewport(page, locator) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+}
 
 async function commandSnapshot(page) {
   return page.evaluate(async () => {
@@ -38,6 +88,7 @@ test("release shell exposes only owner-backed navigation and bounded commands", 
   await expect(refresh).toBeEnabled();
   await refresh.click();
   await expect(workspace.getByRole("button", { name: "Notes", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
 
   const commands = await commandSnapshot(page);
   expect(commands.length).toBeGreaterThan(0);
@@ -88,6 +139,19 @@ for (const viewport of [
     expect(overflow).toBeLessThanOrEqual(1);
     await expect(page.getByRole("button", { name: "New note", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
+
+    await installOneShotBootstrapOpenFailure(page);
+    await page.reload();
+    const recovery = page.locator("#applicationRecovery");
+    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    const reset = page.getByRole("button", { name: "Reset local data…", exact: true });
+    await expectVisibleWithinViewport(page, recovery);
+    await expectVisibleWithinViewport(page, retry);
+    await expectVisibleWithinViewport(page, reset);
+    const recoveryOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(recoveryOverflow).toBeLessThanOrEqual(1);
+    await retry.click();
+    await expect(recovery).toBeHidden();
   });
 }
 
@@ -114,6 +178,7 @@ test("saved-grid drawing stays local and outside canonical note content", async 
   await expect(dialog.getByRole("button", { name: "Marker", exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Eraser", exact: true })).toBeVisible();
   await expect(page.locator("#recognizeKanjiButton, #kanjiCandidateList, #kanjiSelectedCharacter")).toHaveCount(0);
+  expect(await countForbiddenHealthyControls(page)).toBe(0);
 
   const canvas = page.locator("#kanjiInkCanvas");
   const box = await canvas.boundingBox();
