@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+async function createInitialNote(page) {
+  await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+}
+
 async function createAndSave(page, title, content) {
   await page.locator("#newNoteButton").click();
   await expect(page.locator("#titleInput")).toBeFocused();
@@ -12,7 +17,7 @@ async function createAndSave(page, title, content) {
 
 test("editor overlay owns drawing projection, title, save status, Details, and More without permanent Save", async ({ page }) => {
   await page.goto("/");
-  await page.locator("#noteList .note-item").first().click();
+  await createInitialNote(page);
 
   const header = page.locator("#editorContextHeader");
   await expect(header).toBeVisible();
@@ -56,7 +61,7 @@ test("note cards use bounded plain text and semantic non-color selection without
 
 test("Details progressively discloses metadata, hides empty backlinks, and returns focus", async ({ page }) => {
   await page.goto("/");
-  await page.locator("#noteList .note-item").first().click();
+  await createInitialNote(page);
   const opener = page.getByRole("button", { name: "Details", exact: true });
 
   await expect(page.locator("#noteInspector")).toBeHidden();
@@ -77,7 +82,7 @@ test("Details progressively discloses metadata, hides empty backlinks, and retur
 test("More actions resolves current registry metadata and labelled recoverable delete", async ({ page }) => {
   await page.goto("/");
   await createAndSave(page, "Recoverable note", "Delete and undo evidence");
-  await expect(page.locator("#noteCount")).toHaveText("2 notes");
+  await expect(page.locator("#noteCount")).toHaveText("1 note");
 
   const opener = page.getByRole("button", { name: "More actions", exact: true });
   await opener.click();
@@ -92,12 +97,12 @@ test("More actions resolves current registry metadata and labelled recoverable d
   await expect(deleteItem).toContainText("Recoverable through Undo");
   await deleteItem.click();
 
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
   await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   const notice = page.getByRole("status", { name: "Deletion recovery" });
   await expect(notice).toContainText("Note deleted");
   await notice.getByRole("button", { name: "Undo delete", exact: true }).click();
-  await expect(page.locator("#noteCount")).toHaveText("2 notes");
+  await expect(page.locator("#noteCount")).toHaveText("1 note");
   await expect(page.locator("#titleInput")).toHaveValue("Recoverable note");
 });
 

@@ -12,6 +12,7 @@ import {
   restoreNoteWithReviewToDb,
 } from "./core/storage.js";
 import { createJapaneseFilterController } from "./ui/japanese-filters.js";
+import { presentJapaneseReviewState } from "./ui/statePresentation.js";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -79,6 +80,8 @@ function collectElements(document) {
     notesSummary: document.querySelector("#japaneseNotesSummary"),
     notesDueCount: document.querySelector("#japaneseNotesDueCount"),
     summaryReview: document.querySelector("#japaneseSummaryReviewButton"),
+    availabilityStatus: document.querySelector("#japaneseAvailabilityStatus"),
+    stateAnnouncement: document.querySelector("#japaneseStateAnnouncement"),
     filterTools: document.querySelector("#japaneseFilterTools"),
     filtersRoot: document.querySelector("#japaneseFilters"),
     filterToggle: document.querySelector("#japaneseFilterToggle"),
@@ -127,24 +130,15 @@ function repairEntries(state) {
     ...(state.studyStatus || []),
   ];
   for (const entry of sources) {
-    const key = `${entry.code}\u0000${entry.noteId ?? ""}`;
-    const current = entries.get(key);
-    if (current) {
-      current.count = Math.max(current.count, entry.count || 1);
-    } else {
-      entries.set(key, {
-        code: entry.code,
-        noteId: entry.noteId,
-        count: entry.count || 1,
-      });
-    }
+    const code = typeof entry?.code === "string" && entry.code ? entry.code : "study-data-invalid";
+    const count = Number.isFinite(entry?.count) && entry.count > 0 ? entry.count : 1;
+    const current = entries.get(code);
+    entries.set(code, Math.max(current || 0, count));
   }
-  return [...entries.values()]
-    .sort((left, right) => {
-      const byCode = left.code.localeCompare(right.code);
-      return byCode || String(left.noteId || "").localeCompare(String(right.noteId || ""));
-    })
-    .slice(0, 20);
+  return [...entries.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(0, 20)
+    .map(([code, count]) => ({ code, count }));
 }
 
 export function createJapaneseApp({ runtime, document = globalThis.document }) {
@@ -173,6 +167,8 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   const workspace = runtime.workspace;
   let studyDetailsOpen = false;
   let quickCreatePending = false;
+  let reviewPhase = "ready";
+  let lastJapaneseAnnouncementKey = "";
 
   function persistenceDatabase() {
     const database = store.getState().db;
@@ -180,6 +176,22 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       throw new Error("Local database is unavailable");
     }
     return database;
+  }
+
+  function clearJapaneseAnnouncement() {
+    elements.stateAnnouncement.textContent = "";
+    elements.stateAnnouncement.setAttribute("aria-live", "polite");
+    lastJapaneseAnnouncementKey = "";
+  }
+
+  function announceJapanese(message, key, announce = "polite") {
+    if (!message) return;
+    const politeness = announce === "assertive" ? "assertive" : "polite";
+    elements.stateAnnouncement.setAttribute("aria-live", politeness);
+    const normalizedKey = `${politeness}:${key || message}`;
+    if (normalizedKey === lastJapaneseAnnouncementKey) return;
+    lastJapaneseAnnouncementKey = normalizedKey;
+    elements.stateAnnouncement.textContent = message;
   }
 
   const actions = createJapaneseActions({
@@ -257,6 +269,17 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.studyDetailsToggle.hidden = !japanese;
     elements.studyDetailsToggle.setAttribute("aria-expanded", String(studyDetailsOpen));
 
+    const unavailableMessage = unavailable && japanese
+      ? "Japanese study data is unavailable. Ordinary Notes are still available."
+      : "";
+    elements.availabilityStatus.hidden = !unavailableMessage;
+    elements.availabilityStatus.textContent = unavailableMessage;
+    if (unavailableMessage) {
+      announceJapanese(unavailableMessage, "study-data-unavailable");
+    } else if (reviewPhase !== "rating-failed") {
+      clearJapaneseAnnouncement();
+    }
+
     const dashboard = state.studyDashboard || {
       dueCount: 0,
       newVocabulary: 0,
@@ -284,8 +307,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       : String(repairs.length);
     elements.repairList.replaceChildren(...repairs.map((repair) => {
       const item = document.createElement("li");
-      const target = repair.noteId ? ` · ${repair.noteId}` : "";
-      item.textContent = `${repair.code}${target} ×${repair.count}`;
+      item.textContent = `${repair.code} ×${repair.count}`;
       return item;
     }));
     elements.repairRegion.hidden = !japanese || !studyDetailsOpen || repairs.length === 0;
@@ -385,9 +407,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       return true;
     }
     const enrolled = state.studyReviews?.some((review) => review.noteId === noteId);
-    if (!enrolled) {
-      return false;
-    }
+    if (!enrolled) return false;
     await coordinator.deleteNote(noteId);
     return true;
   });
@@ -421,9 +441,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     const open = elements.japaneseCreateMenu.hidden;
     elements.japaneseCreateMenu.hidden = !open;
     elements.newJapaneseNote.setAttribute("aria-expanded", String(open));
-    if (open) {
-      elements.quickCreateButtons[0]?.focus();
-    }
+    if (open) elements.quickCreateButtons[0]?.focus();
   });
   for (const button of elements.quickCreateButtons) {
     button.addEventListener("click", () => {
@@ -455,9 +473,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     let session = state.reviewSession;
     while (session?.status === "active") {
       const note = state.notes.find((item) => item.id === session.currentNoteId);
-      if (note && !note.archived) {
-        break;
-      }
+      if (note && !note.archived) break;
       const message = note ? "Skipped archived note" : "Skipped missing note";
       store.setState((current) => advanceReviewSession(current, message));
       state = store.getState();
@@ -474,16 +490,27 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       elements.reviewStatus.textContent = "Review complete";
       elements.reviewNoteTitle.textContent = "";
       elements.reviewContent.textContent = "";
+      if (reviewPhase !== "rating-failed") clearJapaneseAnnouncement();
       renderDashboard(state);
       return;
     }
 
     const note = state.notes.find((item) => item.id === session.currentNoteId);
+    const presentation = presentJapaneseReviewState({ phase: reviewPhase });
     elements.reviewProgress.textContent = `Item ${session.index + 1} of ${session.queue.length}`;
     elements.reviewNoteTitle.textContent = note.title;
     elements.reviewContent.textContent = note.content;
-    elements.reviewStatus.textContent = session.message
-      || (session.revealed ? "Choose a rating" : "Content hidden until reveal");
+    if (reviewPhase === "rating-pending" || reviewPhase === "rating-failed") {
+      elements.reviewStatus.textContent = presentation.message;
+    } else {
+      elements.reviewStatus.textContent = session.message
+        || (session.revealed ? "Choose a rating" : "Content hidden until reveal");
+    }
+    if (reviewPhase === "rating-failed") {
+      announceJapanese(presentation.message, "rating-failed", presentation.announce);
+    } else if (!state.studyDataUnavailable) {
+      clearJapaneseAnnouncement();
+    }
   }
 
   async function openReview(opener = elements.reviewEntry) {
@@ -492,17 +519,13 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     if (store.getState().reviewSession?.status !== "active") {
       actions.startReview(currentContext().nowIso);
     }
+    reviewPhase = "ready";
     renderReview();
-    if (!elements.reviewDialog.open) {
-      elements.reviewDialog.showModal();
-    }
+    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
     const session = store.getState().reviewSession;
     if (session?.status === "active") {
-      if (session.revealed) {
-        elements.reviewRatings.querySelector("button")?.focus();
-      } else {
-        elements.revealReview.focus();
-      }
+      if (session.revealed) elements.reviewRatings.querySelector("button")?.focus();
+      else elements.revealReview.focus();
     } else {
       elements.closeReview.focus();
     }
@@ -510,23 +533,24 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   async function submitRating(rating) {
     const session = store.getState().reviewSession;
-    if (session?.status !== "active" || !session.currentNoteId || !session.revealed) {
-      return;
-    }
+    if (session?.status !== "active" || !session.currentNoteId || !session.revealed) return;
     const buttons = [...elements.reviewRatings.querySelectorAll("button")];
-    for (const button of buttons) {
-      button.disabled = true;
-    }
+    const retryButton = elements.reviewRatings.querySelector(`[data-review-rating="${rating}"]`);
+    let failed = false;
+    reviewPhase = "rating-pending";
+    renderReview();
+    for (const button of buttons) button.disabled = true;
     try {
       await actions.rateReview(session.currentNoteId, rating, currentContext().nowIso);
+      reviewPhase = "ready";
     } catch {
-      renderReview();
+      reviewPhase = "rating-failed";
+      failed = true;
     } finally {
-      for (const button of buttons) {
-        button.disabled = false;
-      }
+      for (const button of buttons) button.disabled = false;
     }
     renderReview();
+    if (failed) retryButton?.focus();
   }
 
   elements.startReview.addEventListener("click", () => {
@@ -539,6 +563,8 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.reviewDialog.close();
   });
   elements.reviewDialog.addEventListener("close", () => {
+    reviewPhase = "ready";
+    clearJapaneseAnnouncement();
     renderDashboard();
     const focusTarget = reviewOpener && !reviewOpener.disabled
       ? reviewOpener
@@ -556,9 +582,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     });
   }
   elements.reviewDialog.addEventListener("keydown", (event) => {
-    if (!store.getState().reviewSession?.revealed) {
-      return;
-    }
+    if (!store.getState().reviewSession?.revealed) return;
     const ratings = { "1": "again", "2": "hard", "3": "good", "4": "easy" };
     const rating = ratings[event.key];
     if (rating) {
@@ -571,11 +595,16 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   return {
     ready: coordinator.ready,
+    openCreateMenu() {
+      if (elements.newJapaneseNote.disabled) return false;
+      elements.japaneseCreateMenu.hidden = false;
+      elements.newJapaneseNote.setAttribute("aria-expanded", "true");
+      elements.quickCreateButtons[0]?.focus();
+      return true;
+    },
     destroy() {
       filterController.destroy();
-      for (const unregisterCommand of unregisterCommands) {
-        unregisterCommand();
-      }
+      for (const unregisterCommand of unregisterCommands) unregisterCommand();
       unregisterDelete();
       unregisterResultPolicy();
       unsubscribeDashboard();

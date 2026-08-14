@@ -1,13 +1,22 @@
 import { expect, test } from "@playwright/test";
 
+async function createInitialNote(page) {
+  await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+  await page.getByRole("button", { name: "Close note editor" }).click();
+  await expect(page.locator("#noteEditorOverlay")).toBeHidden();
+  await expect(page.locator("#noteCount")).toHaveText("1 note");
+}
+
 test("Notes opens on the board with the shared editor overlay closed", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
 
   await expect(page.locator("#noteEditorOverlay")).toBeHidden();
   await expect(page.locator("#titleInput")).toBeHidden();
-  await expect(page.locator("#noteList .note-item")).toHaveCount(1);
-  await expect(page.locator(".note-board-heading")).toHaveText(["NOTES"]);
+  await expect(page.locator("#noteList .note-item")).toHaveCount(0);
+  await expect(page.locator("#noteList .empty-state")).toContainText("No notes yet");
+  await expect(page.locator("#noteList .empty-state button")).toHaveText("New note");
   await expect(page.locator("body")).not.toContainText("Autosaves locally");
 });
 
@@ -85,6 +94,7 @@ test("Japanese quick create returns focus to its visible workspace control", asy
 
 test("card selection reuses the edit overlay and returns focus to the card", async ({ page }) => {
   await page.goto("/");
+  await createInitialNote(page);
 
   const card = page.locator("#noteList .note-item").first();
   await card.evaluate((element) => {
@@ -104,6 +114,7 @@ test("card selection reuses the edit overlay and returns focus to the card", asy
 test("query scroll focus and a saved draft survive overlay close and reopen", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/");
+  await createInitialNote(page);
   const search = page.locator("#searchInput");
   await search.fill("Untitled");
   await expect(page.locator("#noteList .note-item")).toHaveCount(1);
@@ -138,6 +149,7 @@ test("query scroll focus and a saved draft survive overlay close and reopen", as
 
 test("the editor modal isolates background note navigation shortcuts", async ({ page }) => {
   await page.goto("/");
+  await createInitialNote(page);
   await page.locator("#newNoteButton").click();
   await page.locator("#titleInput").fill("Second note");
   await page.locator("#contentInput").fill("Second body");
@@ -157,6 +169,7 @@ test("the editor modal isolates background note navigation shortcuts", async ({ 
 
 test("the editor focus command opens the overlay at the content field", async ({ page }) => {
   await page.goto("/");
+  await createInitialNote(page);
   await page.locator("#newNoteButton").focus();
   await page.keyboard.press("i");
 
@@ -166,7 +179,8 @@ test("the editor focus command opens the overlay at the content field", async ({
 
 test("a canonical save failure keeps the overlay open with an explicit error", async ({ page }) => {
   await page.goto("/");
-  await page.locator("#noteList .note-item").first().click();
+  await page.locator("#newNoteButton").click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
   await page.evaluate(() => {
     const original = globalThis.IDBObjectStore.prototype.put;
     Object.defineProperty(globalThis, "__restoreNotePut", {
@@ -184,8 +198,9 @@ test("a canonical save failure keeps the overlay open with an explicit error", a
   const close = page.getByRole("button", { name: "Close note editor" });
   await close.click();
   await expect(page.locator("#noteEditorOverlay")).toBeVisible();
-  await expect(page.locator("#saveState")).toHaveText("Storage unavailable");
+  await expect(page.locator("#saveState")).toHaveText("Save failed. Your draft is preserved.");
   await expect(page.locator("#saveState")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#retryNoteSaveButton")).toBeVisible();
   await expect(close).toBeEnabled();
 
   await page.evaluate(() => globalThis.__restoreNotePut());

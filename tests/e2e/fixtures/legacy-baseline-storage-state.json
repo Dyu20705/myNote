@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:4173",
+      "localStorage": [
+        {
+          "name": "my-note-v2",
+          "value": "[{\"id\":\"legacy-baseline-note\",\"title\":\"Untitled\",\"content\":\"\",\"tags\":[],\"createdAt\":\"2026-08-01T00:00:00.000Z\",\"updatedAt\":\"2026-08-01T00:00:00.000Z\",\"pinned\":false,\"archived\":false,\"version\":1}]"
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ const elements = {
   closeEditorButton: document.getElementById("closeNoteEditorButton"),
   pinButton: document.getElementById("pinNoteButton"),
   newNoteButton: document.getElementById("newNoteButton"),
+  newJapaneseNoteButton: document.getElementById("newJapaneseNoteButton"),
   detailsButton: document.getElementById("detailsButton"),
   closeDetailsButton: document.getElementById("closeDetailsButton"),
   inspector: document.getElementById("noteInspector"),
@@ -46,6 +47,10 @@ function activeCard() {
   return elements.noteList.querySelector(".note-item[aria-current='true']");
 }
 
+function visibleCreateControl() {
+  return elements.newNoteButton.hidden ? elements.newJapaneseNoteButton : elements.newNoteButton;
+}
+
 function activeMetadata() {
   const card = activeCard();
   return {
@@ -72,16 +77,12 @@ function renderMetadata() {
   appendMetadata("Storage", "local");
   appendMetadata("Updated", metadata.updated);
   appendMetadata("Tags", metadata.tags);
-  if (metadata.states.length > 0) {
-    appendMetadata("State", metadata.states.join(", "));
-  }
+  if (metadata.states.length > 0) appendMetadata("State", metadata.states.join(", "));
 }
 
 function normalizeBacklinks() {
   for (const hint of elements.backlinksList.querySelectorAll(".hint")) {
-    if (hint.textContent.trim() === "No backlinks yet") {
-      hint.remove();
-    }
+    if (hint.textContent.trim() === "No backlinks yet") hint.remove();
   }
   elements.backlinksRegion.hidden = elements.backlinksList.querySelector(".backlink-item") === null;
 }
@@ -93,23 +94,19 @@ function synchronizeInspector() {
 }
 
 function restoreFocus(opener) {
-  if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) {
+  if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled") && !opener.hidden) {
     opener.focus();
     return;
   }
-  const fallback = activeCard() || elements.newNoteButton;
+  const fallback = activeCard() || visibleCreateControl();
   fallback.focus();
 }
 
 function closeDetails({ restore = true } = {}) {
-  if (elements.inspector.hidden) {
-    return;
-  }
+  if (elements.inspector.hidden) return;
   elements.inspector.hidden = true;
   elements.detailsButton.setAttribute("aria-expanded", "false");
-  if (restore) {
-    restoreFocus(detailsOpener || elements.detailsButton);
-  }
+  if (restore) restoreFocus(detailsOpener || elements.detailsButton);
 }
 
 function openDetails(opener = elements.detailsButton) {
@@ -122,20 +119,14 @@ function openDetails(opener = elements.detailsButton) {
 }
 
 function closeActions({ restore = true } = {}) {
-  if (elements.actionsPopover.hidden) {
-    return;
-  }
+  if (elements.actionsPopover.hidden) return;
   elements.actionsPopover.hidden = true;
   elements.actionsButton.setAttribute("aria-expanded", "false");
-  if (restore) {
-    restoreFocus(actionsOpener || elements.actionsButton);
-  }
+  if (restore) restoreFocus(actionsOpener || elements.actionsButton);
 }
 
 function actionDescription(action) {
-  if (action.commandId === "notes.delete") {
-    return "Recoverable through Undo";
-  }
+  if (action.commandId === "notes.delete") return "Recoverable through Undo";
   return action.command.description;
 }
 
@@ -163,19 +154,24 @@ function renderActions() {
     button.append(label, description);
 
     button.addEventListener("click", async () => {
-      if (!action.command.available) {
+      if (!action.command.available) return;
+      const wasDelete = action.commandId === "notes.delete";
+      let outcome;
+      try {
+        outcome = await commandRuntime.execute(action.commandId, {
+          source: "note-actions",
+          target: elements.actionsButton,
+        });
+      } catch {
+        renderActions();
+        elements.actionsList.querySelector(`[data-command-id="${action.commandId}"]`)?.focus();
         return;
       }
-      const wasDelete = action.commandId === "notes.delete";
-      const outcome = await commandRuntime.execute(action.commandId, {
-        source: "note-actions",
-        target: elements.actionsButton,
-      });
+
       closeActions({ restore: false });
       if (wasDelete && outcome?.executed) {
         elements.editorOverlay.addEventListener("close", () => {
           elements.undoNotice.hidden = false;
-          elements.undoDeleteButton.focus();
         }, { once: true });
         elements.closeEditorButton.click();
       } else {
@@ -206,20 +202,21 @@ async function undoDelete() {
     elements.undoNotice.hidden = true;
     queueMicrotask(() => {
       synchronizeInspector();
-      restoreFocus(activeCard() || elements.newNoteButton);
+      restoreFocus(activeCard() || visibleCreateControl());
     });
   }
 }
 
 async function togglePin() {
-  const outcome = await commandRuntime.execute("notes.pin", {
-    source: "note-toolbar",
-    target: elements.pinButton,
-  });
-  if (outcome?.executed) {
-    queueMicrotask(synchronizeInspector);
+  try {
+    const outcome = await commandRuntime.execute("notes.pin", {
+      source: "note-toolbar",
+      target: elements.pinButton,
+    });
+    if (outcome?.executed) queueMicrotask(synchronizeInspector);
+  } finally {
+    elements.pinButton.focus();
   }
-  elements.pinButton.focus();
 }
 
 function scheduleInspectorSync() {
@@ -227,9 +224,7 @@ function scheduleInspectorSync() {
 }
 
 function handleEscape(event) {
-  if (event.key !== "Escape") {
-    return;
-  }
+  if (event.key !== "Escape") return;
   if (!elements.actionsPopover.hidden) {
     event.preventDefault();
     event.stopPropagation();
@@ -258,19 +253,13 @@ function removeLegacySaveAdapter() {
 }
 
 elements.detailsButton.addEventListener("click", () => {
-  if (elements.inspector.hidden) {
-    openDetails(elements.detailsButton);
-  } else {
-    closeDetails();
-  }
+  if (elements.inspector.hidden) openDetails(elements.detailsButton);
+  else closeDetails();
 });
 elements.closeDetailsButton.addEventListener("click", () => closeDetails());
 elements.actionsButton.addEventListener("click", () => {
-  if (elements.actionsPopover.hidden) {
-    openActions(elements.actionsButton);
-  } else {
-    closeActions();
-  }
+  if (elements.actionsPopover.hidden) openActions(elements.actionsButton);
+  else closeActions();
 });
 elements.closeActionsButton.addEventListener("click", () => closeActions());
 elements.pinButton.addEventListener("click", () => {
@@ -298,15 +287,11 @@ synchronizeInspector();
 export const editorChrome = Object.freeze({
   synchronize: synchronizeInspector,
   destroy() {
-    if (destroyed) {
-      return;
-    }
+    if (destroyed) return;
     destroyed = true;
     saveObserver.disconnect();
     document.removeEventListener("keydown", handleEscape, true);
     document.removeEventListener("pointerdown", handleDocumentPointer);
-    for (const unregister of unregisterActions) {
-      unregister();
-    }
+    for (const unregister of unregisterActions) unregister();
   },
 });
