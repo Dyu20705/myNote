@@ -118,9 +118,23 @@ test("live desktop resize preserves query draft overlay and logical focus", asyn
 
   const search = page.locator("#searchInput");
   await search.fill("Untitled");
+  const navigation = page.locator("#noteNavigationRegion");
+  const expectedScrollTop = await page.evaluate(() => {
+    const list = globalThis.document.querySelector("#noteList");
+    const panel = globalThis.document.querySelector("#noteNavigationRegion");
+    list.style.minHeight = "2400px";
+    panel.scrollTop = 320;
+    return panel.scrollTop;
+  });
+  expect(expectedScrollTop).toBeGreaterThan(0);
+
   const card = page.locator("#noteList .note-item").first();
   const activeId = await card.getAttribute("data-id");
-  await card.click();
+  await card.evaluate((element) => {
+    element.focus({ preventScroll: true });
+    element.click();
+  });
+  expect(await navigation.evaluate((element) => element.scrollTop)).toBe(expectedScrollTop);
 
   const overlay = page.locator("#noteEditorOverlay");
   const title = page.locator("#titleInput");
@@ -141,6 +155,7 @@ test("live desktop resize preserves query draft overlay and logical focus", asyn
     await expect(search).toHaveValue("Untitled");
     await expect(content).toBeFocused();
     await expect(page.locator(`.note-item[data-id="${activeId}"]`)).toHaveAttribute("aria-current", "true");
+    expect(await navigation.evaluate((element) => element.scrollTop)).toBe(expectedScrollTop);
     await expectInsideViewport(overlay);
     await expectNoDocumentHorizontalOverflow(page);
   }
@@ -228,6 +243,59 @@ test("note and command transient surfaces stay contained during 720x450 narrow-l
   await expect(page.locator("#commandPalette")).toBeVisible();
   await expectInsideViewport(page.locator(".command-panel"));
   await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("open note actions and command palette preserve focus and containment through resize", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("#noteList .note-item").first().click();
+
+  const actionsButton = page.locator("#noteActionsButton");
+  const actions = page.locator("#noteActionsPopover");
+  const archiveAction = page.getByRole("menuitem", { name: "Archive active note" });
+  await actionsButton.click();
+  await archiveAction.focus();
+  await expect(archiveAction).toBeFocused();
+
+  for (const viewport of [
+    { width: 1024, height: 768 },
+    { width: 1280, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(actions).toBeVisible();
+    await expectInsideViewport(actions);
+    await expect(archiveAction).toBeFocused();
+    await expectNoDocumentHorizontalOverflow(page);
+  }
+
+  await page.keyboard.press("Escape");
+  await expect(actions).toBeHidden();
+  await expect(actionsButton).toBeFocused();
+
+  await closeNoteEditor(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.keyboard.press("Control+k");
+
+  const commandPalette = page.locator("#commandPalette");
+  const commandPanel = page.locator(".command-panel");
+  const commandInput = page.locator("#commandInput");
+  await expect(commandPalette).toBeVisible();
+  await expect(commandInput).toBeFocused();
+
+  for (const viewport of [
+    { width: 1024, height: 768 },
+    { width: 1280, height: 720 },
+    { width: 720, height: 450 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(commandPalette).toBeVisible();
+    await expectInsideViewport(commandPanel);
+    await expect(commandInput).toBeFocused();
+    await expectNoDocumentHorizontalOverflow(page);
+  }
+
+  await page.keyboard.press("Escape");
+  await expect(commandPalette).toBeHidden();
 });
 
 test("Japanese filters create menu and review state survive desktop resize", async ({ page }) => {
