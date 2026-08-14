@@ -92,10 +92,10 @@ for (const viewport of [
 }
 
 test("saved-grid drawing stays local and outside canonical note content", async ({ page }) => {
-  const externalRequests = [];
+  let externalRequestCount = 0;
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.origin !== APP_ORIGIN) externalRequests.push(`${request.method()} ${url.origin}${url.pathname}`);
+    if (url.origin !== APP_ORIGIN) externalRequestCount += 1;
   });
 
   await page.goto("/");
@@ -129,5 +129,5 @@ test("saved-grid drawing stays local and outside canonical note content", async 
   const noteKeys = await activeCanonicalNoteShape(page);
   expect(noteKeys).not.toContain("strokes");
   expect(noteKeys).not.toContain("paperStyle");
-  expect(externalRequests).toEqual([]);
+  expect(externalRequestCount).toBe(0);
 });
