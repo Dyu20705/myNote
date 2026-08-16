@@ -1,62 +1,62 @@
-# Thiết kế V2 Canonical Data Schema (Japanese V2.1)
+# V2 Canonical Data Schema Design (Japanese V2.1)
 
-Dựa trên yêu cầu tối giản (Simplicity First) và Karpathy Guidelines, dưới đây là bản thiết kế Schema V2.1.
-Mục tiêu là hỗ trợ Atomic item/card-level identity và cơ chế Exact Undo.
+Based on the requirement for simplicity (Simplicity First) and Karpathy Guidelines, here is the V2.1 Schema design.
+The goal is to support Atomic item/card-level identity and Exact Undo mechanism.
 
-## Chiến lược lưu trữ thời gian (Number vs String)
+## Time Storage Strategy (Number vs String)
 
-Tất cả các trường mốc thời gian (`createdAt`, `updatedAt`, `nextReviewAt`, `reviewedAt`) sẽ được lưu dưới dạng **Number (Unix timestamp theo milliseconds)**.
-Lý do là hiệu suất truy vấn (Range Queries) của IndexedDB trên mảng dữ liệu số cực kỳ nhanh thông qua `IDBKeyRange.upperBound()`, kích thước nhỏ gọn hơn so với chuỗi ISO 8601, và dễ dàng cộng/trừ interval mà không cần parse date.
+All timestamp fields (`createdAt`, `updatedAt`, `nextReviewAt`, `reviewedAt`) will be stored as **Number (Unix timestamp in milliseconds)**.
+The reason is that the query performance (Range Queries) of IndexedDB on an array of numeric data is extremely fast via `IDBKeyRange.upperBound()`, more compact in size than an ISO 8601 string, and makes it easy to add/subtract intervals without needing to parse the date.
 
-## 1. `Item` (Thực thể kiến thức gốc)
-Lưu trữ thông tin học thuật độc lập. Hỗ trợ đầy đủ các loại thẻ bao gồm `output` và `sentence`. `reading` và `meaning` là optional.
+## 1. `Item` (Core Knowledge Entity)
+Stores independent academic information. Fully supports all card types including `output` and `sentence`. `reading` and `meaning` are optional.
 
 ```typescript
 interface Item {
   id: string;              // UUID
-  noteId: string;          // Khóa ngoại liên kết về Note gốc (duy trì #69 Ink boundary)
+  noteId: string;          // Foreign key linked to the original Note (maintains #69 Ink boundary)
   type: "kanji" | "vocabulary" | "grammar" | "output" | "sentence";
 
-  target: string;          // Từ/Chữ mục tiêu (VD: 食べる, 漢, một câu văn)
-  reading?: string;        // Cách đọc (Furigana / Kana). Tùy chọn
-  meaning?: string;        // Ý nghĩa. Tùy chọn
+  target: string;          // Target word/character (e.g., 食べる, 漢, a sentence)
+  reading?: string;        // Reading (Furigana / Kana). Optional
+  meaning?: string;        // Meaning. Optional
 
   createdAt: number;       // Unix timestamp (ms)
   updatedAt: number;       // Unix timestamp (ms)
 }
 ```
 
-## 2. `Card` (Mặt kiểm tra kỹ năng độc lập)
-Tách biệt trạng thái SRS cho từng kỹ năng riêng lẻ.
+## 2. `Card` (Independent Skill Testing Face)
+Separates the SRS state for each individual skill.
 
 ```typescript
 interface Card {
   id: string;              // UUID
-  itemId: string;          // Khóa ngoại liên kết về Item
+  itemId: string;          // Foreign key linked to the Item
 
   skill: "recognition" | "meaning" | "reading" | "form-recall";
 
   status: "new" | "learning" | "review" | "suspended";
-  nextReviewAt: number;    // Unix timestamp (ms) - Tối ưu cho IDBKeyRange.upperBound
-  interval: number;        // Khoảng cách ôn tập
-  ease: number;            // Hệ số độ khó (ease factor)
-  lapses: number;          // Tổng số lần quên
+  nextReviewAt: number;    // Unix timestamp (ms) - Optimized for IDBKeyRange.upperBound
+  interval: number;        // Review interval
+  ease: number;            // Ease factor
+  lapses: number;          // Total number of lapses
 }
 ```
 
-## 3. `ReviewLog` (Nhật ký ôn tập tích hợp State Snapshot)
-Hỗ trợ O(1) exact undo (khôi phục trạng thái tức thì không cần tính toán ngược) bằng cách lưu lại nguyên trạng của Card ngay trước thời điểm chấm điểm.
+## 3. `ReviewLog` (Review Log with State Snapshot)
+Supports O(1) exact undo (immediate state restoration without backward calculation) by saving the exact state of the Card immediately before grading.
 
 ```typescript
 interface ReviewLog {
   id: string;              // UUID
-  cardId: string;          // Khóa ngoại liên kết về Card
+  cardId: string;          // Foreign key linked to the Card
 
   rating: "again" | "hard" | "good" | "easy";
   reviewedAt: number;      // Unix timestamp (ms)
-  responseTimeMs: number;  // Độ trễ trả lời (fluency tracking)
+  responseTimeMs: number;  // Answer latency (fluency tracking)
 
-  // --- STATE SNAPSHOT (Phục vụ Exact Undo O(1)) ---
+  // --- STATE SNAPSHOT (For Exact Undo O(1)) ---
   previousStatus: "new" | "learning" | "review" | "suspended";
   previousInterval: number;
   previousEase: number;
