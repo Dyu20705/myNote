@@ -7,6 +7,15 @@ async function runCommand(page, title) {
   await page.locator("#commandInput").press("Enter");
 }
 
+async function createAndSave(page, title, content) {
+  await page.locator("#newNoteButton").click();
+  await page.locator("#titleInput").fill(title);
+  await page.locator("#contentInput").fill(content);
+  await page.locator("#contentInput").press("Control+Enter");
+  await expect(page.locator("#saveState")).toHaveText("Saved");
+  await page.getByRole("button", { name: "Close note editor" }).click();
+}
+
 async function activeNoteField(page, field) {
   return page.evaluate(async (fieldName) => {
     const { getActiveStore } = await import("/core/state.js");
@@ -22,8 +31,9 @@ test("generic Notes create, edit, search, navigation, pin, archive, export, and 
 
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Notes", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
 
+  await createAndSave(page, "Navigation peer", "Peer body");
   await page.locator("#newNoteButton").click();
   await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);
@@ -58,8 +68,10 @@ test("generic Notes create, edit, search, navigation, pin, archive, export, and 
   await runCommand(page, "Archive active note");
   await expect.poll(() => activeNoteField(page, "archived")).toBe(true);
 
-  page.once("dialog", (dialog) => dialog.dismiss());
-  await runCommand(page, "Safe mode: reset local database");
+  await runCommand(page, "Reset local database");
+  await expect(page.locator("#applicationResetDialog")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator("#applicationResetDialog")).toBeHidden();
   await expect(page.locator("#noteCount")).toHaveText("2 notes");
   await expect(page.getByRole("button", { name: "Notes", exact: true })).toHaveAttribute("aria-pressed", "true");
 });

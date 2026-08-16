@@ -6,6 +6,10 @@ import {
 
 async function openApplication(page) {
   await page.goto("/");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
+  await page.getByRole("button", { name: "New note", exact: true }).first().click();
+  await expect(page.locator("#noteEditorOverlay")).toBeVisible();
+  await page.getByRole("button", { name: "Close note editor" }).click();
   await expect(page.locator("#noteCount")).toHaveText("1 note");
   await expect(page.locator("#noteEditorOverlay")).toBeHidden();
 }
