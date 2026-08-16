@@ -3,10 +3,13 @@ import { validateStudyReview } from "./studyReview.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NOTES = "notes";
 const STORE_STUDY_REVIEWS = "studyReviews";
 const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
+const STORE_JAPANESE_ITEMS = "japaneseItems";
+const STORE_JAPANESE_CARDS = "japaneseCards";
+const STORE_JAPANESE_REVIEW_LOGS = "japaneseReviewLogs";
 const pendingDependentRestores = new WeakMap();
 
 function createMigrationOutcome(status, count, errorCode) {
@@ -138,6 +141,20 @@ export function openDatabase() {
         const store = db.createObjectStore(STORE_KANJI_INK_ENTRIES, { keyPath: "id" });
         store.createIndex("noteId", "noteId");
         store.createIndex("updatedAt", "updatedAt");
+      }
+      if (event.oldVersion < 4) {
+        if (!db.objectStoreNames.contains(STORE_JAPANESE_ITEMS)) {
+          const store = db.createObjectStore(STORE_JAPANESE_ITEMS, { keyPath: "id" });
+          store.createIndex("noteId", "noteId");
+        }
+        if (!db.objectStoreNames.contains(STORE_JAPANESE_CARDS)) {
+          const store = db.createObjectStore(STORE_JAPANESE_CARDS, { keyPath: "id" });
+          store.createIndex("nextReviewAt", "nextReviewAt");
+        }
+        if (!db.objectStoreNames.contains(STORE_JAPANESE_REVIEW_LOGS)) {
+          const store = db.createObjectStore(STORE_JAPANESE_REVIEW_LOGS, { keyPath: "id" });
+          store.createIndex("cardId", "cardId");
+        }
       }
     };
 
