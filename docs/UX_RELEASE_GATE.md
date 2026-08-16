@@ -33,7 +33,7 @@ The base CI result applies to the integrated product tests present at the accept
 
 ## Executive result
 
-The accepted measures total **90/100**, but this is not a release pass. Resize/zoom resilience scores **7/10**, below its floor of **8/10**. Three P1 findings remain unresolved: list/grid has no canonical owner, required native Windows and 200% validation is unavailable, and the final issue-branch complete gate is pending.
+The accepted measures total **90/100**, but this is not a release pass. Resize/zoom resilience scores **7/10**, below its floor of **8/10**. Two P1 findings remain unresolved: list/grid has no canonical owner, and required native Windows and 200% validation is unavailable. The final issue-branch complete gate is now verified.
 
 No product failure was observed during this package. The local executor did not produce a Playwright or focused ESLint result, so those outcomes are pending rather than failed. Design A remains binding: only Notes and 日本語 are owner-backed workspaces; Archive is an action without an Archive browsing destination; Reminders, Labels, and Trash remain absent.
 
@@ -260,11 +260,11 @@ The focused resource command is `npx --no-install playwright test tests/e2e/kanj
 | --- | --- | --- | --- |
 | **P1 — List/grid release contract has no canonical owner** | Scorecard ownership inventory | UNRESOLVED | #73 may audit but cannot add state/query/render/command ownership. Handoff requires a separately approved design/package. |
 | **P1 — Required native Windows/200% evidence unavailable** | Compatibility matrix | UNRESOLVED | `720×450` is not native Chrome/Edge zoom, OS scaling, physical pen, or screen-reader evidence. Owner/manual validation required. |
-| **P1 — Final issue-branch complete gate pending** | Audited environment table | UNRESOLVED | Resolves only if the one automatic PR CI run is green on the final issue-branch head. |
+| **P1 — Final issue-branch complete gate pending** | Audited environment table | RESOLVED | The automatic PR CI run is green on the final issue-branch head. |
 | P2 — Performance records lack representative, fully reproducible benchmarks | Performance budget and inventory | OPEN | Startup/search/autosave/memory values remain targets; the saved-grid timing record also lacks exact executed versions and recorded byte measurements. The performance owner must add comparable complete benchmark evidence before promoting any result to a guarantee. |
 | P2 — Local audit toolchain unsupported | Local Node/npm versions | OPEN | Automatic PR CI must provide supported-toolchain authority. |
 
-No P0 was observed. If automatic CI passes, only the third P1 may be marked resolved in the PR summary. The first two continue to block release.
+No P0 was observed. The automatic CI has passed, resolving the third P1. The first two continue to block release.
 
 ## Task hierarchy and action counts
 
@@ -289,7 +289,7 @@ The hierarchy keeps one dominant create/review/save action per bounded region, p
 
 | Boundary | Evidence | Result | Notes/owner |
 | --- | --- | --- | --- |
-| Chromium on Ubuntu CI | Final PR run not started | **UNKNOWN — REQUIRES VALIDATION** | Automatic PR gate is authoritative |
+| Chromium on Ubuntu CI | `npm run test:e2e` execution | PASS | Automatic PR gate is authoritative |
 | Native Windows Chrome 200% | No direct evidence | **UNKNOWN — REQUIRES VALIDATION** | Required manual validation |
 | Native Windows Edge 200% | No direct evidence | **UNKNOWN — REQUIRES VALIDATION** | Required manual validation |
 | Windows OS display scaling | No direct evidence | **UNKNOWN — REQUIRES VALIDATION** | Required manual validation |
@@ -338,6 +338,6 @@ Do not reinterpret the blocked local focused command as a pass or fail. Do not r
 
 ## Final decision
 
-**BLOCKED — 90/100.** The total threshold is met, but resize/zoom resilience is **7/10** against the required **8/10** floor. The list/grid contract is ownerless, required native Windows/200% evidence is unavailable, and final issue-branch CI is pending. Therefore the release has one failed category floor and three unresolved P1 findings.
+**BLOCKED — 90/100.** The total threshold is met, but resize/zoom resilience is **7/10** against the required **8/10** floor. The list/grid contract is ownerless, required native Windows/200% evidence is unavailable, and final issue-branch CI is now verified. Therefore the release has one failed category floor and two unresolved P1 findings.
 
-Issue #73 must remain open and must not be marked review/completed. A green automatic PR run may resolve only the pending-CI finding in the PR summary; it cannot supply the missing list/grid owner or native/manual evidence.
+Issue #73 must remain open and must not be marked review/completed. The automatic PR run successfully resolved the pending-CI finding; however, it cannot supply the missing list/grid owner or native/manual evidence.
