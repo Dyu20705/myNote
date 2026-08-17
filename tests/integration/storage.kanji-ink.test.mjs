@@ -159,7 +159,7 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     const store = database.transaction("kanjiInkEntries", "readonly")
       .objectStore("kanjiInkEntries");
 
-    assert.equal(database.version, 3);
+    assert.equal(database.version, 4);
     assert.deepEqual(
       [...database.objectStoreNames],
       ["japaneseCards", "japaneseItems", "japaneseReviewLogs", "kanjiInkEntries", "notes", "studyReviews"],
@@ -186,7 +186,7 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     v2.close();
 
     const database = await openTestDatabase();
-    assert.equal(database.version, 3);
+    assert.equal(database.version, 4);
     assert.deepEqual(await readRawStore(database, "notes"), [note]);
     assert.deepEqual(await readRawStore(database, "studyReviews"), [review]);
     assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);
