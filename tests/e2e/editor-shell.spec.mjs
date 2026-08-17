@@ -180,6 +180,8 @@ test("keyboard traversal includes editor context actions and reaches the shell d
   await page.locator("#notesWorkspaceButton").focus();
   await expect(page.locator("#notesWorkspaceButton")).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.locator("#archiveWorkspaceButton")).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.locator("#japaneseWorkspaceButton")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.locator("#searchInput")).toBeFocused();

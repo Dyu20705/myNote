@@ -134,15 +134,16 @@ function intersectSets(left, right) {
 
 function runQuery(rawQuery) {
   const query = String(rawQuery || "").trim().toLowerCase().slice(0, MAX_QUERY_LENGTH);
-  const notes = [...notesById.values()].filter((note) => !note.archived);
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const isArchived = tokens.includes("is:archived");
+  const notes = [...notesById.values()].filter((note) => isArchived ? note.archived : !note.archived);
 
-  if (!query) {
+  if (tokens.length === 0 || (tokens.length === 1 && isArchived)) {
     return notes
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .map((note) => note.id);
   }
 
-  const tokens = query.split(/\s+/).filter(Boolean);
   let candidateSet = null;
 
   const scoreTokens = [];

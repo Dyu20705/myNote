@@ -35,6 +35,7 @@ if (required.length > 0) {
 const actionRegistry = createNoteActionRegistry();
 const unregisterActions = [
   actionRegistry.register({ commandId: "notes.archive", order: 40 }),
+  actionRegistry.register({ commandId: "notes.unarchive", order: 41 }),
   actionRegistry.register({ commandId: "notes.kanji-ink", order: 50 }),
   actionRegistry.register({ commandId: "notes.delete", tone: "danger", order: 90 }),
 ];
@@ -135,6 +136,10 @@ function renderActions() {
   elements.actionsList.replaceChildren();
 
   for (const action of actions) {
+    if ((action.commandId === "notes.archive" || action.commandId === "notes.unarchive") && !action.command.available) {
+      continue;
+    }
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = action.tone === "danger"
