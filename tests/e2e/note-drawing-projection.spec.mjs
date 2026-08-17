@@ -37,7 +37,7 @@ async function drawStroke(page) {
 
 async function seedDrawings(page, noteId, count) {
   await page.evaluate(async ({ noteId: id, count: entryCount }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const request = globalThis.indexedDB.open("myNoteDB", 4);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -69,7 +69,7 @@ async function seedDrawings(page, noteId, count) {
 
 async function readCanonicalFixture(page, noteId) {
   return page.evaluate(async (id) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const request = globalThis.indexedDB.open("myNoteDB", 4);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
