@@ -2,6 +2,7 @@ import {
   JAPANESE_FILTER_ERRORS,
   resolveJapaneseCommonFilter,
 } from "../core/japaneseFilters.js";
+import { presentBoardState } from "./statePresentation.js";
 
 const REQUIRED_ELEMENTS = Object.freeze([
   "root",
@@ -99,9 +100,7 @@ export function createJapaneseFilterController(options) {
     elements.root.hidden = !japanese;
     elements.panel.hidden = !disclosureOpen;
     elements.toggle.setAttribute("aria-expanded", String(disclosureOpen));
-    if (!japanese) {
-      return;
-    }
+    if (!japanese) return;
 
     const error = filter.getValidationError();
     const invalidRange = error === JAPANESE_FILTER_ERRORS.INVALID_DATE_RANGE;
@@ -118,6 +117,11 @@ export function createJapaneseFilterController(options) {
 
     const total = new Set(Array.isArray(state.japaneseNoteIds) ? state.japaneseNoteIds : []).size;
     const visible = resultCount(state);
+    const presentation = presentBoardState({ total, visible, japanese: true });
+    if (presentation.kind === "empty" || presentation.kind === "no-match") {
+      elements.status.textContent = presentation.message;
+      return;
+    }
     elements.status.textContent = `Showing ${visible} of ${total} Japanese ${total === 1 ? "note" : "notes"}`;
   }
 
@@ -188,9 +192,7 @@ export function createJapaneseFilterController(options) {
     const notebookType = resolveJapaneseCommonFilter(
       event.currentTarget.dataset.japaneseCommonFilter,
     );
-    if (notebookType === null) {
-      return;
-    }
+    if (notebookType === null) return;
     filter.update({ notebookType });
     syncControls();
     render();
@@ -200,9 +202,7 @@ export function createJapaneseFilterController(options) {
   function toggleDisclosure() {
     disclosureOpen = !disclosureOpen;
     render();
-    if (disclosureOpen) {
-      elements.dateFrom.focus();
-    }
+    if (disclosureOpen) elements.dateFrom.focus();
   }
 
   elements.dateFrom.addEventListener("input", readControls);

@@ -5,7 +5,7 @@ test("edited synthetic note survives a save-triggered reload", async ({ page }) 
   const content = "E2E synthetic body";
 
   await page.goto("/");
-  await expect(page.locator("#noteCount")).toHaveText("1 note");
+  await expect(page.locator("#noteCount")).toHaveText("0 notes");
   await page.locator("#newNoteButton").click();
   await expect(page.locator("#titleInput")).toBeFocused();
   await page.locator("#titleInput").fill(title);

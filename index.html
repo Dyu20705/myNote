@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="command.css" />
     <link rel="stylesheet" href="editor.css" />
+    <link rel="stylesheet" href="state-recovery.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -44,6 +45,14 @@
         </div>
       </header>
 
+      <section id="applicationRecovery" class="application-recovery" role="alert" hidden>
+        <p id="applicationRecoveryMessage"></p>
+        <div class="application-recovery-actions">
+          <button id="retryApplicationStorageButton" class="secondary-button" type="button">Retry</button>
+          <button id="resetApplicationDataButton" class="destructive-button" type="button">Reset local data…</button>
+        </div>
+      </section>
+
       <section class="workspace" aria-label="Note workspace">
         <aside id="noteNavigationRegion" class="panel notes-panel" aria-label="Note navigation">
           <div class="panel-header">
@@ -69,6 +78,9 @@
             <button id="japaneseSummaryReviewButton" type="button">Open review</button>
           </section>
 
+          <p id="japaneseAvailabilityStatus" class="japanese-availability-status" hidden></p>
+          <span id="japaneseStateAnnouncement" class="visually-hidden" aria-live="polite"></span>
+
           <section id="japaneseFilterTools" class="japanese-filter-tools" hidden>
             <div class="japanese-filter-presets" role="group" aria-label="Japanese common filters">
               <button type="button" data-japanese-common-filter="all" aria-pressed="true">All</button>
@@ -80,7 +92,7 @@
               <button id="japaneseFilterToggle" type="button" aria-expanded="false" aria-controls="japaneseFilters">+ Filter</button>
             </div>
             <div id="japaneseFilterChips" class="japanese-filter-chips" aria-label="Active Japanese filters"></div>
-            <span id="japaneseFilterStatus" class="japanese-filter-status" role="status" aria-live="polite">Showing 0 of 0 Japanese notes</span>
+            <span id="japaneseFilterStatus" class="japanese-filter-status">Showing 0 of 0 Japanese notes</span>
             <section id="japaneseFilters" class="japanese-filters" role="region" aria-label="Japanese note filters" hidden>
               <label class="japanese-filter-field" for="japaneseDateFrom">
                 <span>Created from</span>
@@ -105,6 +117,9 @@
             </section>
           </section>
 
+          <div id="boardStatusRegion" class="board-status" role="alert" hidden>
+            <span id="boardStatusMessage"></span>
+          </div>
           <div id="noteList" class="note-list" aria-live="polite"></div>
 
           <section id="japaneseDashboard" class="japanese-dashboard" aria-label="Japanese learning dashboard" hidden>
@@ -167,7 +182,11 @@
             <div class="editor-context-copy">
               <span id="noteEditorOverlayLabel" class="editor-context-label">Edit note</span>
               <input id="titleInput" class="title-input" type="text" placeholder="Title" aria-label="Note title" spellcheck="false" />
-              <span id="saveState" class="editor-save-state" role="status" aria-live="polite">Saved</span>
+              <div id="noteStatusRegion" class="editor-save-region">
+                <span id="saveState" class="editor-save-state">Saved</span>
+                <button id="retryNoteSaveButton" class="quiet-button" type="button" hidden>Retry save</button>
+                <span id="noteStatusAnnouncement" class="visually-hidden" aria-live="polite"></span>
+              </div>
             </div>
             <div class="editor-context-actions">
               <button id="pinNoteButton" class="note-toolbar-button" type="button" aria-label="Pin note" aria-pressed="false" title="Pin note">
@@ -230,6 +249,15 @@
       </section>
     </div>
 
+    <dialog id="applicationResetDialog" class="application-reset-dialog" aria-labelledby="applicationResetTitle">
+      <h2 id="applicationResetTitle">Reset local data?</h2>
+      <p>This permanently removes local myNote data on this device.</p>
+      <div class="dialog-actions">
+        <button id="cancelApplicationResetButton" class="secondary-button" type="button">Cancel</button>
+        <button id="confirmApplicationResetButton" class="destructive-button" type="button">Reset</button>
+      </div>
+    </dialog>
+
     <dialog id="reviewDialog" class="review-dialog" aria-labelledby="reviewDialogTitle">
       <div class="review-dialog-header">
         <div>
@@ -239,7 +267,7 @@
         <button id="closeReviewButton" type="button" aria-label="Close review session">Close</button>
       </div>
       <p id="reviewProgress" class="review-progress"></p>
-      <p id="reviewStatus" class="review-status" aria-live="polite">Content hidden until reveal</p>
+      <p id="reviewStatus" class="review-status">Content hidden until reveal</p>
       <h3 id="reviewNoteTitle" class="review-note-title"></h3>
       <pre id="reviewContent" class="review-content" hidden></pre>
       <button id="revealReviewButton" class="primary-button" type="button">Reveal review content</button>

@@ -1,0 +1,97 @@
+.empty-state {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--mn-space-3);
+  padding: var(--mn-space-6);
+  text-align: center;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--mn-text-secondary);
+}
+
+.board-status,
+.application-recovery,
+.japanese-availability-status {
+  border: 1px solid var(--mn-danger-border);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-danger-text);
+  background: var(--mn-surface-raised);
+}
+
+.board-status {
+  margin: var(--mn-space-3) var(--mn-space-6) 0;
+  padding: var(--mn-space-3);
+}
+
+.application-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mn-space-4);
+  padding: var(--mn-space-3) var(--mn-space-4);
+}
+
+.application-recovery p,
+.japanese-availability-status {
+  margin: 0;
+}
+
+.application-recovery-actions,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--mn-space-2);
+  flex-wrap: wrap;
+}
+
+.application-reset-dialog {
+  width: min(480px, calc(100vw - 32px));
+  border: 1px solid var(--mn-danger-border);
+  border-radius: var(--mn-radius-lg);
+  padding: var(--mn-space-6);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-overlay);
+}
+
+.application-reset-dialog::backdrop {
+  background: var(--mn-overlay-scrim);
+}
+
+.application-reset-dialog h2 {
+  margin-top: 0;
+}
+
+.application-reset-dialog .dialog-actions {
+  justify-content: flex-end;
+  margin-top: var(--mn-space-5);
+}
+
+.editor-save-region {
+  display: flex;
+  align-items: center;
+  gap: var(--mn-space-2);
+  min-height: var(--mn-control-sm);
+  flex-wrap: wrap;
+}
+
+.editor-save-state[data-state="success"] {
+  color: var(--mn-success-text);
+}
+
+.editor-save-state[data-state="warning"] {
+  color: var(--mn-warning-text);
+}
+
+.editor-save-state[data-state="error"] {
+  color: var(--mn-danger-text);
+  font-weight: 600;
+}
+
+.japanese-availability-status {
+  margin: var(--mn-space-3) var(--mn-space-3) 0;
+  padding: var(--mn-space-3);
+}

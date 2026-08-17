@@ -1,121 +1,203 @@
 # myNote Governance
 
-## Project mode
+## Repository purpose
 
-myNote is maintained as an internal personal-development project.
+`myNote` is an internal personal-development project. Repository work is planned, implemented, reviewed, and integrated through owner-controlled work packages.
 
-- Unsolicited external issues, pull requests, feature requests, and contribution proposals are not accepted.
-- Repository issues are the internal source of truth for roadmap, dependency, risk, and completion state.
-- Completed issues and pull requests are preserved as audit evidence; they are closed and may be locked, not deleted.
-- The current repository tree uses English for documentation, comments, templates, test descriptions, and user-facing text.
-- Tool-specific execution artifacts and provenance markers are not stored in the current tree.
+Unsolicited external issues, pull requests, feature proposals, and automated changes are not part of the accepted execution model unless the owner explicitly adopts them.
 
-## Hierarchy
+Closed historical issues and pull requests are retained as audit evidence. Completed records are closed and may be locked, not deleted.
+
+## Authority model
+
+Repository authority is ordered as follows:
+
+1. architecture and technical invariants;
+2. accepted product/architecture decisions;
+3. the authoritative issue design under `docs/design/issues/`;
+4. the approved implementation plan referenced by that design;
+5. GitHub issue lifecycle/dependency metadata;
+6. accepted visual evidence referenced by the design;
+7. runtime code;
+8. test and CI evidence.
+
+The issue body is a coordination record once an authoritative design exists. Historical issue prose cannot override the accepted design.
+
+## Work-package relationships
+
+Every executable child records:
+
+- Parent:
+- Depends on:
+- Blocks:
+
+Relationships are reconciled after integration so downstream readiness is based on current repository state rather than stale prose.
+
+## Lifecycle labels
+
+Use exactly one execution-state label for an executable child:
+
+- `status/blocked` — a direct dependency or required design decision is unresolved;
+- `status/ready` — direct dependencies are satisfied and an accepted design exists;
+- `status/in-progress` — one implementation branch/package is active;
+- `status/review` — implementation is complete enough for owner/reviewer review and the required current-head verification gate is green;
+- completed/closed — accepted and integrated according to the package completion rule.
+
+Only one child issue may be `status/in-progress` at a time.
+
+Design/review work may occur while no runtime child is active. A downstream runtime child never starts merely because it is open.
+
+## Branch model
 
 ```text
-Roadmap
-└── Epic or milestone parent
-    └── Child work package
-        └── Pull request
+main
+  ↑ reviewed release/promotion
+  ↑
+dev
+  ↑
+issue/<number>-<bounded-name>
 ```
 
-A child work package represents one independently reviewable change. Parent issues provide context and remain open until every accepted child and completion criterion is satisfied.
+- `dev` is the integration branch for reviewed issue work.
+- `main` is the release/promotion branch.
+- implementation work starts from current `dev`;
+- one issue uses one bounded implementation branch and one pull request to `dev`;
+- implementation commits are not pushed directly to `dev` or `main`;
+- the implementation agent never merges its own pull request.
 
-## Required relationship fields
+Owner-maintained governance/design corrections may be committed directly to `dev` when they do not contain runtime implementation and when doing so avoids creating a competing runtime work package.
 
-Every active child issue states:
+## Docs-first design gate
 
-- **Parent:** the roadmap or epic that owns the outcome.
-- **Depends on:** issues, pull requests, release gates, or repository contracts that must be complete first.
-- **Blocks:** downstream work packages that cannot proceed until this issue is complete.
-- **Current status:** one execution status label.
-- **Ordered steps:** the dependency-safe implementation sequence.
-- **Acceptance criteria:** observable completion evidence.
-- **Verification:** exact commands and relevant manual checks.
-- **Rollback:** the safe revert or recovery boundary.
+A child becomes `status/ready` only after the owner/reviewer has created and accepted an issue design under `docs/design/issues/`.
 
-## Execution status
+The design records at minimum:
 
-Use exactly one status label on each open child issue:
+- goal and user outcome;
+- verified baseline;
+- product and architecture decisions;
+- ownership boundaries;
+- state/data flow where relevant;
+- in-scope and out-of-scope behavior;
+- allowed/forbidden interfaces;
+- RED regression contract;
+- acceptance criteria;
+- failure/recovery behavior;
+- security/privacy;
+- performance/resource bounds;
+- accessibility;
+- compatibility/migration;
+- rollback;
+- verification;
+- stop conditions.
 
-- `status/blocked`: a dependency, decision, evidence gate, or higher-priority work package prevents execution.
-- `status/ready`: scope is bounded, dependencies are complete, and verification is executable.
-- `status/in-progress`: the single selected implementation work package.
-- `status/review`: implementation is complete and a reviewable pull request exists.
+Detailed future designs are created just in time. Open future issues do not become implementation-ready by default.
 
-Only one child issue may be `status/in-progress` at a time. A maintenance or reliability blocker takes precedence over feature expansion.
+## Implementation contract
 
-Issue closure is separate from execution status. Close a child as `completed` only after its accepted pull request is merged and required verification is green on the target branch. Close rejected or obsolete work as `not planned` with a concise reason.
+The implementation agent must:
 
-## Milestone sequence
+1. start from current `dev`;
+2. read all authoritative docs in repository order;
+3. implement only the active issue;
+4. write the required regression evidence;
+5. observe genuine RED before runtime changes;
+6. make the smallest authorized implementation;
+7. run focused and complete verification;
+8. inspect the final diff;
+9. push the bounded branch;
+10. open/update one pull request to `dev`;
+11. stop for review.
 
-Work proceeds through these product gates:
+If an accepted regression is already GREEN, the agent records regression evidence and does not invent a runtime change.
 
-1. **M0 — Governance**
-2. **M1 — Reliable Core**
-3. **M2 — Daily Driver**
-4. **M3 — Workflows**
-5. **M4 — Scale**
-6. **M5 — Advanced Platform**
+If an unrelated baseline defect blocks the complete gate, the agent reports it and stops instead of silently repairing another owner's subsystem.
 
-A later milestone does not bypass an unmet earlier release gate. Research may occur early, but runtime implementation remains blocked until its required contracts are complete.
+## Review and integration
 
-## Readiness check
+The owner/reviewer decides:
 
-A child becomes `status/ready` only when:
+- whether findings are in scope;
+- whether the design must change;
+- whether a baseline defect needs owner maintenance;
+- whether the package advances to `status/review`;
+- whether the pull request is accepted/integrated;
+- when a downstream package becomes ready.
 
-1. Parent, dependencies, and blocked downstream issues are explicit.
-2. Goal, scope, and non-goals form one reviewable unit.
-3. Every dependency is merged, closed, or satisfied by immutable current repository evidence.
-4. Acceptance criteria are observable and testable.
-5. Verification commands exist or creating them is explicitly in scope.
-6. Data migration, rollback, security/privacy, performance, memory, and accessibility risks are addressed where applicable.
-7. No unresolved `UNKNOWN — REQUIRES VALIDATION` item blocks safe implementation.
-8. No other child is already `status/in-progress`.
+No P0/P1 correctness, data-integrity, privacy, accessibility, migration, security, or release-claim defect may remain unresolved at a package gate that claims those properties.
 
-## Work-package selection
+## Verification gate
 
-At the start of a work cycle:
+Default complete verification:
 
-1. Read the roadmap, relevant parents, candidate children, recent merged pull requests, and current repository contracts.
-2. Reconcile stale checkboxes and labels against current `main` evidence.
-3. Identify the earliest incomplete milestone gate.
-4. Select the highest-impact prerequisite among eligible `status/ready` children.
-5. Change only that child to `status/in-progress`; block conflicting or downstream work.
-6. Implement, verify, self-review, and open a draft pull request.
-7. Move the issue to `status/review` only after the required CI result is green.
-8. Merge only through an explicit owner decision.
-9. Close the child as `completed`, update parents and blocked dependents, then lock the completed conversation when no follow-up is required.
+```sh
+npm ci
+npx --no-install playwright install --with-deps chromium
+npm run test:content
+npm run lint
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+git diff --check
+```
 
-## Definition of Done
+A command is PASS only when it actually exits successfully in the claimed environment. Unsupported native environments remain `UNKNOWN — REQUIRES VALIDATION`.
 
-A work package is complete when all applicable conditions hold:
+## CI usage and anti-spam policy
 
-- Acceptance criteria are satisfied without speculative scope expansion.
-- Focused regression tests cover changed contracts.
-- `npm run test:content`, `npm run lint`, `npm run test:unit`, `npm run test:integration`, and `npm run test:e2e` pass where applicable.
-- Migration and rollback behavior are verified when applicable.
-- Self-review covers correctness, data integrity, architecture, security/privacy, performance/memory, error handling, accessibility, compatibility, and documentation.
-- No unresolved P0/P1 finding remains.
-- The pull request references the child and parent issues and records exact verification evidence.
-- Parent checklists and downstream dependency states are reconciled after merge.
+Remote CI is a verification gate, not an interactive debugger.
 
-## Risk levels
+Required behavior:
 
-- **P0:** active or imminent data loss, security compromise, or unrecoverable corruption. Stop unrelated work.
-- **P1:** serious correctness, privacy, migration, or availability defect. Resolve before completion.
-- **P2:** bounded behavior or process risk with a clear rollback.
-- **P3:** low-impact documentation, polish, or maintainability risk.
+- run focused/local checks before pushing where the environment permits;
+- batch related verified changes before remote push;
+- prefer one CI run per review iteration;
+- do not create repeated trial commits or empty commits merely to trigger Actions;
+- do not repeatedly rerun an unchanged deterministic failure;
+- rerun only when the failure is plausibly transient or the tested commit/environment changed;
+- use concurrency cancellation already configured by the workflow;
+- keep failure artifacts short-lived and bounded;
+- do not create duplicate PRs, duplicate automation comments, or label churn.
 
-## Issue maintenance
+## Milestones
 
-Perform a backlog reconciliation after every merge and at each milestone checkpoint:
+### M0 — Governance
 
-1. Close merged child issues with `completed`.
-2. Close rejected or superseded work with `not planned` and a reason.
-3. Update parent checklists and release-gate evidence.
-4. Remove stale status labels and apply one current status to each open child.
-5. Validate `Depends on` and `Blocks` links in both directions.
-6. Ensure exactly one child is in progress.
-7. Lock completed conversations when no additional action is needed.
-8. Keep roadmap, governance, current-tree documentation, and repository evidence consistent.
+Repository lifecycle, authority, issue relationships, verification, and review rules.
+
+### M1 — Reliable Core
+
+Local-first persistence, parser/model/state/history, migration, deterministic testing, and failure-safe mutation ordering.
+
+### M2 — Desktop Daily Driver
+
+Board-first desktop Notes/Japanese Notes, centered editing overlay, command/focus/accessibility quality, saved-grid Kanji workflow, resize/zoom resilience, failure/recovery UX, and final evidence gate.
+
+### M3 — Workflows
+
+Accepted higher-level workflows such as Japanese learning expansion only after M2 dependency gates and dedicated data/identity/deletion/export contracts.
+
+### M4 — Scale
+
+Bounded performance, memory, storage, indexes, history, drawings, and long-session behavior using reproducible benchmarks.
+
+### M5 — Advanced Platform
+
+Cross-device, protected-data, remote-trust, optional intelligence, and extension work only after prior milestone gates and dedicated architecture/security decisions.
+
+## Current M2 sequence
+
+```text
+completed foundations + saved-grid drawing + board/overlay reconciliation
+→ #71 desktop resilience
+→ #72 state/recovery UX
+→ #73 final desktop release evidence
+```
+
+Only direct dependency-safe work advances.
+
+## Completion and rollback
+
+A child closes only after its accepted integration/completion rule is satisfied and downstream relationship/status metadata is reconciled.
+
+Every package must have a bounded rollback. Schema changes require explicit forward/rollback compatibility. Code-only presentation changes must not invent data migrations.

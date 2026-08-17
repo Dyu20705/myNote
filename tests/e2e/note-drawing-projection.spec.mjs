@@ -37,7 +37,7 @@ async function drawStroke(page) {
 
 async function seedDrawings(page, noteId, count) {
   await page.evaluate(async ({ noteId: id, count: entryCount }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const request = globalThis.indexedDB.open("myNoteDB", 4);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -69,7 +69,7 @@ async function seedDrawings(page, noteId, count) {
 
 async function readCanonicalFixture(page, noteId) {
   return page.evaluate(async (id) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 3);
+    const request = globalThis.indexedDB.open("myNoteDB", 4);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -195,7 +195,7 @@ test("drawing save and delete failure preserve canonical data with explicit reco
   await drawStroke(page);
   await abortNextInkMutation(page, "add");
   await page.getByRole("button", { name: "Save drawing", exact: true }).click();
-  await expect(page.locator("#kanjiInkStatus")).toHaveText("Save failed. Your drawing is preserved; retry save.");
+  await expect(page.locator("#kanjiInkStatus")).toHaveText("Save failed. Your drawing is preserved.");
   await expect(page.getByRole("dialog", { name: "Draw Kanji" })).toBeVisible();
   expect((await readCanonicalFixture(page, noteId)).entries).toHaveLength(0);
 
@@ -206,7 +206,7 @@ test("drawing save and delete failure preserve canonical data with explicit reco
 
   await abortNextInkMutation(page, "delete");
   await page.getByRole("button", { name: "Delete Kanji drawing", exact: true }).click();
-  await expect(page.locator("#kanjiInkRegionStatus")).toHaveText("Delete failed. The saved drawing is unchanged.");
+  await expect(page.locator("#kanjiInkRegionStatus")).toHaveText("Drawing couldn't be deleted. The saved drawing is unchanged. Try again.");
   await expect(page.locator(`[data-kanji-entry-id="${savedId}"]`)).toBeVisible();
   expect((await readCanonicalFixture(page, noteId)).entries.map((entry) => entry.id)).toEqual([savedId]);
 });

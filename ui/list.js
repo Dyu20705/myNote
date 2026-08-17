@@ -33,12 +33,8 @@ function renderButton(button, note, isActive, formatDate) {
   const metadata = document.createElement("span");
   metadata.className = "note-item-metadata";
   appendText(metadata, "note-item-date", presentation.date);
-  if (presentation.pinned) {
-    appendText(metadata, "note-item-state", "Pinned");
-  }
-  if (presentation.archived) {
-    appendText(metadata, "note-item-state", "Archived");
-  }
+  if (presentation.pinned) appendText(metadata, "note-item-state", "Pinned");
+  if (presentation.archived) appendText(metadata, "note-item-state", "Archived");
   heading.append(metadata);
   button.append(heading);
 
@@ -93,7 +89,20 @@ function createSection(section, nodes, viewId) {
   return root;
 }
 
-export function createListView({ container, onSelect, formatDate }) {
+function actionLabel(actionId) {
+  if (actionId === "create-note") return "New note";
+  if (actionId === "create-japanese-note") return "New Japanese note";
+  if (actionId === "clear-search") return "Clear search";
+  return "";
+}
+
+function actionAccessibleLabel(actionId) {
+  if (actionId === "create-note") return "Create first note";
+  if (actionId === "create-japanese-note") return "Create first Japanese note";
+  return "";
+}
+
+export function createListView({ container, onSelect, onEmptyAction = () => {}, formatDate }) {
   const viewId = nextListViewId;
   nextListViewId += 1;
   const nodeCache = new Map();
@@ -133,9 +142,7 @@ export function createListView({ container, onSelect, formatDate }) {
 
   function pruneCache(retainedIds) {
     for (const id of nodeCache.keys()) {
-      if (!retainedIds.has(id)) {
-        nodeCache.delete(id);
-      }
+      if (!retainedIds.has(id)) nodeCache.delete(id);
     }
   }
 
@@ -185,17 +192,35 @@ export function createListView({ container, onSelect, formatDate }) {
     container.replaceChildren(fragment);
   }
 
-  function clearToEmpty(message) {
+  function clearToEmpty(presentation) {
     nodeCache.clear();
     container.dataset.virtualized = "false";
     container.replaceChildren();
+
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = message;
+    const message = document.createElement("p");
+    message.textContent = presentation?.message || "No notes";
+    empty.append(message);
+
+    const label = actionLabel(presentation?.actionId);
+    if (presentation?.actionId && label) {
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = presentation.actionId === "clear-search"
+        ? "secondary-button"
+        : "primary-button";
+      action.textContent = label;
+      const accessibleLabel = actionAccessibleLabel(presentation.actionId);
+      if (accessibleLabel) action.setAttribute("aria-label", accessibleLabel);
+      action.addEventListener("click", () => onEmptyAction(presentation.actionId, action));
+      empty.append(action);
+    }
+
     container.append(empty);
   }
 
-  function render({ notesById, orderedIds, activeId, query }) {
+  function render({ notesById, orderedIds, activeId, query, emptyPresentation }) {
     const sections = projectSections(notesById, orderedIds);
     const boardIds = sections.flatMap((section) => section.orderedIds);
     const virtualized = boardIds.length >= VIRTUALIZATION_THRESHOLD;
@@ -210,21 +235,16 @@ export function createListView({ container, onSelect, formatDate }) {
     container.dataset.virtualized = String(virtualized);
 
     if (boardIds.length === 0) {
-      clearToEmpty(query ? "No notes match this search." : "No notes yet. Create one to start.");
+      clearToEmpty(emptyPresentation);
       return;
     }
 
-    if (virtualized) {
-      renderWindow();
-    } else {
-      renderCompleteBoard(sections);
-    }
+    if (virtualized) renderWindow();
+    else renderCompleteBoard(sections);
   }
 
   scrollOwner.addEventListener("scroll", () => {
-    if (currentPayload.virtualized) {
-      renderWindow();
-    }
+    if (currentPayload.virtualized) renderWindow();
   });
 
   return { render };

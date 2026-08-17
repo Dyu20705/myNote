@@ -43,6 +43,10 @@
   justify-content: space-between;
 }
 
+.kanji-ink-recovery[hidden] {
+  display: none;
+}
+
 .kanji-ink-header h2,
 .kanji-entry-header h4 {
   margin: 0;

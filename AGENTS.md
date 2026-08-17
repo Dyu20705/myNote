@@ -1,77 +1,118 @@
-# Repository Execution Instructions
+# Repository Agent Contract
 
-## Required reading
+This repository uses a docs-first delivery model. Product intent, architecture, issue design, implementation, review, and integration are separate responsibilities.
 
-Before any UX or UI task, read these files in order:
+## Authority
 
-1. `README.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/INVARIANTS.md`
-4. `docs/UX_DESIGN_HANDOFF.md`
-5. `docs/UX_ISSUE_EXECUTION.md`
-6. The complete GitHub issue body for the active work package
+Read and obey sources in this order:
 
-Do not begin implementation when the active issue is blocked by an unmerged dependency.
+1. `docs/ARCHITECTURE.md` and `docs/INVARIANTS.md`
+2. accepted architecture/product decisions referenced by the active design
+3. `docs/design/issues/<issue>-*.md`
+4. the approved implementation plan referenced by that design
+5. GitHub issue tracking metadata
+6. accepted visual evidence referenced by the design
+7. current runtime implementation
+8. verification evidence
 
-## Source-of-truth order
+A lower source never overrides a higher source.
 
-Use this authority order:
+## Roles
+
+The owner and architecture reviewer own:
+
+- product decisions;
+- architecture;
+- UX design;
+- issue decomposition;
+- roadmap priority;
+- acceptance criteria;
+- review;
+- integration decisions.
+
+The implementation agent owns only:
+
+- reading the accepted contract;
+- creating one bounded branch from current `dev`;
+- writing the specified tests;
+- implementing the minimum change required by the contract;
+- running verification;
+- opening one pull request to `dev`;
+- stopping for review.
+
+The implementation agent must not redesign requirements, reinterpret architecture, expand scope, reprioritize the backlog, create future packages, mutate visual design sources, merge its own pull request, or begin the next issue.
+
+## Branch model
 
 ```text
-Canonical domain and persistence contracts
-→ merged GitHub issue decisions
-→ accepted Figma specification
-→ runtime implementation
-→ automated and recorded manual evidence
+main
+  ↑ reviewed release promotion
+  ↑
+dev
+  ↑
+issue/<number>-<bounded-name>
 ```
 
-Figma is the presentation and interaction specification. It is not a second owner for persistence, search, command dispatch, review scheduling, recognition, or canonical note state.
+Implementation always starts from the current `dev` head.
 
-## Design access
+Never push implementation directly to `dev` or `main`.
 
-The design file, canonical node identifiers, supported viewports, and acceptance boundaries are listed in `docs/UX_DESIGN_HANDOFF.md`.
+Pull requests from issue branches target `dev`.
 
-For UI work:
+## One active package
 
-- Use the Figma MCP server and request node-specific design context.
-- Read variables and component metadata before translating a screen.
-- Capture a screenshot of the exact target node before implementation.
-- Compare the running application against the target at the required viewport after implementation.
-- If design context cannot be retrieved, stop and report the missing access. Do not guess from memory or recreate a generic dark interface.
-- Candidate frames are not implementation authority. Only frames marked `Accepted` may drive runtime implementation.
+Only one runtime implementation package may be active at a time. A ready package becomes active only when implementation begins. Downstream packages remain blocked until their direct dependency is accepted and integrated.
 
-## Architecture constraints
+## Required implementation workflow
 
-- Keep `app.js` as the single browser composition root.
-- Preserve dependency direction: `UI → Actions → State → Core → Persistence`.
-- Use vanilla HTML, CSS, and ES modules. Do not introduce a UI framework or component-library dependency.
-- UI modules must not open IndexedDB directly.
-- Canonical writes complete before state, history, derived indexes, or success presentation.
-- Search, backlinks, review scheduling, and command availability retain one owner each.
-- Ordinary Notes and Japanese Notes share the accepted shell and runtime.
-- Mobile/tablet navigation, touch-first behavior, virtual keyboards, native wrappers, and PWA scope are excluded.
+1. fetch current repository state;
+2. verify the exact `dev` head;
+3. verify there is no conflicting active package;
+4. create one bounded issue branch;
+5. read architecture, invariants, delivery model, issue design, and approved plan;
+6. create or extend the specified regression evidence;
+7. observe genuine RED before changing runtime behavior;
+8. implement the minimum authorized change;
+9. run focused verification;
+10. run the complete repository gate;
+11. inspect the entire diff for scope and ownership violations;
+12. push once after local verification is complete where practical;
+13. open or update one pull request targeting `dev`;
+14. stop for owner/reviewer review.
 
-## Work-package discipline
+If a required regression is already GREEN on the accepted baseline, record that fact. Do not manufacture runtime changes merely to create a RED result.
 
-- Implement one GitHub issue per branch and pull request.
-- Follow the dependency order in `docs/UX_ISSUE_EXECUTION.md`.
-- Do not mix design-system, command, editor, Japanese, Kanji, resize, and recovery packages in one pull request.
-- Add the smallest focused abstraction that gives one owner to the changed behavior.
-- Do not perform unrelated refactoring.
-- Preserve rollback boundaries and forward-compatible stored data.
+## Stop conditions
 
-## Test-driven workflow
+Stop and report instead of guessing when:
 
-For every behavior change:
+- authoritative sources materially conflict;
+- the accepted design requires a boundary forbidden by architecture/invariants;
+- satisfying the issue appears to require scope outside the accepted design;
+- a runtime fix requires a new canonical owner;
+- a required environment is unavailable and equivalence cannot be proven;
+- another runtime issue becomes conflicting/active;
+- verification reveals an unrelated owner defect.
 
-1. Add a focused failing test.
-2. Run it and record the expected failure.
-3. Implement the minimum change.
-4. Run the focused test.
-5. Run the relevant unit/integration/browser package.
-6. Run the complete release gate before opening a pull request.
+Unrelated baseline defects are reported to the owner/reviewer. They are not authorization to widen the implementation pull request.
 
-Required final commands:
+## Architecture invariants
+
+Preserve:
+
+```text
+UI → Actions → State → Core → Persistence
+```
+
+Do not create duplicate owners for parsing, search, scheduling, commands, review state, drawing state, or persistence.
+
+Canonical persistence succeeds before visible/history success. Derived search/backlink degradation is separate from canonical storage failure.
+
+Kanji saved-grid data remains in its existing canonical relation and is never copied into note Markdown merely for presentation.
+
+## Verification
+
+Unless a narrower accepted design explicitly adds more checks, the complete gate is:
 
 ```sh
 npm ci
@@ -84,32 +125,18 @@ npm run test:e2e
 git diff --check
 ```
 
-## UI verification
+Do not claim PASS for a command that was not actually executed successfully.
 
-Required desktop baselines:
+Environment limitations must be reported as `UNKNOWN — REQUIRES VALIDATION` when direct evidence is unavailable.
 
-- `1024×768`
-- `1280×720`
-- `1440×900`
-- 200% browser zoom
-- keyboard and desktop mouse
+## CI and repository hygiene
 
-For every UI pull request:
+Use local/focused verification before remote CI.
 
-- verify no horizontal document overflow;
-- verify long English, Japanese, mixed, and code content;
-- verify visible focus and logical focus return;
-- verify disabled reasons and IME precedence where commands are involved;
-- verify draft, active note, query/filter, and review state are not reset by presentation changes;
-- attach before/after screenshots or Playwright evidence for changed routes.
+Do not repeatedly push trial fixes merely to use Actions as a debugger. Batch verified changes and prefer a single remote verification run per review iteration. Re-run a failed workflow only when the failure is plausibly transient or the exact failing condition has changed.
 
-## Safety and completion claims
+Do not create empty commits, duplicate pull requests, repeated labels/comments, or automated activity with no engineering value.
 
-Do not claim completion from screenshots alone. A work package is complete only when:
+## Review boundary
 
-- its issue acceptance criteria are checked against direct evidence;
-- focused and full verification are green;
-- no unresolved P0/P1 finding remains;
-- documentation matches the current tree;
-- unsupported environments remain explicit unknowns;
-- the pull request remains limited to one rollback-safe package.
+A pull request remains unmerged until the owner/reviewer explicitly accepts it. Review findings are classified by severity and owner. The implementation agent fixes only findings inside the assigned contract unless the design is explicitly amended.
