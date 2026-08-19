@@ -1,6 +1,6 @@
 import { createJapaneseAppState } from "./japaneseState.js";
 
-const WORKSPACES = Object.freeze(["notes", "japanese"]);
+const WORKSPACES = Object.freeze(["notes", "japanese", "archive"]);
 
 function createCoordinatorError() {
   return new TypeError("Invalid Japanese workspace coordinator dependencies");
@@ -33,10 +33,13 @@ function validateDependencies(options) {
 }
 
 function workspaceOf(state) {
-  return state?.workspace === "japanese" ? "japanese" : "notes";
+  if (state?.workspace === "japanese") return "japanese";
+  if (state?.workspace === "archive") return "archive";
+  return "notes";
 }
 
 function emptyLabel(workspace) {
+  if (workspace === "archive") return "No archived notes";
   return workspace === "japanese" ? "No Japanese notes" : "No notes";
 }
 
@@ -95,6 +98,7 @@ export function createJapaneseWorkspaceCoordinator(options) {
   const views = {
     notes: { query: "", activeId: null },
     japanese: { query: "", activeId: null },
+    archive: { query: "", activeId: null },
   };
   let renderedWorkspace = workspaceOf(initialState);
   views[renderedWorkspace] = viewOf(initialState);

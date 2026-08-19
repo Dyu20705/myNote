@@ -7,7 +7,7 @@ import {
 } from "./japanese-helpers.mjs";
 
 const APP_ORIGIN = "http://127.0.0.1:4173";
-const DEFERRED_DESTINATIONS = ["Reminders", "Labels", "Archive", "Trash"];
+const DEFERRED_DESTINATIONS = ["Reminders", "Labels", "Trash"];
 const FORBIDDEN_COMMAND_IDS = /^(?:reminders?|labels?|trash|analytics|attachments?|formatting|recognition|candidates?|(?:remote[.-]?)?models?|rich[.-]?format(?:ting)?|handwriting[.-]?recognition)(?:[.-]|$)/i;
 const FORBIDDEN_HEALTHY_CONTROL_FAMILY = /\b(?:recognition|recognize|candidates?|remote[-\s]?model|analytics?|reminders?|labels?(?:[-\s]?(?:management|manager))?|trash|attachments?|rich[-\s]?(?:format|formatting)|handwriting[-\s]?recognition)\b/i;
 const NATIVE_CONTROL_SELECTOR = [
@@ -131,7 +131,7 @@ test("release shell exposes only owner-backed navigation and bounded commands", 
 
   const workspace = page.getByRole("navigation", { name: "Workspace" });
   await expect(workspace).toBeVisible();
-  await expect(workspace.getByRole("button")).toHaveCount(2);
+  await expect(workspace.getByRole("button")).toHaveCount(3);
   await expect(workspace.getByRole("button", { name: "Notes", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(workspace.getByRole("button", { name: "日本語", exact: true })).toHaveAttribute("aria-pressed", "false");
 
@@ -220,11 +220,15 @@ test("workspace transitions preserve ordinary context and keyboard return", asyn
   const japanese = page.locator("#japaneseWorkspaceButton");
   await notes.focus();
   await page.keyboard.press("Tab");
+  await expect(page.locator("#archiveWorkspaceButton")).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(japanese).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(japanese).toHaveAttribute("aria-pressed", "true");
 
   await japanese.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#archiveWorkspaceButton")).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(notes).toBeFocused();
   await page.keyboard.press("Enter");

@@ -627,7 +627,13 @@ async function flushWorkspace() {
 noteWorkspace = createNoteWorkspaceController({
   getState: store.getState,
   setState: store.setState,
-  query: searchClient.query,
+  query: (queryText) => {
+    const workspace = store.getState().workspace || document.body.dataset.workspace || "notes";
+    if (workspace === "archive") {
+      return searchClient.query(`is:archived ${queryText}`.trim());
+    }
+    return searchClient.query(queryText);
+  },
   flush: flushWorkspace,
   onSearchMetrics(elapsed) {
     updateMetrics({ searchMs: elapsed, workerMs: elapsed });
@@ -984,9 +990,23 @@ const unregisterApplicationCommands = [
     id: "notes.archive",
     title: "Archive active note",
     description: "Archive the selected note without deleting it",
-    isAvailable: () => Boolean(activeNote()),
+    isAvailable: () => {
+      const note = activeNote();
+      console.log("NOTE FOR ARCHIVE", note); return note && !note.archived;
+    },
     unavailableReason: () => "No active note to archive",
     run: () => mutateActiveNote((note) => ({ ...note, archived: true }), "archive"),
+  }),
+  registerCommand({
+    id: "notes.unarchive",
+    title: "Unarchive active note",
+    description: "Restore the selected note from the archive",
+    isAvailable: () => {
+      const note = activeNote();
+      return note && note.archived;
+    },
+    unavailableReason: () => "No archived note is active",
+    run: () => mutateActiveNote((note) => ({ ...note, archived: false }), "unarchive"),
   }),
   registerCommand({
     id: "notes.delete",

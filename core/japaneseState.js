@@ -4,7 +4,7 @@ import { validateStudyReview } from "./studyReview.js";
 
 export const JAPANESE_STATUS_LIMIT = 20;
 
-const WORKSPACES = Object.freeze(["notes", "japanese"]);
+const WORKSPACES = Object.freeze(["notes", "japanese", "archive"]);
 
 function createInvalidStateInputError() {
   return new TypeError("Invalid Japanese state input");
