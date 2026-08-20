@@ -1,10 +1,17 @@
 export function compileLearningItem(item, existingCards = [], existingStates = []) {
   const now = new Date().toISOString();
   
+  // Enforce boundary: existing cards must belong to this item
+  for (const card of existingCards) {
+    if (card.itemId !== item.id) {
+      throw new Error(`Compiler received card ${card.id} belonging to item ${card.itemId}, expected ${item.id}`);
+    }
+  }
+  
   // Map of existing cards by skill for quick lookup
   const cardsBySkill = new Map();
   for (const card of existingCards) {
-    cardsBySkill.set(card.skill, card);
+    cardsBySkill.set(`${card.itemId}:${card.skill}`, card);
   }
 
   const generatedCards = [];
@@ -12,7 +19,8 @@ export function compileLearningItem(item, existingCards = [], existingStates = [
 
   // Generate or preserve cards for active skills
   for (const skill of item.skills) {
-    let card = cardsBySkill.get(skill);
+    const key = `${item.id}:${skill}`;
+    let card = cardsBySkill.get(key);
     let state = existingStates.find(s => s.cardId === card?.id);
 
     if (!card) {
@@ -52,11 +60,11 @@ export function compileLearningItem(item, existingCards = [], existingStates = [
     generatedCards.push(card);
     if (state) generatedStates.push(state);
     
-    cardsBySkill.delete(skill); // Remove processed skill
+    cardsBySkill.delete(key); // Remove processed skill
   }
 
   // Handle removed skills (orphans)
-  for (const [skill, orphanedCard] of cardsBySkill.entries()) {
+  for (const orphanedCard of cardsBySkill.values()) {
     if (orphanedCard.status !== "orphaned" && orphanedCard.status !== "archived") {
       generatedCards.push({
         ...orphanedCard,

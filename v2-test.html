@@ -25,12 +25,13 @@
 
     <script type="module">
       import { openDatabase } from "./core/storage.js";
-      import { saveLearningItemWithCards, getDueReviewStates, commitReviewTransaction, getCardsForItem, getLearningItem } from "./core/japaneseV2Storage.js";
+      import { saveLearningItemWithCards, getDueCards, commitReviewTransaction } from "./core/japaneseV2Storage.js";
       import { compileLearningItem } from "./core/cardCompiler.js";
       import { schedule } from "./core/schedulerAdapter.js";
 
       let db;
       let currentDueCard = null;
+      let currentReviewState = null;
 
       function log(msg) {
         document.getElementById('output').textContent += msg + "\n";
@@ -60,29 +61,32 @@
 
       document.getElementById("btnFetch").addEventListener("click", async () => {
         const now = new Date().toISOString();
-        const dueStates = await getDueReviewStates(db, now, 10);
-        log(`Fetched ${dueStates.length} due review states.`);
+        const dueCards = await getDueCards(db, { now, limit: 10 });
+        log(`Fetched ${dueCards.length} due active cards.`);
 
-        if (dueStates.length > 0) {
-          currentDueCard = dueStates[0];
-          const cardRecord = (await getCardsForItem(db, currentDueCard.cardId))[0]; // Simplifying for demo
-          document.getElementById("cardSkill").textContent = `Skill: ${cardRecord?.skill || "unknown"}`;
-          document.getElementById("cardWord").textContent = `Reviewing card ID: ${currentDueCard.cardId}`;
+        if (dueCards.length > 0) {
+          const entry = dueCards[0];
+          currentDueCard = entry.card;
+          currentReviewState = entry.reviewState;
+          
+          document.getElementById("cardSkill").textContent = `Skill: ${currentDueCard.skill}`;
+          document.getElementById("cardWord").textContent = `Reviewing card ID: ${currentDueCard.id}`;
           document.getElementById("reviewSection").style.display = "block";
         }
       });
 
       document.getElementById("btnGradeGood").addEventListener("click", async () => {
-        if (!currentDueCard) return;
+        if (!currentReviewState) return;
         
         const input = { grade: "good", reviewedAt: new Date().toISOString(), durationMs: 2000 };
-        const { nextState, log: reviewLog } = schedule(currentDueCard, input, new Date().toISOString());
+        const { nextState, log: reviewLog } = schedule(currentReviewState, input, new Date().toISOString());
         
         await commitReviewTransaction(db, nextState, reviewLog);
         log(`Committed review. Next due: ${nextState.due}`);
         
         document.getElementById("reviewSection").style.display = "none";
         currentDueCard = null;
+        currentReviewState = null;
       });
 
       init();

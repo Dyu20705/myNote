@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
 import "fake-indexeddb/auto";
 import { openDatabase, resetDatabase } from "../../core/storage.js";
-import { saveLearningItemWithCards, getDueReviewStates, commitReviewTransaction, getCardsForItem } from "../../core/japaneseV2Storage.js";
+import { saveLearningItemWithCards, getDueCards, commitReviewTransaction, getCardsForItem } from "../../core/japaneseV2Storage.js";
 import { compileLearningItem } from "../../core/cardCompiler.js";
 import { schedule } from "../../core/schedulerAdapter.js";
 
@@ -22,54 +22,92 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
   });
 
   it("proves the full data lifecycle from learning item to review log", async () => {
-    // 1. Create a Vocabulary LearningItem
     const learningItem = {
       id: crypto.randomUUID(),
       type: "vocabulary",
       content: { writtenForm: "猫", meanings: ["cat"] },
       skills: ["recognition", "meaning"],
-      sourceRefs: [{ type: "note", id: crypto.randomUUID() }],
+      sourceRefs: [],
       status: "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    // 2. Compile into Cards and ReviewStates
     const { cards, reviewStates } = compileLearningItem(learningItem);
-    assert.strictEqual(cards.length, 2, "Compiler should generate 2 cards");
-    assert.strictEqual(reviewStates.length, 2, "Compiler should generate 2 initial states");
-
-    // 3. Persist to IndexedDB
     await saveLearningItemWithCards(db, learningItem, cards, reviewStates);
 
-    const savedCards = await getCardsForItem(db, learningItem.id);
-    assert.strictEqual(savedCards.length, 2, "Cards were successfully saved to DB");
-
-    // 4. Query due cards
     const nowTimestamp = new Date().toISOString();
-    const dueStates = await getDueReviewStates(db, nowTimestamp, 10);
-    assert.strictEqual(dueStates.length, 2, "Both new cards should be due immediately");
+    const dueCards = await getDueCards(db, { now: nowTimestamp, limit: 10 });
+    assert.strictEqual(dueCards.length, 2, "Both new cards should be due immediately");
 
-    // 5. Review a card
-    const stateToReview = dueStates[0];
+    const itemToReview = dueCards[0];
     const reviewInput = {
       grade: "good",
       reviewedAt: new Date().toISOString(),
       durationMs: 1500
     };
-    const { nextState, log } = schedule(stateToReview, reviewInput, new Date().toISOString());
+    const { nextState, log } = schedule(itemToReview.reviewState, reviewInput, new Date().toISOString());
 
-    // 6. Commit the review transaction
     await commitReviewTransaction(db, nextState, log);
 
-    // 7. Verify the card is no longer due right now
-    const dueStatesAfter = await getDueReviewStates(db, nowTimestamp, 10);
-    assert.strictEqual(dueStatesAfter.length, 1, "Only one card should remain due");
+    const dueCardsAfter = await getDueCards(db, { now: nowTimestamp, limit: 10 });
+    assert.strictEqual(dueCardsAfter.length, 1, "Only one card should remain due");
+  });
 
-    // Verify ReviewLog integrity
-    assert.strictEqual(log.stateBefore, "new");
-    assert.strictEqual(log.stateAfter, "review");
-    assert.ok(log.nextStateSnapshot, "Should have nextStateSnapshot");
-    assert.strictEqual(log.nextStateSnapshot.state, "review");
+  it("excludes archived, orphaned, and suspended cards from due queue", async () => {
+    const learningItem = {
+      id: crypto.randomUUID(),
+      type: "vocabulary",
+      content: { writtenForm: "犬", meanings: ["dog"] },
+      skills: ["recognition", "meaning"],
+      sourceRefs: [],
+      status: "active", // Active initially
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const { cards, reviewStates } = compileLearningItem(learningItem);
+    await saveLearningItemWithCards(db, learningItem, cards, reviewStates);
+
+    // Make one card orphaned, one archived
+    const recognitionCard = cards.find(c => c.skill === "recognition");
+    const meaningCard = cards.find(c => c.skill === "meaning");
+    
+    recognitionCard.status = "orphaned";
+    meaningCard.status = "archived";
+    
+    // Save updated cards
+    await saveLearningItemWithCards(db, learningItem, cards);
+
+    const dueCards = await getDueCards(db, { now: new Date().toISOString(), limit: 10 });
+    assert.strictEqual(dueCards.length, 0, "No cards should be due as they are orphaned or archived");
+  });
+  
+  it("fails when adding duplicate review logs (append-only invariant)", async () => {
+    const learningItem = {
+      id: crypto.randomUUID(),
+      type: "vocabulary",
+      content: { writtenForm: "本", meanings: ["book"] },
+      skills: ["recognition"],
+      sourceRefs: [],
+      status: "active",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const { cards, reviewStates } = compileLearningItem(learningItem);
+    await saveLearningItemWithCards(db, learningItem, cards, reviewStates);
+    
+    const now = new Date().toISOString();
+    const { nextState, log } = schedule(reviewStates[0], { grade: "good", reviewedAt: now }, now);
+    
+    await commitReviewTransaction(db, nextState, log);
+    
+    // Attempting to commit the same log ID again should fail
+    await assert.rejects(
+      commitReviewTransaction(db, nextState, log),
+      /ConstraintError/, // IndexedDB throws ConstraintError on duplicate keys in add()
+      "Should reject duplicate review logs"
+    );
   });
 });

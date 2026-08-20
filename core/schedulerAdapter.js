@@ -1,12 +1,22 @@
 /**
  * A basic scheduler adapter conforming to the Japanese V2 ReviewState schema.
- * Emulates simple SM2-like logic for the MVP.
+ * Note: This is a deterministic placeholder scheduler, not a strict SM-2 implementation.
+ * It uses simple heuristic multipliers to demonstrate the scheduler boundary.
  */
 
 const SCHEDULER_NAME = "legacy-sm2";
 const SCHEDULER_VERSION = "1.0";
 
+const VALID_GRADES = new Set(["again", "hard", "good", "easy"]);
+
 export function schedule(state, input, now) {
+  if (!VALID_GRADES.has(input.grade)) {
+    throw new TypeError(`INVALID_REVIEW_GRADE: ${input.grade}`);
+  }
+  if (!input.reviewedAt) throw new TypeError("Missing reviewedAt in input");
+  if (!state.cardId) throw new TypeError("Missing cardId in state");
+  if (!state.state) throw new TypeError("Missing state label in state");
+
   const isNew = state.state === "new";
   const nowMs = new Date(now).getTime();
   const lastReviewMs = state.lastReviewAt ? new Date(state.lastReviewAt).getTime() : nowMs;
