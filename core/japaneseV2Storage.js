@@ -89,7 +89,7 @@ export async function getDueCards(db, { now, limit = 50 }) {
   const cardStore = tx.objectStore(STORE_CARDS);
   
   const dueIndex = stateStore.index("due");
-  const range = IDBKeyRange.upperBound(now);
+  const range = globalThis.IDBKeyRange.upperBound(now);
   
   const dueCards = [];
   

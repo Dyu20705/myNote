@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
 import "fake-indexeddb/auto";
 import { openDatabase, resetDatabase } from "../../core/storage.js";
-import { saveLearningItemWithCards, getDueCards, commitReviewTransaction, getCardsForItem } from "../../core/japaneseV2Storage.js";
+import { saveLearningItemWithCards, getDueCards, commitReviewTransaction } from "../../core/japaneseV2Storage.js";
 import { compileLearningItem } from "../../core/cardCompiler.js";
 import { schedule } from "../../core/schedulerAdapter.js";
 
@@ -23,7 +24,7 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
 
   it("proves the full data lifecycle from learning item to review log", async () => {
     const learningItem = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       type: "vocabulary",
       content: { writtenForm: "猫", meanings: ["cat"] },
       skills: ["recognition", "meaning"],
@@ -56,7 +57,7 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
 
   it("excludes archived, orphaned, and suspended cards from due queue", async () => {
     const learningItem = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       type: "vocabulary",
       content: { writtenForm: "犬", meanings: ["dog"] },
       skills: ["recognition", "meaning"],
@@ -85,7 +86,7 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
   
   it("fails when adding duplicate review logs (append-only invariant)", async () => {
     const learningItem = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       type: "vocabulary",
       content: { writtenForm: "本", meanings: ["book"] },
       skills: ["recognition"],
