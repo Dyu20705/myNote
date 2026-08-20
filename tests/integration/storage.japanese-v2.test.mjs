@@ -38,7 +38,7 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
     await saveLearningItemWithCards(db, learningItem, cards, reviewStates);
 
     const nowTimestamp = new Date().toISOString();
-    const dueCards = await getDueCards(db, { now: nowTimestamp, limit: 10 });
+    const dueCards = await getDueCards(db, { date: nowTimestamp, limit: 10 });
     assert.strictEqual(dueCards.length, 2, "Both new cards should be due immediately");
 
     const itemToReview = dueCards[0];
@@ -51,7 +51,7 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
 
     await commitReviewTransaction(db, nextState, log);
 
-    const dueCardsAfter = await getDueCards(db, { now: nowTimestamp, limit: 10 });
+    const dueCardsAfter = await getDueCards(db, { date: nowTimestamp, limit: 10 });
     assert.strictEqual(dueCardsAfter.length, 1, "Only one card should remain due");
   });
 
@@ -80,7 +80,7 @@ describe("Japanese V2 Vocabulary Vertical Slice", () => {
     // Save updated cards
     await saveLearningItemWithCards(db, learningItem, cards);
 
-    const dueCards = await getDueCards(db, { now: new Date().toISOString(), limit: 10 });
+    const dueCards = await getDueCards(db, { date: new Date().toISOString(), limit: 10 });
     assert.strictEqual(dueCards.length, 0, "No cards should be due as they are orphaned or archived");
   });
   

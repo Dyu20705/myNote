@@ -4,67 +4,94 @@ import { schedule } from "./schedulerAdapter.js";
 /**
  * Builds a curated daily session queue from due cards, respecting budgets and sibling burying rules.
  */
-export async function buildSessionQueue(db, { now = new Date().toISOString(), maxNewCards = 20, maxReviews = 100 } = {}) {
-  // Fetch up to 3x limit to allow for sibling exclusion.
-  const poolLimit = (maxNewCards + maxReviews) * 3;
-  const dueCards = await getDueCards(db, { now, limit: poolLimit });
+export async function buildSessionQueue(db, { date = new Date().toISOString(), maxNewCards = 20, maxReviews = 100 } = {}) {
+  const poolLimit = (maxNewCards + maxReviews) * 5;
+  const eligibleItems = await getDueCards(db, { date, limit: poolLimit });
 
-  const learning = [];
-  const reviews = [];
-  const newCards = [];
+  const getRank = (reviewState) => {
+    if (reviewState.state === 'learning' || reviewState.state === 'relearning') return 1;
+    if (reviewState.state === 'review') {
+      return reviewState.due < date ? 2 : 3;
+    }
+    if (reviewState.state === 'new') return 4;
+    return 5;
+  };
 
+  eligibleItems.sort((a, b) => {
+    const rankA = getRank(a.reviewState);
+    const rankB = getRank(b.reviewState);
+    if (rankA !== rankB) return rankA - rankB;
+
+    if (a.reviewState.due < b.reviewState.due) return -1;
+    if (a.reviewState.due > b.reviewState.due) return 1;
+
+    if (a.card.id < b.card.id) return -1;
+    if (a.card.id > b.card.id) return 1;
+    return 0;
+  });
+
+  const activeQueue = [];
+  const buriedCards = [];
+  
+  let reviewCount = 0;
+  let newCount = 0;
   const seenItems = new Set();
 
-  for (const item of dueCards) {
+  for (const item of eligibleItems) {
     const { card, reviewState } = item;
     
     if (seenItems.has(card.itemId)) {
+      buriedCards.push(item);
       continue;
     }
 
-    if (reviewState.state === 'learning' || reviewState.state === 'relearning') {
-      learning.push(item);
-      seenItems.add(card.itemId);
-    } else if (reviewState.state === 'review') {
-      if (reviews.length < maxReviews) {
-        reviews.push(item);
-        seenItems.add(card.itemId);
-      }
-    } else if (reviewState.state === 'new') {
-      if (newCards.length < maxNewCards) {
-        newCards.push(item);
-        seenItems.add(card.itemId);
-      }
+    const isNew = reviewState.state === 'new';
+    if (isNew) {
+      if (newCount >= maxNewCards) continue;
+    } else {
+      if (reviewCount >= maxReviews) continue;
+    }
+
+    seenItems.add(card.itemId);
+    activeQueue.push(item);
+
+    if (isNew) {
+      newCount++;
+    } else {
+      reviewCount++;
     }
   }
 
-  // Priority: learning -> reviews -> new
-  return [...learning, ...reviews, ...newCards];
+  return { activeQueue, buriedCards };
 }
 
 export class DailySession {
-  constructor(db, queue) {
+  constructor(db, config, queueResult) {
     this.db = db;
-    this.queue = queue;
-    this.currentIndex = 0;
-    this.completedCount = 0;
+    this.config = config;
+    this.pendingCards = queueResult.activeQueue;
+    this.buriedCards = queueResult.buriedCards;
+    this.completedCards = [];
   }
 
-  hasMore() {
-    return this.currentIndex < this.queue.length;
+  get currentCard() {
+    return this.pendingCards.length > 0 ? this.pendingCards[0] : null;
   }
 
-  getNextCard() {
-    if (!this.hasMore()) return null;
-    return this.queue[this.currentIndex];
+  get remaining() {
+    return this.pendingCards.length;
   }
 
-  async submitGrade(grade, now = new Date().toISOString(), durationMs = 1000) {
-    if (!this.hasMore()) {
-      throw new Error("No more cards in session");
+  get isComplete() {
+    return this.pendingCards.length === 0;
+  }
+
+  async submitGrade(cardId, grade, now = new Date().toISOString(), durationMs = 1000) {
+    if (!this.currentCard || this.currentCard.card.id !== cardId) {
+      throw new Error(`Invalid submission: cardId ${cardId} is not the current pending card`);
     }
 
-    const item = this.queue[this.currentIndex];
+    const item = this.pendingCards[0];
     const { card, reviewState } = item;
 
     const input = { grade, reviewedAt: now, durationMs };
@@ -72,17 +99,14 @@ export class DailySession {
     
     await commitReviewTransaction(this.db, nextState, log);
 
-    // If 'again' (grade is relearning) or state is still learning, and due is within today.
-    // Wait, the scheduler adapter uses 0 days for 'again' making due = now.
-    const dueMs = new Date(nextState.due).getTime();
-    const nowMs = new Date(now).getTime();
-    
-    if (dueMs <= nowMs + 24 * 60 * 60 * 1000 && (nextState.state === 'learning' || nextState.state === 'relearning')) {
-      this.queue.push({ card, reviewState: nextState });
+    this.pendingCards.shift();
+    this.completedCards.push({ card, reviewState: nextState, log });
+
+    const isRelearning = nextState.state === 'learning' || nextState.state === 'relearning';
+    if (isRelearning && nextState.due <= now) {
+      this.pendingCards.push({ card, reviewState: nextState });
     }
 
-    this.currentIndex++;
-    this.completedCount++;
     return { nextState, reviewLog: log };
   }
 }

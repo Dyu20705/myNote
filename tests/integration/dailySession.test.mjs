@@ -6,124 +6,157 @@ import { openDatabase, resetDatabase } from "../../core/storage.js";
 import { saveLearningItemWithCards } from "../../core/japaneseV2Storage.js";
 import { buildSessionQueue, DailySession } from "../../core/dailySession.js";
 
-// Mock localStorage for tests
 global.localStorage = { removeItem: () => {} };
 
-function makeCard(itemId, skill) {
-  return {
-    id: randomUUID(),
-    itemId,
-    skill,
-    status: "active",
-    format: "recognition",
-    front: "Front",
-    back: "Back",
-    createdAt: new Date().toISOString()
-  };
+function makeCard(itemId, id = randomUUID()) {
+  return { id, itemId, skill: "recognition", status: "active", format: "recognition", front: "F", back: "B", createdAt: new Date().toISOString() };
 }
 
 function makeState(cardId, state, due) {
-  return {
-    cardId,
-    state,
-    due,
-    reps: 0,
-    lapses: 0,
-    elapsedDays: 0,
-    scheduledDays: 0,
-    difficulty: 5,
-    stability: 2,
-    lastReviewAt: null,
-    scheduler: "legacy-sm2",
-    schedulerVersion: "1.0",
-    updatedAt: new Date().toISOString()
-  };
+  return { cardId, state, due, reps: 0, lapses: 0, elapsedDays: 0, scheduledDays: 0, difficulty: 5, stability: 2, lastReviewAt: null, scheduler: "legacy-sm2", schedulerVersion: "1.0", updatedAt: new Date().toISOString() };
 }
 
-test("Daily Session and Scheduler Integration", async (t) => {
-
-  await t.test("builds queue prioritizing learning -> review -> new, respecting limits and sibling burying", async () => {
+test("Daily Session API Contract", async (t) => {
+  await t.test("Queue Construction & Priority (learning > overdue > due > new, tie-break by dueAt/cardId)", async () => {
     await resetDatabase();
     const db = await openDatabase();
-    const now = new Date("2026-08-20T00:00:00Z").toISOString();
+    const date = new Date("2026-08-20T12:00:00.000Z").toISOString();
     
-    // Item 1: Two cards (siblings). One learning, one new.
-    const item1 = { id: randomUUID(), type: "vocabulary", data: { term: "A" } };
-    const card1a = makeCard(item1.id, "recognition");
-    const card1b = makeCard(item1.id, "production");
-    const state1a = makeState(card1a.id, "learning", "2026-08-19T00:00:00Z");
-    const state1b = makeState(card1b.id, "new", "2026-08-19T00:00:00Z");
-    await saveLearningItemWithCards(db, item1, [card1a, card1b], [state1a, state1b]);
+    // Create items to prove ordering
+    const cOverdue = makeCard(randomUUID(), "C_OVERDUE");
+    const sOverdue = makeState(cOverdue.id, "review", new Date("2026-08-19T00:00:00.000Z").toISOString());
+    
+    const cDue1 = makeCard(randomUUID(), "C_DUE_1");
+    const sDue1 = makeState(cDue1.id, "review", new Date("2026-08-20T12:00:00.000Z").toISOString());
+    
+    const cDue2 = makeCard(randomUUID(), "C_DUE_2");
+    const sDue2 = makeState(cDue2.id, "review", new Date("2026-08-20T12:00:00.000Z").toISOString());
 
-    // Item 2: Three cards. All reviews, all due.
-    const item2 = { id: randomUUID(), type: "vocabulary", data: { term: "B" } };
-    const card2a = makeCard(item2.id, "recognition");
-    const card2b = makeCard(item2.id, "production");
-    const card2c = makeCard(item2.id, "listening");
-    const state2a = makeState(card2a.id, "review", "2026-08-19T00:00:00Z");
-    const state2b = makeState(card2b.id, "review", "2026-08-19T00:00:00Z");
-    const state2c = makeState(card2c.id, "review", "2026-08-19T00:00:00Z");
-    await saveLearningItemWithCards(db, item2, [card2a, card2b, card2c], [state2a, state2b, state2c]);
+    const cLearning = makeCard(randomUUID(), "C_LEARNING");
+    const sLearning = makeState(cLearning.id, "learning", new Date("2026-08-20T11:00:00.000Z").toISOString());
 
-    // Item 3: New cards.
-    const item3 = { id: randomUUID(), type: "vocabulary", data: { term: "C" } };
-    const card3a = makeCard(item3.id, "recognition");
-    const state3a = makeState(card3a.id, "new", "2026-08-19T00:00:00Z");
-    await saveLearningItemWithCards(db, item3, [card3a], [state3a]);
+    const cNew = makeCard(randomUUID(), "C_NEW");
+    const sNew = makeState(cNew.id, "new", new Date("2026-08-20T00:00:00.000Z").toISOString());
 
-    const queue = await buildSessionQueue(db, { now, maxNewCards: 1, maxReviews: 100 });
+    await saveLearningItemWithCards(db, { id: cOverdue.itemId }, [cOverdue], [sOverdue]);
+    await saveLearningItemWithCards(db, { id: cDue1.itemId }, [cDue1], [sDue1]);
+    await saveLearningItemWithCards(db, { id: cDue2.itemId }, [cDue2], [sDue2]);
+    await saveLearningItemWithCards(db, { id: cLearning.itemId }, [cLearning], [sLearning]);
+    await saveLearningItemWithCards(db, { id: cNew.itemId }, [cNew], [sNew]);
+
+    const result = await buildSessionQueue(db, { date, maxNewCards: 10, maxReviews: 10 });
+    const queue = result.activeQueue;
     
-    // Expectations:
-    // 1. learning card1a is picked. card1b is buried.
-    // 2. review card2a is picked. card2b, card2c are buried.
-    // 3. new card3a is picked. (budget is 1)
+    assert.equal(queue.length, 5);
     
-    assert.equal(queue.length, 3);
-    assert.equal(queue[0].reviewState.state, "learning");
-    assert.equal(queue[0].card.id, card1a.id);
+    assert.equal(queue[0].card.id, cLearning.id);
+    assert.equal(queue[1].card.id, cOverdue.id);
     
-    assert.equal(queue[1].reviewState.state, "review");
-    assert.equal(queue[1].card.itemId, item2.id); // Exactly one card from item2
+    const sortedDue = [cDue1.id, cDue2.id].sort();
+    assert.equal(queue[2].card.id, sortedDue[0]);
+    assert.equal(queue[3].card.id, sortedDue[1]);
     
-    assert.equal(queue[2].reviewState.state, "new");
-    assert.equal(queue[2].card.id, card3a.id);
+    assert.equal(queue[4].card.id, cNew.id);
 
     db.close();
   });
 
-  await t.test("DailySession API progresses through queue and appends relearning cards", async () => {
+  await t.test("Limits and Budgeting", async () => {
     await resetDatabase();
-    const db2 = await openDatabase();
+    const db = await openDatabase();
+    const date = new Date("2026-08-20T12:00:00.000Z").toISOString();
 
-    const now = new Date("2026-08-20T00:00:00Z").toISOString();
-    const item = { id: randomUUID(), type: "vocabulary", data: { term: "A" } };
-    const card = makeCard(item.id, "recognition");
-    const state = makeState(card.id, "new", "2026-08-19T00:00:00Z");
-    await saveLearningItemWithCards(db2, item, [card], [state]);
+    const cNew1 = makeCard(randomUUID());
+    const cNew2 = makeCard(randomUUID());
+    const cRev1 = makeCard(randomUUID());
+    const cRev2 = makeCard(randomUUID());
 
-    const queue = await buildSessionQueue(db2, { now, maxNewCards: 10, maxReviews: 10 });
-    assert.equal(queue.length, 1);
+    await saveLearningItemWithCards(db, { id: cNew1.itemId }, [cNew1], [makeState(cNew1.id, "new", date)]);
+    await saveLearningItemWithCards(db, { id: cNew2.itemId }, [cNew2], [makeState(cNew2.id, "new", date)]);
+    await saveLearningItemWithCards(db, { id: cRev1.itemId }, [cRev1], [makeState(cRev1.id, "review", date)]);
+    await saveLearningItemWithCards(db, { id: cRev2.itemId }, [cRev2], [makeState(cRev2.id, "review", date)]);
 
-    const session = new DailySession(db2, queue);
-    assert.ok(session.hasMore());
+    // 0 limits
+    const res0 = await buildSessionQueue(db, { date, maxNewCards: 0, maxReviews: 0 });
+    assert.equal(res0.activeQueue.length, 0);
 
-    const currentCard = session.getNextCard();
-    assert.equal(currentCard.card.id, card.id);
-
-    // Fail the card -> should transition to relearning and re-append to queue
-    await session.submitGrade("again", now);
+    // new cards don't consume review budget
+    const res1 = await buildSessionQueue(db, { date, maxNewCards: 2, maxReviews: 1 });
+    assert.equal(res1.activeQueue.length, 3);
+    assert.equal(res1.activeQueue.filter(x => x.reviewState.state === 'new').length, 2);
+    assert.equal(res1.activeQueue.filter(x => x.reviewState.state === 'review').length, 1);
     
-    // Now there should be one more card in the session
-    assert.ok(session.hasMore());
-    assert.equal(session.queue.length, 2);
+    db.close();
+  });
+
+  await t.test("Sibling Burying", async () => {
+    await resetDatabase();
+    const db = await openDatabase();
+    const date = new Date("2026-08-20T12:00:00.000Z").toISOString();
+
+    const itemId = randomUUID();
+    const c1 = makeCard(itemId); c1.skill = "reading";
+    const c2 = makeCard(itemId); c2.skill = "writing";
+    const c3 = makeCard(itemId); c3.skill = "listening";
+
+    await saveLearningItemWithCards(db, { id: itemId }, [c1, c2, c3], [
+      makeState(c1.id, "new", date),
+      makeState(c2.id, "learning", date),
+      makeState(c3.id, "review", new Date("2026-08-10T00:00:00.000Z").toISOString())
+    ]);
+
+    const res = await buildSessionQueue(db, { date, maxNewCards: 10, maxReviews: 1 });
+    assert.equal(res.activeQueue.length, 1);
+    assert.equal(res.activeQueue[0].card.id, c2.id);
     
-    const nextItem = session.getNextCard();
-    assert.equal(nextItem.reviewState.state, "relearning");
+    assert.equal(res.buriedCards.length, 2);
+    
+    db.close();
+  });
 
-    // Pass it this time
-    await session.submitGrade("good", now);
-    assert.equal(session.hasMore(), false);
+  await t.test("Grade Submission API & Edge Cases", async () => {
+    await resetDatabase();
+    const db = await openDatabase();
+    const date = new Date("2026-08-20T12:00:00.000Z").toISOString();
 
-    db2.close();
+    const c1 = makeCard(randomUUID());
+    const c2 = makeCard(randomUUID());
+    await saveLearningItemWithCards(db, { id: c1.itemId }, [c1], [makeState(c1.id, "new", date)]);
+    await saveLearningItemWithCards(db, { id: c2.itemId }, [c2], [makeState(c2.id, "review", date)]);
+
+    const queueResult = await buildSessionQueue(db, { date, maxNewCards: 10, maxReviews: 10 });
+    const session = new DailySession(db, {}, queueResult);
+
+    assert.equal(session.remaining, 2);
+    assert.equal(session.isComplete, false);
+    
+    await assert.rejects(
+      async () => await session.submitGrade(randomUUID(), "good", date),
+      { message: /Invalid submission/ }
+    );
+
+    const firstCardId = session.currentCard.card.id;
+    
+    await session.submitGrade(firstCardId, "again", date);
+    
+    assert.equal(session.completedCards.length, 1);
+    assert.equal(session.remaining, 2);
+    
+    const secondCardId = session.currentCard.card.id;
+    assert.notEqual(secondCardId, firstCardId);
+    
+    await session.submitGrade(secondCardId, "good", date);
+    assert.equal(session.completedCards.length, 2);
+    assert.equal(session.remaining, 1);
+    
+    const reappendedCardId = session.currentCard.card.id;
+    assert.equal(reappendedCardId, firstCardId);
+    
+    await session.submitGrade(reappendedCardId, "good", date);
+    assert.equal(session.remaining, 0);
+    assert.equal(session.isComplete, true);
+    assert.equal(session.currentCard, null);
+
+    db.close();
   });
 });
