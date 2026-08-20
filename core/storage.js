@@ -3,10 +3,14 @@ import { validateStudyReview } from "./studyReview.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 3;
-const STORE_NOTES = "notes";
-const STORE_STUDY_REVIEWS = "studyReviews";
-const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
+const DB_VERSION = 4;
+export const STORE_NOTES = "notes";
+export const STORE_STUDY_REVIEWS = "studyReviews";
+export const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
+export const STORE_LEARNING_ITEMS = "learningItems";
+export const STORE_CARDS = "cards";
+export const STORE_REVIEW_STATES = "reviewStates";
+export const STORE_REVIEW_LOGS = "reviewLogs";
 const pendingDependentRestores = new WeakMap();
 
 function createMigrationOutcome(status, count, errorCode) {
@@ -138,6 +142,27 @@ export function openDatabase() {
         const store = db.createObjectStore(STORE_KANJI_INK_ENTRIES, { keyPath: "id" });
         store.createIndex("noteId", "noteId");
         store.createIndex("updatedAt", "updatedAt");
+      }
+      if (event.oldVersion < 4) {
+        if (!db.objectStoreNames.contains(STORE_LEARNING_ITEMS)) {
+          db.createObjectStore(STORE_LEARNING_ITEMS, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(STORE_CARDS)) {
+          const store = db.createObjectStore(STORE_CARDS, { keyPath: "id" });
+          store.createIndex("itemId", "itemId");
+          store.createIndex("itemId_skill", ["itemId", "skill"], { unique: true });
+          store.createIndex("status", "status");
+        }
+        if (!db.objectStoreNames.contains(STORE_REVIEW_STATES)) {
+          const store = db.createObjectStore(STORE_REVIEW_STATES, { keyPath: "cardId" });
+          store.createIndex("due", "due");
+          store.createIndex("state", "state");
+        }
+        if (!db.objectStoreNames.contains(STORE_REVIEW_LOGS)) {
+          const store = db.createObjectStore(STORE_REVIEW_LOGS, { keyPath: "id" });
+          store.createIndex("cardId_reviewedAt", ["cardId", "reviewedAt"]);
+          store.createIndex("reviewedAt", "reviewedAt");
+        }
       }
     };
 

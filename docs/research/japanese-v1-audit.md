@@ -1,123 +1,272 @@
 # Japanese V1 Audit
 
 ## 1. Executive Decisions
+### Retain
+Retain `kanjiInkView.js` and the `#69 KanjiInkEntry` lifecycle boundary.
+`KanjiInkEntry` remains an independent authoring/artifact entity and must not become a scheduler entity merely because it contains handwriting data.
+Preserve the existing loose coupling between Ink entries and Notes: deleting an Ink entry must not implicitly delete or mutate Note learning state.
 
-- **Retain**: `kanjiInkView.js` and `#69` boundary separation. The independent Ink entry lifecycle decoupled from note review scheduling is highly robust and must be preserved.
-- **Optimize**: `japaneseApp.js` state updates. Current updates rebuild entire state projections and queues on every review action.
-- **Replace**: `core/studyScheduler.js` and `core/studyReview.js` whole-note scheduling. The V1 model schedules the entire Note (document) rather than atomic facts or discrete skills. This must be replaced with item/card-level identity.
-- **Deprecate**: Free-form Markdown as the primary learning structure. The current templates (`japaneseTemplates.js`) use markdown headers to separate data, which is brittle for structured retrieval and independent skill assessment.
+### Replace
+Replace `core/studyScheduler.js` whole-Note scheduling with Card-level scheduling.
+Replace `core/studyReview.js` whole-Note review state with independent state per atomic review Card.
+Replace the implicit 1:1 relationship between Note and studyReviews.
 
-## 2. Audited Commit and Environment
+### Deprecate
+Deprecate Markdown as the canonical representation of structured learning facts.
+Markdown remains a narrative/authoring/provenance representation but must no longer be the source of truth for scheduler state or skill identity.
+Existing templates in `japaneseTemplates.js` should be treated as migration-compatible authoring formats rather than the canonical learning schema.
 
-- **Commit**: `78c09bc9a54ecceb6fb59408c38c5e8d4707c44c`
-- **Date**: 2026-08-16
-- **Environment**: Node.js 20.x, npm 10.x, Ubuntu Chromium Playwright Sandbox
-- **Commands**: 
-  ```sh
-  npm ci
-  npx --no-install playwright install --with-deps chromium
-  npm run test:content
-  npm run lint
-  npm run test:unit
-  npm run test:integration
-  npm run test:e2e
-  git diff --check
-  ```
+### Optimize
+Optimize `japaneseApp.js` state projection and review updates.
+Avoid rebuilding all derived queues and dashboard projections after every localized review mutation.
+Treat this as a measured performance optimization rather than changing persistence semantics prematurely.
+
+## 2. Audit Scope and Evidence
+### Audited commit
+Commit: 78c09bc9a54ecceb6fb59408c38c5e8d4707c44c Date: 2026-08-16
+
+### Environment
+Node.js 20.x npm 10.x Ubuntu Chromium / Playwright sandbox
+
+### Verification commands
+`npm ci` `npx --no-install playwright install --with-deps chromium` `npm run test:content` `npm run lint` `npm run test:unit` `npm run test:integration` `npm run test:e2e` `git diff --check`
+
+### Evidence rule
+Each architectural finding should be classified as one of:
+* **Observed** — directly verified from source/runtime/tests.
+* **Inferred** — derived from observed architecture but not directly measured.
+* **Unknown** — requires additional validation.
+
+This prevents performance and memory claims from being presented as established facts when only architectural inspection has been performed.
 
 ## 3. Architecture and Ownership Map
 
-- **UI**: `japaneseApp.js` is the main composition root for the Japanese workspace. It delegates to `ui/japanese-filters.js`.
-- **Actions**: `core/japaneseActions.js` mediates between the UI and state, generating command stack actions and history records.
-- **State**: `core/japaneseState.js` calculates derived queues (`buildDueReviewQueue`) and dashboard statistics.
-- **Core**: `core/studyScheduler.js` executes the spaced repetition algorithm (rating → interval/ease). `core/japaneseTemplates.js` defines Note structure.
-- **Persistence**: `core/storage.js` persists Notes and `studyReviews` records to IndexedDB. `studyReviews` are stored separately from Notes but are strictly 1:1.
+| Layer | Current V1 owner | Responsibility | V2 disposition |
+|-------|------------------|----------------|----------------|
+| UI | `japaneseApp.js` | Workspace composition and review interaction | Retain; reduce broad state recomputation |
+| UI filtering | `ui/japanese-filters.js` | Notebook/filter presentation | Retain |
+| Actions | `core/japaneseActions.js` | UI → domain/state commands | Retain; migrate commands from Note identity to Item/Card identity |
+| Derived state | `core/japaneseState.js` | Due queues and dashboard projections | Retain concept; change data source |
+| Scheduler | `core/studyScheduler.js` | Whole-Note scheduling | Replace |
+| Review flow | `core/studyReview.js` | Whole-Note review semantics | Replace |
+| Templates | `core/japaneseTemplates.js` | Markdown authoring | Deprecate as canonical learning structure |
+| Persistence | `core/storage.js` | IndexedDB Notes + studyReviews | Extend with V2 learning stores |
+| Ink | `kanjiInkView.js` / `#69` | Handwriting authoring/artifact lifecycle | Retain boundary |
 
-## 4. User-Journey Matrix
+### Key architectural observation
+V1 has effectively:
+`Note ↕ studyReview ↕ whole-document scheduler`
 
-1. **Dashboard & Creation**: User switches to the Japanese workspace. `japaneseApp.js` renders due counts. User clicks Quick Create. `japaneseTemplates.js` generates a new note, and `studyScheduler.js` creates an initial review record.
-2. **Review**: User clicks "Start review". `reviewDialog` opens. The note title and content are displayed. User clicks "Reveal", then selects a rating.
-3. **Filtering**: User interacts with `ui/japanese-filters.js` to view specific notebook types.
+V2 must become:
+`Note / KanjiInkEntry ↓ provenance/source ↓ LearningItem ↓ Card ↓ ReviewState ↓ Scheduler ↓ ReviewLog`
+
+## 4. User-Journey Audit
+### Dashboard and creation
+**Current:**
+`Quick Create ↓ Markdown Note ↓ studyScheduler creates Note review`
+
+**V2 target:**
+`Quick Create / extraction ↓ LearningItem ↓ Card Compiler ↓ Card + initial ReviewState`
+A Note may produce zero, one, or many LearningItems.
+A Note is therefore no longer a scheduling identity.
+
+### Review
+**Current:**
+`Review ↓ Note ↓ reveal full Markdown ↓ rating`
+**Problem:**
+The user receives multiple forms of information simultaneously. This makes the rating ambiguous because the user may remember one component while using another component as a hint.
+
+**V2 target:**
+`Card ↓ skill-specific prompt ↓ user response ↓ reveal / verification ↓ rating`
+The review surface must be generated from the Card's skill, not from the entire Note.
+
+### Filtering
+Notebook filtering can remain a UI concern, but the resulting queue must be generated from:
+`Card → LearningItem → sourceRefs`
+rather than directly treating Note membership as review identity.
 
 ## 5. Learning-Model Findings
+### 5.1 Whole-Note scheduling is the primary architectural defect
+V1 stores one scheduling state for heterogeneous information:
+Meaning, Reading, Context, Form
+This makes the unit of scheduling larger than the unit of learning evidence.
+Example:
+Reading = forgotten, Meaning = known, Context = known
+V1 cannot represent this independently.
+The fundamental V2 correction is:
+`one knowledge item × one targeted skill = one atomic Card`
 
-- **Consequences of V1 model**:
-  - One review record per complete note: All fields (Meaning, Reading, Context) share a single interval/ease.
-  - One interval/ease/status for all facts/skills: If a user knows the meaning but forgets the reading, they must rate the entire note 'again', penalizing the known skill.
-  - Shared review shape: Vocabulary, Kanji, Grammar, Output, and Planner all use the exact same scheduler logic.
-  - Whole-note reveal: The entire Markdown content is revealed simultaneously, providing unwanted hints for free-production.
-  - No card identity, review logs, lapses, or response time tracking: The system cannot build a detailed learning profile.
-- **Independent skills audit**:
-  - `recognition`: Conflated with meaning.
-  - `reading in context`: Conflated with isolated reading.
-  - `meaning/understanding`: Mixed with form recall.
-  - `form recall/handwriting`: Currently manual/unverified. The #69 Ink View provides the drawing canvas, but the review dialog does not present a drawing prompt before revealing the answer.
-  - `constrained production`: Unsupported.
-  - `free production`: Unsupported.
-  - `transfer`: Unsupported.
+### 5.2 Skill conflation
+Current V1 behavior:
+* recognition is conflated with meaning;
+* reading is not independently schedulable;
+* contextual reading is not distinguished from isolated reading;
+* handwriting is not part of scheduler state;
+* constrained production is unsupported;
+* free production is unsupported;
+* transfer is unsupported.
+These are not merely missing UI features. They represent a mismatch between learning evidence and scheduler identity.
 
-## 6. Japanese-Primary Content Inventory
+### 5.3 Whole-document reveal is a correctness problem
+The current review dialog exposes the entire Markdown document before rating.
+This means that a card asking for:
+`reading`
+may unintentionally expose:
+`meaning, context, example sentence, other readings`
+Therefore the V2 review surface must be skill-specific.
 
-- **English template headings**: Headings in templates are almost entirely English (`## Reading`, `## Meaning`, `## Example`, `## Stroke order`), except Kanji title `新しい漢字` and Output title `今日の文`. (Replace/Localize)
-- **Dashboard & copy**: Hardcoded English ("Start review", "Resume review", "Search Japanese notes"). (Localize)
-- **Language attributes**: Missing explicit `lang="ja"` on note contents within the review modal. (Replace)
+### 5.4 #69 Ink integration
+Current status:
+* handwriting authoring exists;
+* Ink entries are independent;
+* Ink deletion is isolated from Note review state;
+* Ink entries do not automatically enroll into SRS;
+* export support exists.
+This boundary should be retained.
+
+The V2 architecture should therefore treat Ink as:
+`learning evidence / authoring artifact`
+rather than:
+`scheduler entity`
+A LearningItem may reference an Ink entry for provenance or verification, but Card lifecycle must not depend on Ink persistence.
+
+## 6. Japanese-Primary Content Audit
+### Current deficiencies
+Structured template headings are largely English.
+UI copy contains English strings.
+Review content does not consistently declare Japanese language metadata.
+Markdown headings currently carry semantic structure that should eventually move into typed fields.
+
+### V2 requirement
+Canonical structured content should use semantic fields rather than headings such as:
+`## Reading ## Meaning ## Example`
+The renderer may still generate these sections, but the schema—not the heading text—defines their meaning.
+The review surface should expose Japanese content as the primary learning signal.
+Native-language hints may exist only as explicitly classified support material, not as required canonical meaning fields.
 
 ## 7. Kanji Boundary Audit
 
-- **target character**: Supported via Note Title.
-- **primary word and contextual reading**: Partially supported (Text-only in Markdown template).
-- **source sentence/provenance**: Unsupported natively (relegated to `## Common compounds`).
-- **Japanese-primary explanation**: Unsupported.
-- **recognition vs handwriting vs usage evidence**: Unsupported. The review system has no awareness of the #69 ink entry.
-- **optional relation to #69 entry**: Supported (Kanji Ink region automatically links to Active Note ID).
-- **behavior when related entry deleted**: Supported. Deleting ink entry shows a local undo prompt; it does not affect the Note or Review state.
-- **no automatic enrollment from entry**: Supported. Ink entries do not create review scheduler items.
-- **search/export compatibility**: Supported. Ink view provides `export.kanji-json` and `export.kanji-markdown`.
+| Capability | V1 status | V2 target |
+|------------|-----------|-----------|
+| Target character | Supported | `KanjiContent.character` |
+| Primary reading | Partial | Typed content |
+| Contextual reading | Partial | Explicit contextual evidence |
+| Source sentence | Weak | Explicit source/provenance reference |
+| Japanese explanation | Unsupported | Typed understanding/context fields |
+| Recognition | Partial | Independent Card |
+| Handwriting | Authoring only | Optional Card backed by `#69` verification |
+| Usage evidence | Unsupported | Context-bearing LearningItem |
+| Ink relation | Supported | Preserve |
+| Ink deletion isolation | Supported | Preserve |
+| Automatic enrollment | Correctly absent | Preserve |
+| Export | Supported | Extend structurally |
 
-## 8. Correctness and Failure Findings
+### Important invariant
+Deleting a KanjiInkEntry must not invalidate:
+`LearningItem, Card, ReviewState, ReviewLog`
+The source relationship may become dangling, but the learning entity remains valid.
 
-- **Archived Notes**: `buildDueReviewQueue` correctly filters out archived notes.
-- **Missing/Orphaned Notes**: Handled safely. If a review has no matching Note, it's categorized as `orphan-review` and skipped.
-- **Timezone/Day boundaries**: Managed via `nowIso` string comparison, ensuring stable intervals regardless of local time changes.
+## 8. Correctness Findings
+### Observed
+Archived Notes are excluded from the due queue.
+Missing Note references are classified as orphaned review records rather than crashing the queue.
+Ink deletion is isolated from Note/scheduler state.
 
-## 9. Accessibility/UX Findings
+### Requires stronger V2 guarantees
+The V2 system must explicitly guarantee:
+`missing source ≠ missing learning item`
+and:
+`archived source ≠ automatically suspended learning item`
+These are separate lifecycle decisions.
 
-- **Keyboard-only**: The review flow supports numeric shortcuts (`1`, `2`, `3`, `4`) for rating, bound cleanly in `japaneseApp.js`. Focus is managed well within the `reviewDialog`.
-- **Focus return**: Closing the dialog correctly returns focus to the `reviewOpener` button.
-- **Zoom/Narrow**: The review dialog handles overflow, but the hardcoded padding might clip at 200% zoom. (`UNKNOWN — REQUIRES VALIDATION`).
-- **Live announcements**: The review dialog lacks dynamic `aria-live` announcements for progression (e.g., "Item 2 of 5").
+### Time semantics
+The existing `nowIso` approach provides stable lexical timestamp ordering under normalized UTC ISO timestamps.
+However, the V2 contract should define:
+* all scheduler timestamps = UTC
+* all date arithmetic = scheduler-defined temporal calculation
+* UI-local timezone = presentation only
+This avoids allowing local calendar semantics to silently alter scheduler behavior.
 
-## 10. Performance and Resource Baseline
+## 9. Accessibility / UX Findings
+### Verified strengths
+Numeric rating shortcuts are available.
+Review focus management is structured.
+Closing the dialog returns focus to the opener.
 
-- **Queue Construction**: `analyzeRecords` groups and sorts all notes and reviews. This is `O(N log N)` on total dataset size. For a large vocabulary list, this synchronous block could cause frame drops.
-- **Dashboard Derivation**: `deriveStudyDashboard` processes all notes/reviews on every action.
-- **Memory**: The entire notes array and reviews array are kept in memory and cloned frequently during state updates.
+### Known issue candidates
+Missing live announcement of review position/progression.
+200% zoom clipping remains unverified.
+Japanese-font-specific layout behavior remains unverified.
 
-## 11. Persistence, Migration, and Export
+### V2 requirements
+The review interface should expose:
+`Card skill, Current position, Remaining workload, State transition, Feedback after rating`
+through semantic UI mechanisms rather than visual cues only.
 
-- **Notes**: Retain.
-- **`studyReviews` fields**: Deprecate whole-note reviews. Replace with granular Item/Card reviews. 
-  - *Migration risk*: Mapping 1 note review to N card reviews requires heuristics.
-- **Output/Planner records**: Deprecate spaced repetition for planners.
-- **Export**: Currently raw Markdown and JSON. Future requires loss-aware structural export.
+## 10. Performance Findings
+### Observed architecture
+`analyzeRecords` and related state derivation process the complete Note/review collections for queue/dashboard calculations.
 
-## 12. P0–P3 Findings
+### Complexity
+The current queue construction is plausibly:
+`O(N log N)`
+because of global grouping/sorting.
+However:
+Frame-drop impact has not been measured.
+Therefore the correct classification is:
+**P2 — scalability risk, not proven production bottleneck.**
 
-- **P1**: Learning model conflates recognition and recall, severely limiting spaced repetition effectiveness.
-- **P2**: Queue derivation runs synchronously over the entire dataset, creating a scaling bottleneck.
-- **P2**: Review dialog provides no mechanism for handwriting or independent skill verification before revealing the answer.
+### V2 direction
+First introduce indexed entity-oriented queries:
+`ReviewState.due, ReviewState.state, Card.status, Card.itemId`
+Then benchmark.
+Do not prescribe a particular incremental-cache strategy before measurements establish its value.
+
+## 11. Persistence / Migration Findings
+### Current
+`Note, studyReview (1:1)`
+
+### V2 target
+`LearningItem, Card, ReviewState, ReviewLog`
+
+### Migration risk
+A single V1 review state cannot be losslessly split into multiple skill-specific histories.
+Therefore V1 migration must classify records as:
+* exact-history migration
+or:
+* heuristic-state initialization
+The latter must not be presented as reconstructed historical review data.
+
+## 12. Priority Findings
+**P0** Whole-Note scheduling is incompatible with V2 skill separation.
+**P0** Migration cannot infer independent historical Card performance from aggregate Note-level state without evidence.
+**P1** Review content must become skill-specific to avoid accidental hints.
+**P1** V2 needs explicit Card/Item identity and lifecycle invariants.
+**P2** Global queue derivation creates a scaling risk.
+**P2** Handwriting assessment is not yet integrated into review semantics.
 
 ## 13. UNKNOWN — REQUIRES VALIDATION
+* Long-session `ResizeObserver` memory behavior in `kanjiInkView.js`.
+* 200% zoom clipping with Japanese fonts.
+* Actual dashboard frame-time distribution at realistic dataset sizes.
+* IndexedDB query performance at target learning-item/card volumes.
+* Exact recoverability of V1 review history into FSRS-compatible records.
+These should remain explicitly unknown until measured.
 
-- Exact memory leak footprint of `ResizeObserver` in `kanjiInkView.js` over long sessions.
-- Review dialog visual layout clipping on strict 200% zoom with Japanese fonts.
+## 14. V2 Work Package Recommendation
+### Work Package 2 — Canonical Learning Data Model
+Define and implement:
+`LearningItem, Card, ReviewState, ReviewLog, SourceRef, Skill`
+with explicit lifecycle, identity, referential-integrity, and migration invariants.
+Maintain the `#69 KanjiInkEntry` boundary.
+The output of WP2 should be a stable domain contract that the scheduler, review UI, migration layer, and export layer can consume without depending on Markdown structure.
 
-## 14. Exact Recommendation for Japanese V2 Work Package 2
-
-**Work Package 2**: Design the V2 Canonical Data Schema. 
-Create the schema definitions for `Item`, `Card`, and `ReviewLog` entities that decouple atomic facts from the Markdown Note representation, while maintaining the #69 Ink integration boundary.
-
-## 15. Bounded Follow-up Proposals
-
-- Separate the `studyScheduler.js` interval logic to operate on a `Card` ID rather than a `Note` ID.
-- Add `lang="ja"` attributes to the review dialog's content container.
-- Optimize `buildDueReviewQueue` to use incremental updates or IndexedDB indexes instead of full-array sorting.
+## 15. Deferred / Separate Work Packages
+The following should not be bundled into WP2:
+* large-scale performance optimization;
+* FSRS parameter optimization;
+* handwriting assessment algorithm;
+* cloud sync;
+* full localization;
+* dashboard redesign.
+This keeps the schema milestone architecturally focused.
