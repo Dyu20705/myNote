@@ -61,7 +61,7 @@
 
       document.getElementById("btnFetch").addEventListener("click", async () => {
         const now = new Date().toISOString();
-        const dueCards = await getDueCards(db, { now, limit: 10 });
+        const dueCards = await getDueCards(db, { date, limit: 10 });
         log(`Fetched ${dueCards.length} due active cards.`);
 
         if (dueCards.length > 0) {

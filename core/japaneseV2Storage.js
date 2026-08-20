@@ -83,13 +83,13 @@ export async function getCardById(db, cardId) {
  * Enforces workload semantics by filtering strictly for active cards
  * before applying the workload limit.
  */
-export async function getDueCards(db, { now, limit = 50 }) {
+export async function getDueCards(db, { date, limit = 50 }) {
   const tx = db.transaction([STORE_REVIEW_STATES, STORE_CARDS], "readonly");
   const stateStore = tx.objectStore(STORE_REVIEW_STATES);
   const cardStore = tx.objectStore(STORE_CARDS);
   
   const dueIndex = stateStore.index("due");
-  const range = globalThis.IDBKeyRange.upperBound(now);
+  const range = globalThis.IDBKeyRange.upperBound(date || new Date().toISOString());
   
   const dueCards = [];
   
