@@ -42,28 +42,13 @@ describe("Japanese V2 Kanji Workflow", () => {
     const { cards, reviewStates } = compileLearningItem(kanjiItem);
     assert.strictEqual(cards.length, 2, "Should generate two cards for the two skills");
     
-    const recognitionCard = cards.find(c => c.skill === "recognition");
-    const formRecallCard = cards.find(c => c.skill === "form_recall");
-    
-    assert.ok(recognitionCard, "Must generate recognition card");
-    assert.ok(formRecallCard, "Must generate form_recall card");
-    
     await saveLearningItemWithCards(db, kanjiItem, cards, reviewStates);
 
     const dueCards = await getDueCards(db, { date: new Date().toISOString(), limit: 10 });
     assert.strictEqual(dueCards.length, 2, "Both cards should be available for review");
-    
-    // Check that we can identify the cards correctly from DB
-    const dueRecognition = dueCards.find(d => d.card.skill === "recognition");
-    assert.ok(dueRecognition, "DB returns recognition card");
-    
-    const dueFormRecall = dueCards.find(d => d.card.skill === "form_recall");
-    assert.ok(dueFormRecall, "DB returns form_recall card");
   });
   
-  it("isolates Kanji LearningItem from KanjiInkEntry #69 dependencies", async () => {
-    // Tests that we don't strictly require an ink entry to compile or review kanji cards.
-    // The ink entry remains just an authoring artifact.
+  it("isolates Kanji LearningItem from KanjiInkEntry #69 dependencies (missing sourceInkId)", async () => {
     const kanjiItemWithoutInk = {
       id: randomUUID(),
       type: "kanji",
@@ -72,7 +57,6 @@ describe("Japanese V2 Kanji Workflow", () => {
         primaryReading: "ジ",
         primaryWord: "文字",
         meaning: "Character, letter",
-        // sourceInkId intentionally omitted
       },
       skills: ["form_recall"],
       sourceRefs: [],
@@ -87,5 +71,118 @@ describe("Japanese V2 Kanji Workflow", () => {
     await saveLearningItemWithCards(db, kanjiItemWithoutInk, cards, reviewStates);
     const dueCards = await getDueCards(db, { date: new Date().toISOString(), limit: 10 });
     assert.strictEqual(dueCards.length, 1, "Can review kanji without source ink");
+  });
+
+  it("isolates Kanji LearningItem from KanjiInkEntry #69 dependencies (dangling sourceInkId)", async () => {
+    const kanjiItemWithDanglingInk = {
+      id: randomUUID(),
+      type: "kanji",
+      content: {
+        character: "字",
+        primaryReading: "ジ",
+        primaryWord: "文字",
+        meaning: "Character, letter",
+        sourceInkId: "ink-deleted-456"
+      },
+      skills: ["form_recall"],
+      sourceRefs: [],
+      status: "active",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const { cards, reviewStates } = compileLearningItem(kanjiItemWithDanglingInk);
+    assert.strictEqual(cards.length, 1);
+    
+    await saveLearningItemWithCards(db, kanjiItemWithDanglingInk, cards, reviewStates);
+    const dueCards = await getDueCards(db, { date: new Date().toISOString(), limit: 10 });
+    assert.strictEqual(dueCards.length, 1, "Can review kanji even if sourceInkId refers to nonexistent/deleted ink");
+  });
+
+  it("rejects malformed Kanji items", () => {
+    const baseItem = {
+      id: randomUUID(),
+      type: "kanji",
+      content: { character: "漢", primaryReading: "カン", primaryWord: "漢字", meaning: "Sino-" },
+      skills: ["recognition"],
+      status: "active"
+    };
+
+    // Missing character
+    assert.throws(() => compileLearningItem({ ...baseItem, content: { ...baseItem.content, character: "" } }), /missing character/);
+    
+    // Missing primaryReading
+    assert.throws(() => compileLearningItem({ ...baseItem, content: { ...baseItem.content, primaryReading: undefined } }), /missing primaryReading/);
+
+    // Missing primaryWord
+    assert.throws(() => compileLearningItem({ ...baseItem, content: { ...baseItem.content, primaryWord: "" } }), /missing primaryWord/);
+
+    // Missing meaning
+    assert.throws(() => compileLearningItem({ ...baseItem, content: { ...baseItem.content, meaning: undefined } }), /missing meaning/);
+  });
+
+  it("rejects unsupported Kanji skills", () => {
+    const item = {
+      id: randomUUID(),
+      type: "kanji",
+      content: { character: "漢", primaryReading: "カン", primaryWord: "漢字", meaning: "Sino-" },
+      skills: ["banana"],
+      status: "active"
+    };
+
+    assert.throws(() => compileLearningItem(item), /Unsupported skill for Kanji item: banana/);
+  });
+
+  it("preserves existing Card and ReviewState identity when recompiling", async () => {
+    const kanjiItem = {
+      id: randomUUID(),
+      type: "kanji",
+      content: { character: "漢", primaryReading: "カン", primaryWord: "漢字", meaning: "Sino-" },
+      skills: ["recognition", "form_recall"],
+      status: "active"
+    };
+
+    const { cards, reviewStates } = compileLearningItem(kanjiItem);
+    await saveLearningItemWithCards(db, kanjiItem, cards, reviewStates);
+
+    const originalCardId = cards.find(c => c.skill === "recognition").id;
+    const originalStateId = reviewStates.find(s => s.cardId === originalCardId).cardId;
+
+    // Recompile with existing cards and states
+    const { cards: newCards, reviewStates: newStates } = compileLearningItem(kanjiItem, cards, reviewStates);
+    
+    const recompiledCard = newCards.find(c => c.skill === "recognition");
+    const recompiledState = newStates.find(s => s.cardId === originalCardId);
+
+    assert.strictEqual(recompiledCard.id, originalCardId, "Card ID must be preserved");
+    assert.strictEqual(recompiledState.cardId, originalStateId, "ReviewState cardId must be preserved");
+  });
+
+  it("orphans a card when its skill is removed from the learning item", async () => {
+    const kanjiItem = {
+      id: randomUUID(),
+      type: "kanji",
+      content: { character: "漢", primaryReading: "カン", primaryWord: "漢字", meaning: "Sino-" },
+      skills: ["recognition", "form_recall"],
+      status: "active"
+    };
+
+    const { cards, reviewStates } = compileLearningItem(kanjiItem);
+    await saveLearningItemWithCards(db, kanjiItem, cards, reviewStates);
+
+    // Remove form_recall skill
+    const updatedItem = { ...kanjiItem, skills: ["recognition"] };
+    
+    const { cards: updatedCards, reviewStates: updatedStates } = compileLearningItem(updatedItem, cards, reviewStates);
+    
+    assert.strictEqual(updatedCards.length, 2, "Compiler should return 2 cards (one active, one orphaned)");
+    const orphanedCard = updatedCards.find(c => c.skill === "form_recall");
+    assert.strictEqual(orphanedCard.status, "orphaned", "Removed skill should cause card to be orphaned");
+    
+    await saveLearningItemWithCards(db, updatedItem, updatedCards, updatedStates);
+
+    // Check due queue
+    const dueCards = await getDueCards(db, { date: new Date().toISOString(), limit: 10 });
+    assert.strictEqual(dueCards.length, 1, "Only the recognition card should be active and due");
   });
 });

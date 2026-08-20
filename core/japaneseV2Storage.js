@@ -26,6 +26,41 @@ function transactionDone(transaction) {
   });
 }
 
+
+export function validateLearningItem(item) {
+  if (!item || !item.id) {
+    throw new Error("Invalid learning item: missing id");
+  }
+  
+  if (item.type === "kanji") {
+    if (!item.content || typeof item.content !== "object") {
+      throw new Error("Kanji item must have a content object");
+    }
+    const { character, primaryReading, primaryWord, meaning, sourceInkId } = item.content;
+    if (typeof character !== "string" || !character.trim()) throw new Error("Kanji item missing character");
+    if (typeof primaryReading !== "string" || !primaryReading.trim()) throw new Error("Kanji item missing primaryReading");
+    if (typeof primaryWord !== "string" || !primaryWord.trim()) throw new Error("Kanji item missing primaryWord");
+    if (typeof meaning !== "string" || !meaning.trim()) throw new Error("Kanji item missing meaning");
+    
+    if (sourceInkId !== undefined && typeof sourceInkId !== "string") {
+      throw new Error("Kanji item sourceInkId must be a string if provided");
+    }
+
+    const allowedSkills = new Set(["recognition", "form_recall"]);
+    for (const skill of (item.skills || [])) {
+      if (!allowedSkills.has(skill)) {
+        throw new Error(`Unsupported skill for Kanji item: ${skill}`);
+      }
+    }
+  } else if (item.type === "vocabulary") {
+    if (!item.content || typeof item.content !== "object") {
+      throw new Error("Vocabulary item must have a content object");
+    }
+  }
+  // Generic/legacy items bypass type-specific validation
+  return item;
+}
+
 export async function saveLearningItemWithCards(db, learningItem, cards, reviewStates) {
   // Enforce referential integrity
   for (const card of cards) {
@@ -45,7 +80,7 @@ export async function saveLearningItemWithCards(db, learningItem, cards, reviewS
   const tx = db.transaction([STORE_LEARNING_ITEMS, STORE_CARDS, STORE_REVIEW_STATES], "readwrite");
   const done = transactionDone(tx);
 
-  tx.objectStore(STORE_LEARNING_ITEMS).put(learningItem);
+  tx.objectStore(STORE_LEARNING_ITEMS).put(validateLearningItem(learningItem));
   
   const cardStore = tx.objectStore(STORE_CARDS);
   for (const card of cards) {

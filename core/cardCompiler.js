@@ -10,13 +10,39 @@ export function compileLearningItem(item, existingCards = [], existingStates = [
 }
 
 export function compileKanjiCards(item, existingCards = [], existingStates = []) {
-  // Kanji-specific compilation logic could be expanded here.
-  // Currently, the card schema is fully decoupled from the item content,
-  // so we delegate to the generic skill-based compiler.
+  // Validate Kanji content
+  if (!item.content || typeof item.content !== "object") {
+    throw new Error("Kanji item must have a content object");
+  }
+  const { character, primaryReading, primaryWord, meaning, sourceInkId } = item.content;
+  if (typeof character !== "string" || !character.trim()) throw new Error("Kanji item missing character");
+  if (typeof primaryReading !== "string" || !primaryReading.trim()) throw new Error("Kanji item missing primaryReading");
+  if (typeof primaryWord !== "string" || !primaryWord.trim()) throw new Error("Kanji item missing primaryWord");
+  if (typeof meaning !== "string" || !meaning.trim()) throw new Error("Kanji item missing meaning");
+  
+  // sourceInkId is provenance/reference metadata only.
+  // It MUST NOT be dereferenced by scheduling or review compilation.
+  if (sourceInkId !== undefined && typeof sourceInkId !== "string") {
+    throw new Error("Kanji item sourceInkId must be a string if provided");
+  }
+
+  // Validate allowed Kanji skills
+  const allowedSkills = new Set(["recognition", "form_recall"]);
+  for (const skill of (item.skills || [])) {
+    if (!allowedSkills.has(skill)) {
+      throw new Error(`Unsupported skill for Kanji item: ${skill}`);
+    }
+  }
+
   return compileGenericCards(item, existingCards, existingStates);
 }
 
 export function compileVocabularyCards(item, existingCards = [], existingStates = []) {
+  // Vocabulary validation (stubbed for now, can be expanded when vocabulary diverges)
+  if (!item.content || typeof item.content !== "object") {
+    throw new Error("Vocabulary item must have a content object");
+  }
+  
   return compileGenericCards(item, existingCards, existingStates);
 }
 
@@ -40,7 +66,7 @@ function compileGenericCards(item, existingCards = [], existingStates = []) {
   const generatedStates = [];
 
   // Generate or preserve cards for active skills
-  for (const skill of item.skills) {
+  for (const skill of (item.skills || [])) {
     const key = `${item.id}:${skill}`;
     let card = cardsBySkill.get(key);
     let state = existingStates.find(s => s.cardId === card?.id);
