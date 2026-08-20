@@ -10,6 +10,32 @@ import { compileLearningItem } from "../../core/cardCompiler.js";
 global.localStorage = { removeItem: () => {} };
 
 describe("Japanese V2 Kanji Workflow", () => {
+
+  it("allows a zero-skill Kanji item and compiles zero cards", async () => {
+    const kanjiItem = {
+      id: randomUUID(),
+      type: "kanji",
+      content: {
+        character: "無",
+        primaryReading: "ム",
+        primaryWord: "無理",
+        meaning: "Nothing, zero",
+      },
+      skills: [], // Intentionally zero skills
+      sourceRefs: [],
+      status: "active",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const { cards, reviewStates } = compileLearningItem(kanjiItem);
+    assert.strictEqual(cards.length, 0, "Zero skills should yield zero cards");
+    assert.strictEqual(reviewStates.length, 0, "Zero skills should yield zero review states");
+    
+    // Save to DB (this should pass validation)
+    await saveLearningItemWithCards(db, kanjiItem, cards, reviewStates);
+  });
+
   let db;
 
   beforeEach(async () => {
