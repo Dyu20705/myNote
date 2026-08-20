@@ -1,4 +1,26 @@
 export function compileLearningItem(item, existingCards = [], existingStates = []) {
+  if (item.type === "kanji") {
+    return compileKanjiCards(item, existingCards, existingStates);
+  } else if (item.type === "vocabulary") {
+    return compileVocabularyCards(item, existingCards, existingStates);
+  } else {
+    // Fallback to generic compilation if type is omitted (for backward compatibility during transition)
+    return compileGenericCards(item, existingCards, existingStates);
+  }
+}
+
+export function compileKanjiCards(item, existingCards = [], existingStates = []) {
+  // Kanji-specific compilation logic could be expanded here.
+  // Currently, the card schema is fully decoupled from the item content,
+  // so we delegate to the generic skill-based compiler.
+  return compileGenericCards(item, existingCards, existingStates);
+}
+
+export function compileVocabularyCards(item, existingCards = [], existingStates = []) {
+  return compileGenericCards(item, existingCards, existingStates);
+}
+
+function compileGenericCards(item, existingCards = [], existingStates = []) {
   const now = new Date().toISOString();
   
   // Enforce boundary: existing cards must belong to this item
