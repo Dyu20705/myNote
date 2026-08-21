@@ -48,7 +48,7 @@ async function drawStroke(page, points) {
 
 async function storedEntries(page) {
   return page.evaluate(async () => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -134,7 +134,7 @@ const PAGINATION_ENTRY_FIXTURES = [
 
 async function preloadPaginationEntries(page, noteId, fixtures) {
   await page.evaluate(async ({ fixtures: entries, noteId: id }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -292,7 +292,7 @@ test("total point capacity rejects a new stroke before silently dropping its ges
   await createNote(page, "Bounded points");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -442,7 +442,7 @@ test("legacy V1 cards remain read-only and losslessly exportable", async ({ page
   await createNote(page, "Legacy handwriting");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

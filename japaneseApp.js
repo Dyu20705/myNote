@@ -66,6 +66,7 @@ function collectElements(document) {
   return {
     notesButton: document.querySelector("#notesWorkspaceButton"),
     japaneseButton: document.querySelector("#japaneseWorkspaceButton"),
+    archiveButton: document.querySelector("#archiveWorkspaceButton"),
     noteNavigationTitle: document.querySelector("#noteNavigationTitle"),
     searchBox: document.querySelector(".search-box"),
     searchInput: document.querySelector("#searchInput"),
@@ -247,13 +248,23 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   function renderDashboard(state = store.getState()) {
     const japanese = state.workspace === "japanese";
+    const archive = state.workspace === "archive";
     const unavailable = Boolean(state.studyDataUnavailable);
-    document.body.dataset.workspace = japanese ? "japanese" : "notes";
+    document.body.dataset.workspace = state.workspace || "notes";
     document.body.dataset.japaneseSubview = "notes";
-    elements.notesButton.setAttribute("aria-pressed", String(!japanese));
+    elements.notesButton.setAttribute("aria-pressed", String(state.workspace === "notes" || !state.workspace));
     elements.japaneseButton.setAttribute("aria-pressed", String(japanese));
-    elements.noteNavigationTitle.textContent = japanese ? "Japanese Notes" : "Notes";
-    elements.searchInput.placeholder = japanese ? "Search Japanese notes" : "Search notes";
+    elements.archiveButton?.setAttribute("aria-pressed", String(archive));
+    
+    if (japanese) {
+      elements.noteNavigationTitle.textContent = "Japanese Notes";
+    } else if (archive) {
+      elements.noteNavigationTitle.textContent = "Archive";
+    } else {
+      elements.noteNavigationTitle.textContent = "Notes";
+    }
+    
+    elements.searchInput.placeholder = japanese ? "Search Japanese notes" : (archive ? "Search archive" : "Search notes");
     elements.searchBox.hidden = false;
     elements.newNoteButton.hidden = japanese;
     elements.japaneseCreate.hidden = !japanese;
@@ -422,6 +433,12 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   elements.japaneseButton.addEventListener("click", () => {
     studyDetailsOpen = false;
     coordinator.switchWorkspace("japanese").catch(() => undefined);
+  });
+  elements.archiveButton?.addEventListener("click", () => {
+    elements.japaneseCreateMenu.hidden = true;
+    elements.newJapaneseNote.setAttribute("aria-expanded", "false");
+    studyDetailsOpen = false;
+    coordinator.switchWorkspace("archive").catch(() => undefined);
   });
   elements.notesSubview.addEventListener("click", () => {
     studyDetailsOpen = false;

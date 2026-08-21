@@ -19,12 +19,14 @@ import { createSearchClient } from "./core/searchClient.js";
 import { createStore } from "./core/state.js";
 import {
   deleteNoteFromDb,
+  exportDatabase,
   listNotesFromDb,
   migrateLegacyStorageIfNeeded,
   openDatabase,
   putNoteToDb,
   resetDatabase,
 } from "./core/storage.js";
+import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
 import { createJapaneseApp } from "./japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
@@ -627,7 +629,13 @@ async function flushWorkspace() {
 noteWorkspace = createNoteWorkspaceController({
   getState: store.getState,
   setState: store.setState,
-  query: searchClient.query,
+  query: (queryText) => {
+    const workspace = store.getState().workspace || document.body.dataset.workspace || "notes";
+    if (workspace === "archive") {
+      return searchClient.query(`is:archived ${queryText}`.trim());
+    }
+    return searchClient.query(queryText);
+  },
   flush: flushWorkspace,
   onSearchMetrics(elapsed) {
     updateMetrics({ searchMs: elapsed, workerMs: elapsed });
@@ -741,8 +749,10 @@ function triggerDownload(blob, filename) {
   URL.revokeObjectURL(href);
 }
 
-function exportJson() {
-  const blob = new Blob([JSON.stringify(store.getState().notes, null, 2)], {
+async function exportJson() {
+  const db = store.getState().db;
+  const data = await exportDatabase(db);
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",
   });
   triggerDownload(blob, "myNote-export.json");
@@ -984,9 +994,23 @@ const unregisterApplicationCommands = [
     id: "notes.archive",
     title: "Archive active note",
     description: "Archive the selected note without deleting it",
-    isAvailable: () => Boolean(activeNote()),
+    isAvailable: () => {
+      const note = activeNote();
+      console.log("NOTE FOR ARCHIVE", note); return note && !note.archived;
+    },
     unavailableReason: () => "No active note to archive",
     run: () => mutateActiveNote((note) => ({ ...note, archived: true }), "archive"),
+  }),
+  registerCommand({
+    id: "notes.unarchive",
+    title: "Unarchive active note",
+    description: "Restore the selected note from the archive",
+    isAvailable: () => {
+      const note = activeNote();
+      return note && note.archived;
+    },
+    unavailableReason: () => "No archived note is active",
+    run: () => mutateActiveNote((note) => ({ ...note, archived: false }), "unarchive"),
   }),
   registerCommand({
     id: "notes.delete",
@@ -1237,6 +1261,7 @@ japaneseApp = createJapaneseApp({
 async function bootstrap() {
   const db = await openDatabase();
   await migrateLegacyStorageIfNeeded(db, normalizeNote);
+  await migrateV1ReviewsToV2(db);
   const loaded = (await listNotesFromDb(db))
     .map(normalizeNote)
     .filter(Boolean)

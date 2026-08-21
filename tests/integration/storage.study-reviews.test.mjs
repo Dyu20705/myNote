@@ -173,13 +173,13 @@ describe("study review storage schema", { concurrency: false }, () => {
     await deleteTestDatabase();
   });
 
-  test("fresh databases preserve the isolated review schema within v4", async () => {
+  test("fresh databases preserve the isolated review schema within v3", async () => {
     const database = await openTestDatabase();
     const notesStore = database.transaction("notes", "readonly").objectStore("notes");
     const reviewsStore = database.transaction("studyReviews", "readonly").objectStore("studyReviews");
 
-    assert.equal(database.version, 4);
-    assert.deepEqual([...database.objectStoreNames], ["japaneseCards", "japaneseItems", "japaneseReviewLogs", "kanjiInkEntries", "notes", "studyReviews"]);
+    assert.equal(database.version, 5);
+    assert.deepEqual([...database.objectStoreNames].sort(), ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyArtifacts", "studyReviews"]);
     assert.deepEqual([...notesStore.indexNames], ["archived", "pinned", "updatedAt"]);
     assert.deepEqual([...reviewsStore.indexNames], ["nextReviewAt", "notebookType", "status"]);
     assert.deepEqual(await listNotesFromDb(database), []);
@@ -197,8 +197,8 @@ describe("study review storage schema", { concurrency: false }, () => {
     const notesStore = database.transaction("notes", "readonly").objectStore("notes");
     const reviewsStore = database.transaction("studyReviews", "readonly").objectStore("studyReviews");
 
-    assert.equal(database.version, 4);
-    assert.deepEqual([...database.objectStoreNames], ["japaneseCards", "japaneseItems", "japaneseReviewLogs", "kanjiInkEntries", "notes", "studyReviews"]);
+    assert.equal(database.version, 5);
+    assert.deepEqual([...database.objectStoreNames].sort(), ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyArtifacts", "studyReviews"]);
     assert.deepEqual([...notesStore.indexNames], ["archived", "pinned", "updatedAt"]);
     assert.deepEqual([...reviewsStore.indexNames], ["nextReviewAt", "notebookType", "status"]);
     assert.deepEqual(await listNotesFromDb(database), [v1NoteSnapshot]);

@@ -154,15 +154,15 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     await deleteTestDatabase();
   });
 
-  test("fresh database creates additive v4 store and indexes", async () => {
+  test("fresh database creates additive v3 store and indexes", async () => {
     const database = await openTestDatabase();
     const store = database.transaction("kanjiInkEntries", "readonly")
       .objectStore("kanjiInkEntries");
 
-    assert.equal(database.version, 4);
+    assert.equal(database.version, 5);
     assert.deepEqual(
-      [...database.objectStoreNames],
-      ["japaneseCards", "japaneseItems", "japaneseReviewLogs", "kanjiInkEntries", "notes", "studyReviews"],
+      [...database.objectStoreNames].sort(),
+      ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyArtifacts", "studyReviews"],
     );
     assert.deepEqual([...store.indexNames], ["noteId", "updatedAt"]);
     assert.deepEqual(await listKanjiInkEntriesFromDb(database, "note-ink"), {
@@ -171,7 +171,7 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     });
   });
 
-  test("v2 to v4 upgrade preserves notes and reviews byte-for-byte", async () => {
+  test("v2 to v3 upgrade preserves notes and reviews byte-for-byte", async () => {
     const note = makeNote("legacy-v2-note");
     const review = {
       noteId: note.id,
@@ -186,7 +186,7 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     v2.close();
 
     const database = await openTestDatabase();
-    assert.equal(database.version, 4);
+    assert.equal(database.version, 5);
     assert.deepEqual(await readRawStore(database, "notes"), [note]);
     assert.deepEqual(await readRawStore(database, "studyReviews"), [review]);
     assert.deepEqual(await readRawStore(database, "kanjiInkEntries"), []);

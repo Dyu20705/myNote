@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const host = "127.0.0.1";
-const port = 4173;
+const port = 4180;
 const maximumAssetBytes = 1024 * 1024;
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

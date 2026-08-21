@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Japanese V2 Test</title>
+    <style>
+      body { font-family: system-ui; max-width: 600px; margin: 2rem auto; }
+      button { padding: 0.5rem 1rem; margin-right: 0.5rem; }
+      pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Japanese V2 Vocabulary Vertical Slice</h1>
+    
+    <button id="btnCreate">1. Create Vocabulary Item</button>
+    <button id="btnFetch">2. Fetch Due Cards</button>
+    
+    <div id="reviewSection" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #ccc;">
+      <h2 id="cardWord"></h2>
+      <p id="cardSkill"></p>
+      <button id="btnGradeGood">Grade: Good</button>
+    </div>
+
+    <pre id="output"></pre>
+
+    <script type="module">
+      import { openDatabase } from "./core/storage.js";
+      import { saveLearningItemWithCards, getDueCards, commitReviewTransaction } from "./core/japaneseV2Storage.js";
+      import { compileLearningItem } from "./core/cardCompiler.js";
+      import { schedule } from "./core/schedulerAdapter.js";
+
+      let db;
+      let currentDueCard = null;
+      let currentReviewState = null;
+
+      function log(msg) {
+        document.getElementById('output').textContent += msg + "\n";
+      }
+
+      async function init() {
+        db = await openDatabase();
+        log("Database opened.");
+      }
+
+      document.getElementById("btnCreate").addEventListener("click", async () => {
+        const item = {
+          id: crypto.randomUUID(),
+          type: "vocabulary",
+          content: { writtenForm: "猫", meanings: ["cat"] },
+          skills: ["recognition", "meaning"],
+          sourceRefs: [],
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        const { cards, reviewStates } = compileLearningItem(item);
+        await saveLearningItemWithCards(db, item, cards, reviewStates);
+        log(`Created item ${item.content.writtenForm} with 2 cards.`);
+      });
+
+      document.getElementById("btnFetch").addEventListener("click", async () => {
+        const now = new Date().toISOString();
+        const dueCards = await getDueCards(db, { date, limit: 10 });
+        log(`Fetched ${dueCards.length} due active cards.`);
+
+        if (dueCards.length > 0) {
+          const entry = dueCards[0];
+          currentDueCard = entry.card;
+          currentReviewState = entry.reviewState;
+          
+          document.getElementById("cardSkill").textContent = `Skill: ${currentDueCard.skill}`;
+          document.getElementById("cardWord").textContent = `Reviewing card ID: ${currentDueCard.id}`;
+          document.getElementById("reviewSection").style.display = "block";
+        }
+      });
+
+      document.getElementById("btnGradeGood").addEventListener("click", async () => {
+        if (!currentReviewState) return;
+        
+        const input = { grade: "good", reviewedAt: new Date().toISOString(), durationMs: 2000 };
+        const { nextState, log: reviewLog } = schedule(currentReviewState, input, new Date().toISOString());
+        
+        await commitReviewTransaction(db, nextState, reviewLog);
+        log(`Committed review. Next due: ${nextState.due}`);
+        
+        document.getElementById("reviewSection").style.display = "none";
+        currentDueCard = null;
+        currentReviewState = null;
+      });
+
+      init();
+    </script>
+  </body>
+</html>
