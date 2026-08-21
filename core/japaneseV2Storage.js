@@ -3,7 +3,9 @@ import {
   STORE_LEARNING_ITEMS,
   STORE_CARDS,
   STORE_REVIEW_STATES,
-  STORE_REVIEW_LOGS
+  STORE_REVIEW_LOGS,
+  STORE_STUDY_REVIEWS,
+  STORE_STUDY_ARTIFACTS
 } from "./storage.js";
 
 function requestResult(request) {
@@ -159,4 +161,65 @@ export async function commitReviewTransaction(db, nextState, reviewLog) {
   tx.objectStore(STORE_REVIEW_LOGS).add(reviewLog);
 
   await done;
+}
+
+export async function migrateV1ReviewsToV2(db) {
+  if (globalThis.localStorage?.getItem("myNote-japanese-v2-migrated") === "true") {
+    return { migrated: 0, skipped: 0 };
+  }
+
+  const tx = db.transaction([
+    STORE_STUDY_REVIEWS,
+    STORE_STUDY_ARTIFACTS,
+  ], "readwrite");
+
+  const [reviews, existingArtifacts] = await Promise.all([
+    requestResult(tx.objectStore(STORE_STUDY_REVIEWS).getAll()),
+    requestResult(tx.objectStore(STORE_STUDY_ARTIFACTS).getAll()),
+  ]);
+
+  if (reviews.length === 0) {
+    if (globalThis.localStorage) {
+      globalThis.localStorage.setItem("myNote-japanese-v2-migrated", "true");
+    }
+    return { migrated: 0, skipped: 0 };
+  }
+
+  const existingKeys = new Set(
+    existingArtifacts.map((artifact) => `${artifact.noteId}:${artifact.type}`)
+  );
+
+  let migrated = 0;
+  let skipped = 0;
+  const now = new Date().toISOString();
+
+  for (const review of reviews) {
+    if (review.notebookType === "output" || review.notebookType === "planner") {
+      const key = `${review.noteId}:${review.notebookType}`;
+      if (!existingKeys.has(key)) {
+        const artifact = {
+          id: crypto.randomUUID(),
+          noteId: review.noteId,
+          type: review.notebookType,
+          createdAt: now,
+          updatedAt: now
+        };
+        tx.objectStore(STORE_STUDY_ARTIFACTS).put(artifact);
+        existingKeys.add(key);
+        migrated++;
+      }
+    } else {
+      skipped++;
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      if (globalThis.localStorage) {
+        globalThis.localStorage.setItem("myNote-japanese-v2-migrated", "true");
+      }
+      resolve({ migrated, skipped });
+    };
+    tx.onerror = () => reject(tx.error);
+  });
 }

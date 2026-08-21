@@ -117,3 +117,27 @@ export function validateStudyReview(review) {
     throw createInvalidStudyReviewError();
   }
 }
+
+export const STUDY_ARTIFACT_TYPES = Object.freeze(["output", "planner"]);
+
+export function validateStudyArtifact(artifact) {
+  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) {
+    throw new TypeError("Invalid study artifact");
+  }
+  
+  const copy = {
+    id: artifact.id,
+    noteId: artifact.noteId,
+    type: artifact.type,
+    createdAt: artifact.createdAt,
+    updatedAt: artifact.updatedAt,
+  };
+
+  if (typeof copy.id !== "string" || copy.id.length === 0) throw new TypeError("Invalid study artifact ID");
+  if (typeof copy.noteId !== "string" || copy.noteId.length === 0) throw new TypeError("Invalid study artifact noteId");
+  if (!STUDY_ARTIFACT_TYPES.includes(copy.type)) throw new TypeError("Invalid study artifact type");
+  if (!isIsoDateTimeWithZone(copy.createdAt)) throw new TypeError("Invalid study artifact createdAt");
+  if (!isIsoDateTimeWithZone(copy.updatedAt)) throw new TypeError("Invalid study artifact updatedAt");
+
+  return copy;
+}

@@ -178,8 +178,8 @@ describe("study review storage schema", { concurrency: false }, () => {
     const notesStore = database.transaction("notes", "readonly").objectStore("notes");
     const reviewsStore = database.transaction("studyReviews", "readonly").objectStore("studyReviews");
 
-    assert.equal(database.version, 4);
-    assert.deepEqual([...database.objectStoreNames], ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyReviews"]);
+    assert.equal(database.version, 5);
+    assert.deepEqual([...database.objectStoreNames].sort(), ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyArtifacts", "studyReviews"]);
     assert.deepEqual([...notesStore.indexNames], ["archived", "pinned", "updatedAt"]);
     assert.deepEqual([...reviewsStore.indexNames], ["nextReviewAt", "notebookType", "status"]);
     assert.deepEqual(await listNotesFromDb(database), []);
@@ -197,8 +197,8 @@ describe("study review storage schema", { concurrency: false }, () => {
     const notesStore = database.transaction("notes", "readonly").objectStore("notes");
     const reviewsStore = database.transaction("studyReviews", "readonly").objectStore("studyReviews");
 
-    assert.equal(database.version, 4);
-    assert.deepEqual([...database.objectStoreNames], ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyReviews"]);
+    assert.equal(database.version, 5);
+    assert.deepEqual([...database.objectStoreNames].sort(), ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyArtifacts", "studyReviews"]);
     assert.deepEqual([...notesStore.indexNames], ["archived", "pinned", "updatedAt"]);
     assert.deepEqual([...reviewsStore.indexNames], ["nextReviewAt", "notebookType", "status"]);
     assert.deepEqual(await listNotesFromDb(database), [v1NoteSnapshot]);

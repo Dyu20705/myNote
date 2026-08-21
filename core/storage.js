@@ -3,7 +3,7 @@ import { validateStudyReview } from "./studyReview.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 export const STORE_NOTES = "notes";
 export const STORE_STUDY_REVIEWS = "studyReviews";
 export const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
@@ -11,6 +11,7 @@ export const STORE_LEARNING_ITEMS = "learningItems";
 export const STORE_CARDS = "cards";
 export const STORE_REVIEW_STATES = "reviewStates";
 export const STORE_REVIEW_LOGS = "reviewLogs";
+export const STORE_STUDY_ARTIFACTS = "studyArtifacts";
 const pendingDependentRestores = new WeakMap();
 
 function createMigrationOutcome(status, count, errorCode) {
@@ -162,6 +163,12 @@ export function openDatabase() {
           const store = db.createObjectStore(STORE_REVIEW_LOGS, { keyPath: "id" });
           store.createIndex("cardId_reviewedAt", ["cardId", "reviewedAt"]);
           store.createIndex("reviewedAt", "reviewedAt");
+        }
+      }
+      if (event.oldVersion < 5) {
+        if (!db.objectStoreNames.contains(STORE_STUDY_ARTIFACTS)) {
+          const store = db.createObjectStore(STORE_STUDY_ARTIFACTS, { keyPath: "id" });
+          store.createIndex("noteId", "noteId");
         }
       }
     };
@@ -622,4 +629,176 @@ export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
   }
   localStorage.removeItem(LEGACY_STORAGE_KEY);
   return createMigrationOutcome("migrated", result.migratedCount);
+}
+
+export async function exportDatabase(db) {
+  const notes = await listNotesFromDb(db);
+  const tx = db.transaction([
+    STORE_LEARNING_ITEMS,
+    STORE_CARDS,
+    STORE_REVIEW_STATES,
+    STORE_REVIEW_LOGS,
+    STORE_STUDY_ARTIFACTS,
+    STORE_KANJI_INK_ENTRIES
+  ], "readonly");
+  
+  const [
+    learningItems,
+    cards,
+    reviewStates,
+    reviewLogs,
+    studyArtifacts,
+    kanjiInkEntries
+  ] = await Promise.all([
+    requestResult(tx.objectStore(STORE_LEARNING_ITEMS).getAll()),
+    requestResult(tx.objectStore(STORE_CARDS).getAll()),
+    requestResult(tx.objectStore(STORE_REVIEW_STATES).getAll()),
+    requestResult(tx.objectStore(STORE_REVIEW_LOGS).getAll()),
+    requestResult(tx.objectStore(STORE_STUDY_ARTIFACTS).getAll()),
+    requestResult(tx.objectStore(STORE_KANJI_INK_ENTRIES).getAll())
+  ]);
+
+  return {
+    schemaVersion: DB_VERSION,
+    notes,
+    learningItems,
+    cards,
+    reviewStates,
+    reviewLogs,
+    studyArtifacts,
+    kanjiInkEntries
+  };
+}
+
+export async function importDatabase(db, snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    throw new TypeError("Invalid snapshot: expected an object");
+  }
+  if (snapshot.schemaVersion !== DB_VERSION) {
+    throw new TypeError(
+      `Unsupported schema version: expected ${DB_VERSION}, got ${snapshot.schemaVersion}`
+    );
+  }
+
+  const notes = Array.isArray(snapshot.notes) ? snapshot.notes : [];
+  const learningItems = Array.isArray(snapshot.learningItems) ? snapshot.learningItems : [];
+  const cards = Array.isArray(snapshot.cards) ? snapshot.cards : [];
+  const reviewStates = Array.isArray(snapshot.reviewStates) ? snapshot.reviewStates : [];
+  const reviewLogs = Array.isArray(snapshot.reviewLogs) ? snapshot.reviewLogs : [];
+  const studyArtifacts = Array.isArray(snapshot.studyArtifacts) ? snapshot.studyArtifacts : [];
+  const kanjiInkEntries = Array.isArray(snapshot.kanjiInkEntries) ? snapshot.kanjiInkEntries : [];
+
+  // Validate no duplicate IDs within each entity type
+  function assertUniqueIds(entities, label, keyPath = "id") {
+    const seen = new Set();
+    for (const entity of entities) {
+      const id = keyPath === "cardId" ? entity.cardId : entity.id;
+      if (typeof id !== "string" || id.length === 0) {
+        throw new TypeError(`${label}: missing or invalid id`);
+      }
+      if (seen.has(id)) {
+        throw new TypeError(`${label}: duplicate id "${id}"`);
+      }
+      seen.add(id);
+    }
+    return seen;
+  }
+
+  const noteIds = assertUniqueIds(notes, "notes");
+  const itemIds = assertUniqueIds(learningItems, "learningItems");
+  const cardIds = assertUniqueIds(cards, "cards");
+  assertUniqueIds(reviewStates, "reviewStates", "cardId");
+  assertUniqueIds(reviewLogs, "reviewLogs");
+  assertUniqueIds(studyArtifacts, "studyArtifacts");
+  assertUniqueIds(kanjiInkEntries, "kanjiInkEntries");
+
+  // Validate referential integrity: Card.itemId → LearningItem.id
+  for (const card of cards) {
+    if (!itemIds.has(card.itemId)) {
+      throw new TypeError(
+        `Referential integrity: Card "${card.id}" references missing LearningItem "${card.itemId}"`
+      );
+    }
+  }
+
+  // Validate (itemId, skill) uniqueness
+  const cardSkillKeys = new Set();
+  for (const card of cards) {
+    const key = `${card.itemId}:${card.skill}`;
+    if (cardSkillKeys.has(key)) {
+      throw new TypeError(
+        `Duplicate card skill mapping: (${card.itemId}, ${card.skill})`
+      );
+    }
+    cardSkillKeys.add(key);
+  }
+
+  // Validate referential integrity: ReviewState.cardId → Card.id
+  for (const state of reviewStates) {
+    if (!cardIds.has(state.cardId)) {
+      throw new TypeError(
+        `Referential integrity: ReviewState references missing Card "${state.cardId}"`
+      );
+    }
+  }
+
+  // Validate referential integrity: ReviewLog.cardId → Card.id
+  for (const log of reviewLogs) {
+    if (!cardIds.has(log.cardId)) {
+      throw new TypeError(
+        `Referential integrity: ReviewLog "${log.id}" references missing Card "${log.cardId}"`
+      );
+    }
+  }
+
+  // Validate referential integrity: StudyArtifact.noteId → Note.id
+  for (const artifact of studyArtifacts) {
+    if (!noteIds.has(artifact.noteId)) {
+      throw new TypeError(
+        `Referential integrity: StudyArtifact "${artifact.id}" references missing Note "${artifact.noteId}"`
+      );
+    }
+  }
+
+  // KanjiInkEntry.noteId dangling references are permitted per ADR §2.17–2.18
+
+  // Atomically write all entities
+  const tx = db.transaction([
+    STORE_NOTES,
+    STORE_LEARNING_ITEMS,
+    STORE_CARDS,
+    STORE_REVIEW_STATES,
+    STORE_REVIEW_LOGS,
+    STORE_STUDY_ARTIFACTS,
+    STORE_KANJI_INK_ENTRIES
+  ], "readwrite");
+  const done = transactionDone(tx);
+
+  try {
+    const noteStore = tx.objectStore(STORE_NOTES);
+    for (const note of notes) noteStore.put(note);
+
+    const itemStore = tx.objectStore(STORE_LEARNING_ITEMS);
+    for (const item of learningItems) itemStore.put(item);
+
+    const cardStore = tx.objectStore(STORE_CARDS);
+    for (const card of cards) cardStore.put(card);
+
+    const stateStore = tx.objectStore(STORE_REVIEW_STATES);
+    for (const state of reviewStates) stateStore.put(state);
+
+    const logStore = tx.objectStore(STORE_REVIEW_LOGS);
+    for (const log of reviewLogs) logStore.put(log);
+
+    const artifactStore = tx.objectStore(STORE_STUDY_ARTIFACTS);
+    for (const artifact of studyArtifacts) artifactStore.put(artifact);
+
+    const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
+    for (const entry of kanjiInkEntries) inkStore.put(entry);
+
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
 }
