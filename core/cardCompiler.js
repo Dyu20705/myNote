@@ -1,10 +1,12 @@
-import { validateKanjiLearningItem, validateVocabularyLearningItem } from "./japaneseLearningItem.js";
+import { validateKanjiLearningItem, validateVocabularyLearningItem, validateGrammarLearningItem } from "./japaneseLearningItem.js";
 
 export function compileLearningItem(item, existingCards = [], existingStates = []) {
   if (item.type === "kanji") {
     return compileKanjiCards(item, existingCards, existingStates);
   } else if (item.type === "vocabulary") {
     return compileVocabularyCards(item, existingCards, existingStates);
+  } else if (item.type === "grammar") {
+    return compileGrammarCards(item, existingCards, existingStates);
   } else {
     // Fallback to generic compilation if type is omitted (for backward compatibility during transition)
     return compileGenericCards(item, existingCards, existingStates);
@@ -105,4 +107,9 @@ function compileGenericCards(item, existingCards = [], existingStates = []) {
   }
 
   return { cards: generatedCards, reviewStates: generatedStates };
+}
+
+export function compileGrammarCards(item, existingCards = [], existingStates = []) {
+  validateGrammarLearningItem(item);
+  return compileGenericCards(item, existingCards, existingStates);
 }
