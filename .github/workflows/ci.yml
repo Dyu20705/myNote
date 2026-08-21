@@ -40,6 +40,9 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Run performance budget suite
+        run: npm run test:perf
+
       - name: Run integration tests
         run: npm run test:integration
 
