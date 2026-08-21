@@ -57,9 +57,19 @@ export function validateGrammarLearningItem(item) {
   if (!Array.isArray(meaning)) {
     throw new Error("Grammar item missing meaning or meaning is not an array");
   }
+  for (const m of meaning) {
+    if (typeof m !== "string" || !m.trim()) {
+      throw new Error("Grammar item meaning elements must be non-empty strings");
+    }
+  }
 
   if (!Array.isArray(contexts)) {
     throw new Error("Grammar item missing contexts or contexts is not an array");
+  }
+  for (const c of contexts) {
+    if (typeof c !== "string" || !c.trim()) {
+      throw new Error("Grammar item context elements must be non-empty strings");
+    }
   }
 
   const allowedSkills = new Set(["recognition", "meaning"]);

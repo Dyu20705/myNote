@@ -13,7 +13,7 @@ describe("Japanese V2 Grammar Workflow", () => {
   let db;
 
   beforeEach(async () => {
-    resetDatabase();
+    await resetDatabase();
     db = await openDatabase();
   });
 
@@ -186,4 +186,38 @@ describe("Japanese V2 Grammar Workflow", () => {
     assert.strictEqual(recCard.status, "active");
     assert.strictEqual(meaningCard.status, "orphaned");
   });
+
+  it("rejects invalid array elements in meaning and contexts", () => {
+    const valid = {
+      id: randomUUID(),
+      type: "grammar",
+      content: {
+        pattern: "〜",
+        meaning: ["valid"],
+        contexts: ["valid"]
+      },
+      skills: ["recognition"]
+    };
+
+    // meaning containing a non-string
+    const nonStringMeaning = JSON.parse(JSON.stringify(valid));
+    nonStringMeaning.content.meaning = ["valid", 123];
+    assert.throws(() => compileLearningItem(nonStringMeaning), /meaning elements must be non-empty strings/);
+
+    // contexts containing a non-string
+    const nonStringContext = JSON.parse(JSON.stringify(valid));
+    nonStringContext.content.contexts = [null];
+    assert.throws(() => compileLearningItem(nonStringContext), /context elements must be non-empty strings/);
+
+    // blank meaning string
+    const blankMeaning = JSON.parse(JSON.stringify(valid));
+    blankMeaning.content.meaning = [""];
+    assert.throws(() => compileLearningItem(blankMeaning), /meaning elements must be non-empty strings/);
+
+    // blank context string
+    const blankContext = JSON.parse(JSON.stringify(valid));
+    blankContext.content.contexts = ["   "];
+    assert.throws(() => compileLearningItem(blankContext), /context elements must be non-empty strings/);
+  });
+
 });
