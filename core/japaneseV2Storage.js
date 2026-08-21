@@ -1,4 +1,4 @@
-import { validateKanjiLearningItem, validateVocabularyLearningItem } from "./japaneseLearningItem.js";
+import { validateKanjiLearningItem, validateVocabularyLearningItem, validateGrammarLearningItem } from "./japaneseLearningItem.js";
 import {
   STORE_LEARNING_ITEMS,
   STORE_CARDS,
@@ -37,6 +37,8 @@ export function validateLearningItem(item) {
     return validateKanjiLearningItem(item);
   } else if (item.type === "vocabulary") {
     return validateVocabularyLearningItem(item);
+  } else if (item.type === "grammar") {
+    return validateGrammarLearningItem(item);
   }
   
   // Generic/legacy items bypass type-specific validation
