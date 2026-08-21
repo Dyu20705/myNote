@@ -1,107 +1,93 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { performance } from "node:perf_hooks";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
 import { compileLearningItem } from "../../core/cardCompiler.js";
 import { schedule } from "../../core/schedulerAdapter.js";
 import { createAutosave } from "../../core/autosave.js";
 import { parseDocument } from "../../core/parser/index.js";
 
-// Budget constraints matching docs/PERFORMANCE_BUDGET.md
+// Budget constraints matching docs/PERFORMANCE_BUDGET.md and Epic #13
 const PERFORMANCE_BUDGET = Object.freeze({
-  maxSearchQueryMedianMs: 20,
-  maxSearchQueryP95Ms: 50,
-  maxSearch10kIndexMs: 500,
-  maxAutosaveMs: 50,
+  maxMediumSearchQueryMedianMs: 20, // docs/PERFORMANCE_BUDGET.md: < 20 ms median on medium dataset
+  maxMediumSearchQueryP95Ms: 50,
+  maxLargeSearchQueryMedianMs: 50, // Epic #13 common query target
+  maxLargeSearchQueryP95Ms: 150,
+  maxMedium1kIndexMs: 100,
+  maxLarge10kIndexMs: 500,
+  maxAutosaveFlushExecutionMs: 50,
   max1kCardCompileMs: 100,
   max2kScheduleComputeMs: 50,
   max100ParserMs: 50,
 });
 
-// Search Worker Indexing and Query Simulation
-function createSearchIndex() {
-  const notesById = new Map();
-  const tokenIndex = new Map();
-  const noteTokens = new Map();
+/**
+ * Instantiates the actual production Search Worker (core/search.worker.js)
+ * within an isolated VM context adhering to the Web Worker DedicatedWorkerGlobalScope protocol.
+ * This directly executes production indexing, query scoring, tokenization, and cleanup algorithms.
+ */
+function createProductionSearchWorker() {
+  const workerCode = readFileSync(new URL("../../core/search.worker.js", import.meta.url), "utf8");
+  let onmessageHandler = null;
+  const pendingRequests = new Map();
 
-  function tokenize(value) {
-    return String(value || "")
-      .toLowerCase()
-      .split(/[^a-z0-9_-]+/)
-      .filter(Boolean);
-  }
-
-  function addToken(token, noteId) {
-    if (!tokenIndex.has(token)) {
-      tokenIndex.set(token, new Set());
-    }
-    tokenIndex.get(token).add(noteId);
-  }
-
-  function removeToken(token, noteId) {
-    const entry = tokenIndex.get(token);
-    if (!entry) return;
-    entry.delete(noteId);
-    if (entry.size === 0) {
-      tokenIndex.delete(token);
-    }
-  }
-
-  function tokensForNote(note) {
-    const textTokens = tokenize(`${note.title} ${note.content}`);
-    const tagTokens = (note.tags || []).map((t) => `tag:${t}`);
-    return new Set([...textTokens, ...tagTokens]);
-  }
-
-  function upsertNote(note) {
-    const previousTokens = noteTokens.get(note.id);
-    if (previousTokens) {
-      for (const token of previousTokens) {
-        removeToken(token, note.id);
+  const selfMock = {
+    set onmessage(fn) {
+      onmessageHandler = fn;
+    },
+    get onmessage() {
+      return onmessageHandler;
+    },
+    postMessage(data) {
+      const resolver = pendingRequests.get(data.id);
+      if (resolver) {
+        pendingRequests.delete(data.id);
+        resolver(data);
       }
-    }
-    notesById.set(note.id, note);
-    const nextTokens = tokensForNote(note);
-    noteTokens.set(note.id, nextTokens);
-    for (const token of nextTokens) {
-      addToken(token, note.id);
-    }
-  }
+    },
+  };
 
-  function deleteNote(id) {
-    const previousTokens = noteTokens.get(id);
-    if (previousTokens) {
-      for (const token of previousTokens) {
-        removeToken(token, id);
-      }
-      noteTokens.delete(id);
-    }
-    notesById.delete(id);
-  }
+  const context = vm.createContext({
+    self: selfMock,
+    console,
+    Date,
+    Math,
+    Map,
+    Set,
+    Array,
+    String,
+    Boolean,
+    Object,
+  });
 
-  function search(query) {
-    const queryTokens = tokenize(query);
-    if (queryTokens.length === 0) return [];
-    let candidateIds = null;
-    for (const token of queryTokens) {
-      const ids = tokenIndex.get(token) || new Set();
-      if (candidateIds === null) {
-        candidateIds = new Set(ids);
-      } else {
-        for (const id of candidateIds) {
-          if (!ids.has(id)) candidateIds.delete(id);
+  vm.runInContext(workerCode, context);
+
+  let sequence = 0;
+  function send(type, payload) {
+    return new Promise((resolve, reject) => {
+      const id = ++sequence;
+      pendingRequests.set(id, (response) => {
+        if (response.ok) {
+          resolve(response.result);
+        } else {
+          reject(new Error(response.error || "Worker message failed"));
         }
-      }
-    }
-    return Array.from(candidateIds || []).map((id) => notesById.get(id));
+      });
+      selfMock.onmessage({ data: { id, type, payload } });
+    });
   }
 
   return {
-    notesById,
-    tokenIndex,
-    noteTokens,
-    upsertNote,
-    deleteNote,
-    search,
+    rebuild: (notes) => send("rebuild", { notes }),
+    upsert: (note) => send("upsert", { note }),
+    remove: (id) => send("remove", { id }),
+    query: (query) => send("query", { query }),
+    inspectState: () => ({
+      notesCount: vm.runInContext("notesById.size", context),
+      tokenCount: vm.runInContext("tokenIndex.size", context),
+      noteTokensCount: vm.runInContext("noteTokens.size", context),
+    }),
   };
 }
 
@@ -111,83 +97,122 @@ function generateSyntheticNotes(count) {
     notes.push({
       id: `note-${i}`,
       title: `Japanese grammar pattern ${i % 50} vocabulary item ${i % 20}`,
-      content: `Contextual notes on particle usage and kanji stroke order for lesson ${i}. Tags: review, daily. [[reference-${i % 10}]]`,
-      tags: ["japanese", "grammar", `n${(i % 5) + 1}`],
+      content: `Contextual notes on particle usage and kanji stroke order for lesson ${i}. Tags: review, daily. [[reference-${i % 100}]]`,
+      tags: ["japanese", `grammar-${i % 10}`, `n${(i % 5) + 1}`],
+      links: [`reference-${i % 100}`],
+      pinned: i % 25 === 0,
+      archived: i % 100 === 0,
       updatedAt: new Date(Date.now() - i * 1000).toISOString(),
     });
   }
   return notes;
 }
 
-test("search index rebuild and query latency satisfy performance budget tripwires", () => {
-  const index = createSearchIndex();
-  const dataset10k = generateSyntheticNotes(10000);
+test("production search worker indexing and query latency satisfy performance budget tripwires across 1k and 10k datasets", async () => {
+  const worker = createProductionSearchWorker();
 
-  // 1. Index 10,000 notes
-  const t0 = performance.now();
-  for (const note of dataset10k) {
-    index.upsertNote(note);
-  }
-  const indexDuration = performance.now() - t0;
-  assert.ok(
-    indexDuration < PERFORMANCE_BUDGET.maxSearch10kIndexMs,
-    `10k note indexing took ${indexDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxSearch10kIndexMs}ms)`
-  );
-  assert.equal(index.notesById.size, 10000);
-
-  // 2. Query latency tripwire (50 query samples across multiple query types)
   const queries = [
-    "grammar",
+    "grammar-1",
     "particle",
     "kanji",
     "lesson 42",
     "vocabulary 5",
-    "tag:japanese",
     "tag:n1",
+    "is:pinned",
     "nonexistent",
   ];
 
-  // Warm-up query
-  index.search("warmup query");
+  // 1. Medium dataset (1,000 notes)
+  const dataset1k = generateSyntheticNotes(1000);
+  const t0 = performance.now();
+  await worker.rebuild(dataset1k);
+  const index1kDuration = performance.now() - t0;
+  assert.ok(
+    index1kDuration < PERFORMANCE_BUDGET.maxMedium1kIndexMs,
+    `Production 1k note indexing took ${index1kDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxMedium1kIndexMs}ms)`
+  );
 
-  const queryDurations = [];
+  // Warm-up query pass
+  for (const q of queries) {
+    await worker.query(q);
+  }
+
+  const query1kDurations = [];
   for (let i = 0; i < 50; i++) {
     const q = queries[i % queries.length];
     const q0 = performance.now();
-    const results = index.search(q);
-    const qDuration = performance.now() - q0;
-    queryDurations.push(qDuration);
+    const results = await worker.query(q);
+    query1kDurations.push(performance.now() - q0);
     assert.ok(Array.isArray(results));
   }
 
-  queryDurations.sort((a, b) => a - b);
-  const median = queryDurations[Math.floor(queryDurations.length * 0.5)];
-  const p95 = queryDurations[Math.floor(queryDurations.length * 0.95)];
+  query1kDurations.sort((a, b) => a - b);
+  const median1k = query1kDurations[Math.floor(query1kDurations.length * 0.5)];
+  const p95_1k = query1kDurations[Math.floor(query1kDurations.length * 0.95)];
 
   assert.ok(
-    median < PERFORMANCE_BUDGET.maxSearchQueryMedianMs,
-    `Median query latency ${median.toFixed(3)}ms exceeded budget (< ${PERFORMANCE_BUDGET.maxSearchQueryMedianMs}ms)`
+    median1k < PERFORMANCE_BUDGET.maxMediumSearchQueryMedianMs,
+    `1k medium dataset median query latency ${median1k.toFixed(3)}ms exceeded budget (< ${PERFORMANCE_BUDGET.maxMediumSearchQueryMedianMs}ms)`
   );
   assert.ok(
-    p95 < PERFORMANCE_BUDGET.maxSearchQueryP95Ms,
-    `p95 query latency ${p95.toFixed(3)}ms exceeded budget (< ${PERFORMANCE_BUDGET.maxSearchQueryP95Ms}ms)`
+    p95_1k < PERFORMANCE_BUDGET.maxMediumSearchQueryP95Ms,
+    `1k medium dataset p95 query latency ${p95_1k.toFixed(3)}ms exceeded budget (< ${PERFORMANCE_BUDGET.maxMediumSearchQueryP95Ms}ms)`
   );
 
-  // 3. Token memory cleanup invariant
-  const initialTokenCount = index.tokenIndex.size;
-  assert.ok(initialTokenCount > 0);
+  // 2. Large stress dataset (10,000 notes)
+  const dataset10k = generateSyntheticNotes(10000);
+  const t1 = performance.now();
+  await worker.rebuild(dataset10k);
+  const index10kDuration = performance.now() - t1;
 
-  // Delete all notes
-  for (let i = 0; i < 10000; i++) {
-    index.deleteNote(`note-${i}`);
+  assert.ok(
+    index10kDuration < PERFORMANCE_BUDGET.maxLarge10kIndexMs,
+    `Production 10k note indexing took ${index10kDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxLarge10kIndexMs}ms)`
+  );
+
+  // Warm-up query pass on 10k index
+  for (const q of queries) {
+    await worker.query(q);
   }
-  assert.equal(index.notesById.size, 0);
-  assert.equal(index.noteTokens.size, 0);
-  assert.equal(index.tokenIndex.size, 0, "All tokens must be purged from tokenIndex when notes are deleted");
+
+  const query10kDurations = [];
+  for (let i = 0; i < 50; i++) {
+    const q = queries[i % queries.length];
+    const q0 = performance.now();
+    const results = await worker.query(q);
+    query10kDurations.push(performance.now() - q0);
+    assert.ok(Array.isArray(results));
+  }
+
+  query10kDurations.sort((a, b) => a - b);
+  const median10k = query10kDurations[Math.floor(query10kDurations.length * 0.5)];
+  const p95_10k = query10kDurations[Math.floor(query10kDurations.length * 0.95)];
+
+  assert.ok(
+    median10k < PERFORMANCE_BUDGET.maxLargeSearchQueryMedianMs,
+    `10k large dataset median query latency ${median10k.toFixed(3)}ms exceeded budget (< ${PERFORMANCE_BUDGET.maxLargeSearchQueryMedianMs}ms)`
+  );
+  assert.ok(
+    p95_10k < PERFORMANCE_BUDGET.maxLargeSearchQueryP95Ms,
+    `10k large dataset p95 query latency ${p95_10k.toFixed(3)}ms exceeded budget (< ${PERFORMANCE_BUDGET.maxLargeSearchQueryP95Ms}ms)`
+  );
+
+  // 3. Production Search Worker: Token memory cleanup invariant upon note deletion
+  for (let i = 0; i < 10000; i++) {
+    await worker.remove(`note-${i}`);
+  }
+
+  const queryAfterDeletion = await worker.query("grammar-1");
+  assert.equal(queryAfterDeletion.length, 0);
+
+  const stateAfterDeletion = worker.inspectState();
+  assert.equal(stateAfterDeletion.notesCount, 0, "All notes must be removed from production notesById Map");
+  assert.equal(stateAfterDeletion.noteTokensCount, 0, "All note token sets must be removed from noteTokens Map");
+  assert.equal(stateAfterDeletion.tokenCount, 0, "All tokens must be purged from production tokenIndex Map");
 });
 
 test("Japanese V2 card compiler and scheduler adapter throughput meet release budget", () => {
-  // 1. Compile 1,000 items (2,000 cards)
+  // 1. Compile 1,000 items (2,000 cards) via production compileLearningItem
   const t0 = performance.now();
   const compiledCards = [];
   for (let i = 0; i < 1000; i++) {
@@ -209,7 +234,7 @@ test("Japanese V2 card compiler and scheduler adapter throughput meet release bu
     `Compiling 1,000 items took ${compileDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max1kCardCompileMs}ms)`
   );
 
-  // 2. Schedule 2,000 cards
+  // 2. Schedule 2,000 cards via production schedule adapter
   const t1 = performance.now();
   const now = new Date().toISOString();
   for (const card of compiledCards) {
@@ -222,8 +247,10 @@ test("Japanese V2 card compiler and scheduler adapter throughput meet release bu
       elapsedDays: 0,
       scheduledDays: 0,
     };
-    const { nextState } = schedule(state, { grade: "good", reviewedAt: now }, now);
+    const { nextState, log } = schedule(state, { grade: "good", reviewedAt: now }, now);
     assert.equal(nextState.state, "review");
+    assert.equal(log.stateBefore, "new");
+    assert.equal(log.stateAfter, "review");
   }
   const scheduleDuration = performance.now() - t1;
   assert.ok(
@@ -232,7 +259,7 @@ test("Japanese V2 card compiler and scheduler adapter throughput meet release bu
   );
 });
 
-test("autosave scheduling and flush settle within latency budget", async () => {
+test("deterministic autosave flush execution budget settles within latency tripwire", async () => {
   let saveCount = 0;
   const mockScheduler = {
     setTimeout(cb) {
@@ -263,8 +290,8 @@ test("autosave scheduling and flush settle within latency budget", async () => {
   const autosaveDuration = performance.now() - t0;
   assert.equal(saveCount, 20);
   assert.ok(
-    autosaveDuration < PERFORMANCE_BUDGET.maxAutosaveMs,
-    `20 autosave cycles took ${autosaveDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxAutosaveMs}ms)`
+    autosaveDuration < PERFORMANCE_BUDGET.maxAutosaveFlushExecutionMs,
+    `20 autosave flush cycles took ${autosaveDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxAutosaveFlushExecutionMs}ms)`
   );
 });
 
