@@ -1,3 +1,4 @@
+import { validateKanjiLearningItem, validateVocabularyLearningItem } from "./japaneseLearningItem.js";
 import {
   STORE_LEARNING_ITEMS,
   STORE_CARDS,
@@ -26,6 +27,22 @@ function transactionDone(transaction) {
   });
 }
 
+
+export function validateLearningItem(item) {
+  if (!item || !item.id) {
+    throw new Error("Invalid learning item: missing id");
+  }
+  
+  if (item.type === "kanji") {
+    return validateKanjiLearningItem(item);
+  } else if (item.type === "vocabulary") {
+    return validateVocabularyLearningItem(item);
+  }
+  
+  // Generic/legacy items bypass type-specific validation
+  return item;
+}
+
 export async function saveLearningItemWithCards(db, learningItem, cards, reviewStates) {
   // Enforce referential integrity
   for (const card of cards) {
@@ -45,7 +62,7 @@ export async function saveLearningItemWithCards(db, learningItem, cards, reviewS
   const tx = db.transaction([STORE_LEARNING_ITEMS, STORE_CARDS, STORE_REVIEW_STATES], "readwrite");
   const done = transactionDone(tx);
 
-  tx.objectStore(STORE_LEARNING_ITEMS).put(learningItem);
+  tx.objectStore(STORE_LEARNING_ITEMS).put(validateLearningItem(learningItem));
   
   const cardStore = tx.objectStore(STORE_CARDS);
   for (const card of cards) {

@@ -1,4 +1,27 @@
+import { validateKanjiLearningItem, validateVocabularyLearningItem } from "./japaneseLearningItem.js";
+
 export function compileLearningItem(item, existingCards = [], existingStates = []) {
+  if (item.type === "kanji") {
+    return compileKanjiCards(item, existingCards, existingStates);
+  } else if (item.type === "vocabulary") {
+    return compileVocabularyCards(item, existingCards, existingStates);
+  } else {
+    // Fallback to generic compilation if type is omitted (for backward compatibility during transition)
+    return compileGenericCards(item, existingCards, existingStates);
+  }
+}
+
+export function compileKanjiCards(item, existingCards = [], existingStates = []) {
+  validateKanjiLearningItem(item);
+  return compileGenericCards(item, existingCards, existingStates);
+}
+
+export function compileVocabularyCards(item, existingCards = [], existingStates = []) {
+  validateVocabularyLearningItem(item);
+  return compileGenericCards(item, existingCards, existingStates);
+}
+
+function compileGenericCards(item, existingCards = [], existingStates = []) {
   const now = new Date().toISOString();
   
   // Enforce boundary: existing cards must belong to this item
@@ -18,7 +41,7 @@ export function compileLearningItem(item, existingCards = [], existingStates = [
   const generatedStates = [];
 
   // Generate or preserve cards for active skills
-  for (const skill of item.skills) {
+  for (const skill of (item.skills || [])) {
     const key = `${item.id}:${skill}`;
     let card = cardsBySkill.get(key);
     let state = existingStates.find(s => s.cardId === card?.id);
