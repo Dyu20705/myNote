@@ -8,35 +8,68 @@ All milestone delivery goals across M0 (Governance), M1 (Reliable Core), M2 (Des
 
 ### Key Metrics Summary
 
-| Area | Measured Baseline | Target Budget (`docs/PERFORMANCE_BUDGET.md`) | Status |
-|---|---|---|---|
-| **Production Runtime Payload** | **389.58 KiB** (total uncompressed) | `< 2,048 KiB` | **PASS (Exceeds budget)** |
-| **Production External Dependencies** | **0 dependencies** (100% pure ES modules) | `0 runtime dependencies` | **PASS (Zero supply chain risk)** |
-| **Network Isolation** | **100% offline-first / local-only** | No remote telemetry/CDNs | **PASS** |
-| **Worker Search Query (100 notes)** | Median: `0.026 ms`, p95: `0.146 ms` | `< 20 ms` | **PASS** |
-| **Worker Search Query (1,000 notes)** | Median: `0.152 ms`, p95: `0.342 ms` | `< 20 ms` | **PASS** |
-| **Worker Search Query (10,000 notes)**| Median: `1.573 ms`, p95: `2.453 ms` | `< 20 ms` | **PASS (12x faster than budget)** |
-| **Search Rebuild / Indexing Throughput** | `0.018 – 0.030 ms` per note (`40,000+ notes/sec`) | Bounded | **PASS** |
-| **Kanji Max Drawing Codec Serialization** | Median: `54.3 ms` (sample range `52.3 – 59.0 ms`) | `< 1,000 ms` | **PASS (18x faster than budget)** |
-| **Kanji Note Context Load (65 entries)** | Median: `5.45 ms` (sample range `4.6 – 6.3 ms`) | `< 2,000 ms` | **PASS (360x faster than budget)** |
-| **Kanji Preview Projection (64 drawings)** | `155 ms` | `< 5,000 ms` | **PASS (32x faster than budget)** |
-| **V2 Card Compilation** | `0.021 ms` per item (`47,000+ items/sec`) | Bounded | **PASS** |
-| **Scheduler State Calculation** | `0.005 ms` per card (`200,000+ cards/sec`) | Bounded | **PASS** |
-| **Repository Verification Gate** | 100% PASS (1 content, 239 unit, 100 integration, 117 E2E) | All suites green | **PASS** |
+| Area | Measured Baseline | Target Budget (`docs/PERFORMANCE_BUDGET.md`) | Evidence Type | Status |
+|---|---|---|---|---|
+| **Production Runtime Payload** | **389.58 KiB** (total uncompressed) | `< 2,048 KiB` | Static | **PASS (Exceeds budget)** |
+| **Production External Dependencies** | **0 dependencies** (100% pure ES modules) | `0 runtime dependencies` | Static | **PASS (Zero supply chain risk)** |
+| **Network Isolation** | **Local-only execution** (0 outbound network calls in production) | Local-first; no remote telemetry/CDNs | Static / Runtime-observed | **PASS** |
+| **Worker Search Query (100 notes)** | Median: `0.026 ms`, p95: `0.146 ms` | `< 20 ms` | Measured | **PASS** |
+| **Worker Search Query (1,000 notes)** | Median: `0.152 ms`, p95: `0.342 ms` | `< 20 ms` | Measured | **PASS** |
+| **Worker Search Query (10,000 notes)**| Median: `1.573 ms`, p95: `2.453 ms` | `< 20 ms` | Measured | **PASS (12x faster than budget)** |
+| **Search Rebuild / Indexing Throughput** | `0.018 – 0.030 ms` per note (`40,000+ notes/sec`) | Bounded | Measured | **PASS** |
+| **Kanji Max Drawing Codec Serialization** | Median: `54.3 ms` (sample range `52.3 – 59.0 ms`) | `< 1,000 ms` | Measured | **PASS (18x faster than budget)** |
+| **Kanji Note Context Load (65 entries)** | Median: `5.45 ms` (sample range `4.6 – 6.3 ms`) | `< 2,000 ms` | Measured | **PASS (360x faster than budget)** |
+| **Kanji Preview Projection (64 drawings)** | `155 ms` | `< 5,000 ms` | Measured | **PASS (32x faster than budget)** |
+| **V2 Card Compilation** | `0.021 ms` per item (`47,000+ items/sec`) | Bounded | Measured | **PASS** |
+| **Scheduler State Calculation** | `0.005 ms` per card (`200,000+ cards/sec`) | Bounded | Measured | **PASS** |
+| **Repository Verification Gate** | 100% PASS (1 content, 239 unit, 100 integration, 117 E2E) | All suites green | Runtime-observed | **PASS** |
 
 ---
 
-## 2. Target Identification & Environment
+## 2. Evidence Methodology & Classification
+
+To ensure rigorous audit quality, all statements and data points are classified into four distinct evidentiary tiers:
+
+1. **Measured Evidence**: Empirical timings and resource counters captured via reproducible execution with declared sampling, warm-up iterations, and statistical derivation.
+2. **Static Evidence**: Direct properties derived from codebase inspection (e.g. asset byte counts, AST analysis of API calls, zero production `dependencies` in `package.json`).
+3. **Runtime-Observed Evidence**: Behavior verified during test suite execution in target runtime environments (Node.js test runner and Playwright headless Chromium).
+4. **Inference**: Architectural and scaling conclusions derived from combining measured performance and structural design constraints.
+
+### Benchmark Protocol & Reproducibility Specifications
+
+- **Environment**:
+  - Operating System: Linux x86_64 (kernel 6.6.x)
+  - JavaScript Runtime: Node.js `v24.18.1`
+  - Browser Engine: Playwright `1.62.0` (Chromium headless)
+  - Base Commit: `8220cd74222a92dae8d6e6118b71174669b3b05c` on branch `dev`
+- **Search Worker Benchmark**:
+  - Datasets: Synthetic collections of 100, 1,000, and 10,000 notes with mixed Japanese and English content, tags, and timestamps.
+  - Queries: 50 sequential query runs over 6 query archetypes (single token, multi-token, tag filter, metadata filter, prefix, non-matching).
+  - Warm-up: 1 unmeasured complete query cycle prior to recording.
+  - Statistics: `median = sorted[floor(N * 0.5)]`, `p95 = sorted[floor(N * 0.95)]`.
+- **Kanji Resource Benchmark**:
+  - Test Target: `tests/e2e/kanji-resource.spec.mjs`.
+  - Max Drawing Shape: 32 strokes, 256 points per stroke (4,096 total points).
+  - Sampling: 1 combined warm-up pass + 5 timed serialization passes.
+  - Context Load: 65 valid minimal V2 entries measured across 2 synchronization calls.
+  - Preview Projection: 64 concurrent drawing projection previews rendered in the DOM overlay.
+- **Card Compiler & Scheduler Adapter Benchmark**:
+  - Compiler: 1,000 vocabulary items generating 2,000 cards via `compileLearningItem()`.
+  - Scheduler: 2,000 state transitions evaluated via `schedule()`.
+  - Warm-up: 1 unmeasured warm-up cycle.
+
+---
+
+## 3. Target Identification & Environment
 
 - **Repository**: `https://github.com/Dyu20705/myNote`
 - **Target `dev` Base Commit SHA**: `8220cd74222a92dae8d6e6118b71174669b3b05c`
 - **Audit Branch**: `issue/118-optimization-audit`
-- **Runtime Environment**: Node.js `v24.18.1`, Linux x86_64, Chromium headless (Playwright `1.62.0`)
 - **Governing Issues**: #93 (Post-build optimization parent), #118 (Post-build audit package), #20 (MVP delivery roadmap)
 
 ---
 
-## 3. Architecture & Ownership Mapping
+## 4. Architecture & Ownership Mapping
 
 The repository adheres strictly to the canonical architectural direction:
 ```text
@@ -58,11 +91,11 @@ UI → Actions → State → Core → Persistence
 
 ---
 
-## 4. Performance & Scale Benchmark Evidence
+## 5. Performance & Scale Benchmark Evidence
 
-### 4.1. Static Runtime Payload & Distribution
+### 5.1. Static Runtime Payload & Distribution
 
-Total uncompressed runtime payload across the entire application is **389.58 KiB**:
+*(Static Evidence)* Total uncompressed runtime payload across the entire application is **389.58 KiB**:
 
 ```text
 index.html:                           16.55 KiB
@@ -79,9 +112,9 @@ Web Worker (search.worker.js):         7.47 KiB
 TOTAL RUNTIME PAYLOAD:               389.58 KiB
 ```
 
-### 4.2. Worker Search Indexing & Query Latency
+### 5.2. Worker Search Indexing & Query Latency
 
-Benchmarked across 3 dataset sizes (50 representative queries per scale):
+*(Measured Evidence)* Benchmarked across 3 dataset sizes (50 representative queries per scale):
 
 | Dataset Scale | Rebuild / Indexing Time | Per-Note Index Rate | Query Median Latency | Query p95 Latency | Budget Target |
 |---|---|---|---|---|---|
@@ -89,9 +122,9 @@ Benchmarked across 3 dataset sizes (50 representative queries per scale):
 | **1,000 notes** | `18.36 ms` | `0.018 ms/note` | `0.152 ms` | `0.342 ms` | `< 20 ms` |
 | **10,000 notes** | `228.95 ms` | `0.023 ms/note` | `1.573 ms` | `2.453 ms` | `< 20 ms` |
 
-### 4.3. Kanji Saved-Grid Drawing Resource Evidence
+### 5.3. Kanji Saved-Grid Drawing Resource Evidence
 
-Measured via Playwright test runner against `tests/e2e/kanji-resource.spec.mjs`:
+*(Measured Evidence)* Captured via Playwright test runner against `tests/e2e/kanji-resource.spec.mjs`:
 
 - **Maximum V2 Drawing Codec Serialization** (32 strokes, 4,096 points):
   - Sample measurements: `[54.3, 59.0, 55.7, 52.7, 52.3] ms`
@@ -102,7 +135,9 @@ Measured via Playwright test runner against `tests/e2e/kanji-resource.spec.mjs`:
 - **Saved-Drawing Projection Preview Rendering** (64 previews rendered simultaneously):
   - Measured duration: `155 ms` (Budget: `< 5,000 ms` — **32x headroom**)
 
-### 4.4. Japanese V2 Card Compiler & Scheduler Adapter Throughput
+### 5.4. Japanese V2 Card Compiler & Scheduler Adapter Throughput
+
+*(Measured Evidence)*:
 
 - **Card Compilation** (1,000 vocabulary items generating 2,000 cards):
   - Total duration: `20.90 ms` (`0.021 ms` per item / ~47,800 items/sec)
@@ -111,35 +146,35 @@ Measured via Playwright test runner against `tests/e2e/kanji-resource.spec.mjs`:
 
 ---
 
-## 5. Reliability, Security, and Dependency Audit
+## 6. Reliability, Security, and Dependency Audit
 
-1. **Supply Chain Risk**:
+1. **Supply Chain Risk** *(Static Evidence)*:
    - Zero runtime production dependencies (`"dependencies": {}`).
    - Development dependencies are strictly limited to testing (`eslint`, `@playwright/test`, `fake-indexeddb`).
-2. **Network Isolation**:
-   - Zero outbound or inbound network connections during runtime execution.
-   - All persistence, parsing, search indexing, and scheduling occur locally in-browser via IndexedDB and Web Workers.
-3. **Data Safety & Rollback Invariants**:
+2. **Network Isolation** *(Static & Runtime-Observed Evidence)*:
+   - Static inspection confirms zero usage of `fetch()`, `XMLHttpRequest`, `WebSocket`, or external telemetry endpoints in production files (`app.js`, `japaneseApp.js`, `core/`, `ui/`).
+   - Local-first architecture executes entirely in-browser against IndexedDB and Web Workers without remote CDN dependencies.
+3. **Data Safety & Rollback Invariants** *(Runtime-Observed Evidence)*:
    - Non-destructive V1 migration: original V1 records in `studyReviews` are preserved.
    - Atomic transactions: multi-store mutations commit or abort atomically via IndexedDB transactions.
    - Export/Import integrity: schema version, entity IDs, and referential relations (`Card → Item`, `ReviewState → Card`, `ReviewLog → Card`, `StudyArtifact → Note`) are validated before any write occurs.
 
 ---
 
-## 6. Classified Findings and Action Plan
+## 7. Classified Findings and Action Plan
 
-| Finding ID | Domain | Description | Severity | Classification | Rationale / Mitigation |
-|---|---|---|---|---|---|
-| **F-01** | Scale / Search | Search worker rebuild on dataset update | P3 | `retain` | Rebuilding 10,000 notes takes only 228 ms; incremental updates already handle normal note edits without full rebuilds. |
-| **F-02** | UI / List | List virtualization boundary at 500 notes | P3 | `retain` | DOM virtualization kicks in at 500 notes (`ui/list.js`), keeping memory and frame rates stable. |
-| **F-03** | Storage | IndexedDB transaction concurrency across tabs | P3 | `retain` | Database version upgrade handling (`DATABASE_UPGRADE_BLOCKED` error) and defensive copies prevent corruption. |
-| **F-04** | Security | DevDependency `brace-expansion` vulnerability | P3 | `retain` (tooling-only) | Development tooling only; does not touch production bundle or runtime code. |
-| **F-05** | Benchmark | Checked-in automated performance tripwires in CI | P2 | `optimize` / `retain` | Current E2E suite (`kanji-resource.spec.mjs`) already includes assertions on duration limits. Additional tripwires can be added incrementally. |
+| Finding ID | Domain | Description | Severity | Classification | Rationale / Mitigation | Evidence Type |
+|---|---|---|---|---|---|---|
+| **F-01** | Scale / Search | Search worker rebuild on full dataset update | P3 | `retain` | Rebuilding 10,000 notes takes only 228 ms; incremental updates already handle normal note edits without full rebuilds. | Measured |
+| **F-02** | UI / List | List virtualization boundary at 500 notes | P3 | `retain` | DOM virtualization kicks in at 500 notes (`ui/list.js`), keeping memory and frame rates stable. | Static / Runtime-observed |
+| **F-03** | Storage | IndexedDB transaction concurrency across tabs | P3 | `retain` | Database version upgrade handling (`DATABASE_UPGRADE_BLOCKED` error) and defensive copies prevent corruption. | Runtime-observed |
+| **F-04** | Security | DevDependency `brace-expansion` vulnerability | P3 | `retain` (tooling-only) | Development tooling only; does not touch production bundle or runtime code. | Static |
+| **F-05** | Benchmark | Checked-in automated performance tripwires in CI | P2 | `optimize` / `retain` | Current E2E suite (`kanji-resource.spec.mjs`) already includes assertions on duration limits. Additional tripwires can be added incrementally. | Measured |
 
 ---
 
-## 7. Recommendations for Milestone M4 Progression
+## 8. Recommendations for Milestone M4 Progression
 
-1. **Maintain Architectural Simplicity**: The current zero-dependency, pure ES module architecture has proven to deliver performance well exceeding all defined budgets (e.g. search query latency is 12x faster than target at 10,000 notes).
-2. **No Speculative Framework Rewrites**: Avoid introducing virtual DOM frameworks, WebAssembly, or complex state managers that would increase bundle size and complexity without meaningful real-world latency gains.
-3. **Gate Status**: Milestone M3 is complete and verified. Milestone M4 audit is established.
+1. **Maintain Architectural Simplicity** *(Inference)*: The current zero-dependency, pure ES module architecture delivers performance well exceeding all defined budgets (e.g. search query latency is 12x faster than target at 10,000 notes).
+2. **No Speculative Framework Rewrites** *(Inference)*: Virtual DOM frameworks, WebAssembly, or complex state managers would increase bundle size and complexity without providing meaningful real-world latency gains.
+3. **Gate Status**: Milestone M3 is complete and verified. Milestone M4 baseline audit is established.
