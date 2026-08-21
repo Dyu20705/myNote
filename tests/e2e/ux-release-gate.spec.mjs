@@ -6,7 +6,7 @@ import {
   openJapaneseReview,
 } from "./japanese-helpers.mjs";
 
-const APP_ORIGIN = "http://127.0.0.1:4173";
+const APP_ORIGIN = "http://127.0.0.1:4180";
 const DEFERRED_DESTINATIONS = ["Reminders", "Labels", "Trash"];
 const FORBIDDEN_COMMAND_IDS = /^(?:reminders?|labels?|trash|analytics|attachments?|formatting|recognition|candidates?|(?:remote[.-]?)?models?|rich[.-]?format(?:ting)?|handwriting[.-]?recognition)(?:[.-]|$)/i;
 const FORBIDDEN_HEALTHY_CONTROL_FAMILY = /\b(?:recognition|recognize|candidates?|remote[-\s]?model|analytics?|reminders?|labels?(?:[-\s]?(?:management|manager))?|trash|attachments?|rich[-\s]?(?:format|formatting)|handwriting[-\s]?recognition)\b/i;

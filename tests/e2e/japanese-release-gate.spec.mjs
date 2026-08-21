@@ -300,12 +300,20 @@ test("Markdown and JSON exports retain Japanese note content while scheduling me
 
   const jsonDownload = await runCommand(page, "Export all as JSON");
   const exportedJson = JSON.parse(await downloadText(jsonDownload));
-  const exportedNote = exportedJson.find((note) => note.id === activeId);
+  const exportedNote = exportedJson.notes.find((note) => note.id === activeId);
   expect(exportedNote.title).toBe(title);
   expect(exportedNote.content).toBe(content);
   expect(exportedNote).not.toHaveProperty("notebookType");
   expect(exportedNote).not.toHaveProperty("nextReviewAt");
   expect(exportedNote).not.toHaveProperty("ease");
+  
+  // Verify V2 structures are exported
+  expect(exportedJson).toHaveProperty("schemaVersion");
+  expect(exportedJson.learningItems).toBeInstanceOf(Array);
+  expect(exportedJson.cards).toBeInstanceOf(Array);
+  expect(exportedJson.reviewStates).toBeInstanceOf(Array);
+  expect(exportedJson.reviewLogs).toBeInstanceOf(Array);
+  expect(exportedJson.studyArtifacts).toBeInstanceOf(Array);
 
   const markdownDownload = await runCommand(page, "Export all as Markdown");
   const exportedMarkdown = await downloadText(markdownDownload);

@@ -3,7 +3,9 @@ import {
   STORE_LEARNING_ITEMS,
   STORE_CARDS,
   STORE_REVIEW_STATES,
-  STORE_REVIEW_LOGS
+  STORE_REVIEW_LOGS,
+  STORE_STUDY_REVIEWS,
+  STORE_STUDY_ARTIFACTS
 } from "./storage.js";
 
 function requestResult(request) {
@@ -159,4 +161,112 @@ export async function commitReviewTransaction(db, nextState, reviewLog) {
   tx.objectStore(STORE_REVIEW_LOGS).add(reviewLog);
 
   await done;
+}
+
+export async function migrateV1ReviewsToV2(db) {
+  if (globalThis.localStorage?.getItem("myNote-japanese-v2-migrated") === "true") {
+    return { migratedCount: 0 };
+  }
+
+  const tx = db.transaction([
+    STORE_STUDY_REVIEWS,
+    STORE_STUDY_ARTIFACTS,
+    STORE_LEARNING_ITEMS,
+    STORE_CARDS,
+    STORE_REVIEW_STATES,
+    STORE_REVIEW_LOGS
+  ], "readwrite");
+
+  const reviews = await requestResult(tx.objectStore(STORE_STUDY_REVIEWS).getAll());
+  if (reviews.length === 0) {
+    if (globalThis.localStorage) {
+      globalThis.localStorage.setItem("myNote-japanese-v2-migrated", "true");
+    }
+    return { migratedCount: 0 };
+  }
+
+  let migratedCount = 0;
+  const now = new Date().toISOString();
+
+  for (const review of reviews) {
+    if (review.notebookType === "output" || review.notebookType === "planner") {
+      const artifact = {
+        id: crypto.randomUUID(),
+        noteId: review.noteId,
+        type: review.notebookType,
+        createdAt: now,
+        updatedAt: now
+      };
+      tx.objectStore(STORE_STUDY_ARTIFACTS).put(artifact);
+    } else {
+      const itemId = crypto.randomUUID();
+      const cardId = crypto.randomUUID();
+
+      const learningItem = {
+        id: itemId,
+        type: "legacy",
+        content: { originalType: review.notebookType },
+        skills: ["legacy"],
+        sourceRefs: [{ type: "note", id: review.noteId }],
+        status: review.status === "suspended" ? "archived" : "active",
+        createdAt: now,
+        updatedAt: now
+      };
+
+      const card = {
+        id: cardId,
+        itemId: itemId,
+        skill: "legacy",
+        status: review.status === "suspended" ? "suspended" : "active",
+        createdAt: now,
+        updatedAt: now
+      };
+
+      const reviewState = {
+        cardId: cardId,
+        state: review.status === "suspended" ? "review" : review.status,
+        due: review.nextReviewAt || now,
+        reps: 0,
+        lapses: 0,
+        elapsedDays: 0,
+        scheduledDays: review.interval || 0,
+        lastReviewAt: review.lastReviewedAt || undefined,
+        scheduler: "legacy-sm2",
+        schedulerVersion: "1.0",
+        updatedAt: now
+      };
+
+      const reviewLog = {
+        id: crypto.randomUUID(),
+        cardId: cardId,
+        grade: "good",
+        reviewedAt: now,
+        stateBefore: "new",
+        stateAfter: reviewState.state,
+        elapsedDays: 0,
+        scheduledDays: review.interval || 0,
+        scheduler: "legacy-sm2",
+        schedulerVersion: "1.0",
+        source: "migration",
+        migrationQuality: "heuristic"
+      };
+
+      tx.objectStore(STORE_LEARNING_ITEMS).put(learningItem);
+      tx.objectStore(STORE_CARDS).put(card);
+      tx.objectStore(STORE_REVIEW_STATES).put(reviewState);
+      tx.objectStore(STORE_REVIEW_LOGS).put(reviewLog);
+    }
+    // Do NOT delete the V1 record. This ensures rollback capability and keeps the legacy UI working.
+    migratedCount++;
+  }
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      if (globalThis.localStorage) {
+        globalThis.localStorage.setItem("myNote-japanese-v2-migrated", "true");
+      }
+      resolve({ migratedCount });
+    };
+    tx.onerror = () => reject(tx.error);
+  });
 }

@@ -3,7 +3,7 @@ import { validateStudyReview } from "./studyReview.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 export const STORE_NOTES = "notes";
 export const STORE_STUDY_REVIEWS = "studyReviews";
 export const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
@@ -11,6 +11,7 @@ export const STORE_LEARNING_ITEMS = "learningItems";
 export const STORE_CARDS = "cards";
 export const STORE_REVIEW_STATES = "reviewStates";
 export const STORE_REVIEW_LOGS = "reviewLogs";
+export const STORE_STUDY_ARTIFACTS = "studyArtifacts";
 const pendingDependentRestores = new WeakMap();
 
 function createMigrationOutcome(status, count, errorCode) {
@@ -162,6 +163,12 @@ export function openDatabase() {
           const store = db.createObjectStore(STORE_REVIEW_LOGS, { keyPath: "id" });
           store.createIndex("cardId_reviewedAt", ["cardId", "reviewedAt"]);
           store.createIndex("reviewedAt", "reviewedAt");
+        }
+      }
+      if (event.oldVersion < 5) {
+        if (!db.objectStoreNames.contains(STORE_STUDY_ARTIFACTS)) {
+          const store = db.createObjectStore(STORE_STUDY_ARTIFACTS, { keyPath: "id" });
+          store.createIndex("noteId", "noteId");
         }
       }
     };
@@ -622,4 +629,43 @@ export async function migrateLegacyStorageIfNeeded(db, normalizeNote) {
   }
   localStorage.removeItem(LEGACY_STORAGE_KEY);
   return createMigrationOutcome("migrated", result.migratedCount);
+}
+
+export async function exportDatabase(db) {
+  const notes = await listNotesFromDb(db);
+  const tx = db.transaction([
+    STORE_LEARNING_ITEMS,
+    STORE_CARDS,
+    STORE_REVIEW_STATES,
+    STORE_REVIEW_LOGS,
+    STORE_STUDY_ARTIFACTS,
+    STORE_KANJI_INK_ENTRIES
+  ], "readonly");
+  
+  const [
+    learningItems,
+    cards,
+    reviewStates,
+    reviewLogs,
+    studyArtifacts,
+    kanjiInkEntries
+  ] = await Promise.all([
+    requestResult(tx.objectStore(STORE_LEARNING_ITEMS).getAll()),
+    requestResult(tx.objectStore(STORE_CARDS).getAll()),
+    requestResult(tx.objectStore(STORE_REVIEW_STATES).getAll()),
+    requestResult(tx.objectStore(STORE_REVIEW_LOGS).getAll()),
+    requestResult(tx.objectStore(STORE_STUDY_ARTIFACTS).getAll()),
+    requestResult(tx.objectStore(STORE_KANJI_INK_ENTRIES).getAll())
+  ]);
+
+  return {
+    schemaVersion: DB_VERSION,
+    notes,
+    learningItems,
+    cards,
+    reviewStates,
+    reviewLogs,
+    studyArtifacts,
+    kanjiInkEntries
+  };
 }

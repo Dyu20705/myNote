@@ -178,7 +178,7 @@ test("bounded drawing evidence validates maximum V2 shape, reloads note context,
   await expect(page.locator("#saveState")).toHaveText("Saved");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id, entryCount }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -364,7 +364,7 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   await expect(page.locator("#saveState")).toHaveText("Saved");
   const noteId = await page.locator(".note-item[aria-current='true']").getAttribute("data-id");
   await page.evaluate(async ({ noteId: id }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -414,7 +414,7 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   expect(await page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBeLessThanOrEqual(4);
 
   await page.evaluate(async () => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -431,7 +431,7 @@ test("preview layout observer ownership stays bounded across hidden synchronizat
   expect(await page.evaluate(() => globalThis.kanjiPreviewObserverCounts.activeTargets)).toBe(0);
 
   const destroyedSnapshot = await page.evaluate(async ({ noteId: id }) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 4);
+    const request = globalThis.indexedDB.open("myNoteDB", 5);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

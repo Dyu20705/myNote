@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const host = "127.0.0.1";
-const port = 4173;
+const port = 4180;
 const maximumAssetBytes = 1024 * 1024;
 const readyMessage = `Static server ready at http://${host}:${port}`;
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");

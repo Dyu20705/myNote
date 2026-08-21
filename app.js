@@ -19,12 +19,14 @@ import { createSearchClient } from "./core/searchClient.js";
 import { createStore } from "./core/state.js";
 import {
   deleteNoteFromDb,
+  exportDatabase,
   listNotesFromDb,
   migrateLegacyStorageIfNeeded,
   openDatabase,
   putNoteToDb,
   resetDatabase,
 } from "./core/storage.js";
+import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
 import { createJapaneseApp } from "./japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
@@ -747,8 +749,10 @@ function triggerDownload(blob, filename) {
   URL.revokeObjectURL(href);
 }
 
-function exportJson() {
-  const blob = new Blob([JSON.stringify(store.getState().notes, null, 2)], {
+async function exportJson() {
+  const db = store.getState().db;
+  const data = await exportDatabase(db);
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",
   });
   triggerDownload(blob, "myNote-export.json");
@@ -1257,6 +1261,7 @@ japaneseApp = createJapaneseApp({
 async function bootstrap() {
   const db = await openDatabase();
   await migrateLegacyStorageIfNeeded(db, normalizeNote);
+  await migrateV1ReviewsToV2(db);
   const loaded = (await listNotesFromDb(db))
     .map(normalizeNote)
     .filter(Boolean)
