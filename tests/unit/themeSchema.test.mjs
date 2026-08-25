@@ -234,6 +234,13 @@ test("Theme Schema Validator — deepFreeze utility creates immutable nested obj
   }, /Cannot assign to read only property/);
 });
 
+test("Theme Schema Validator — rejects prototype pollution attempts", () => {
+  const payload = JSON.parse('{"id":"custom-theme","version":1,"name":"Pollution Test","isDark":false,"colors":{"background":"#fff","surface":"#fff","surfaceHover":"#fff","textPrimary":"#000","textSecondary":"#000","textMuted":"#000","border":"#000","borderFocus":"#000","primary":"#000","primaryHover":"#000","accent":"#000","statusSuccess":"#000","statusWarning":"#000","statusError":"#000"},"typography":{"fontFamilyPrimary":"sans-serif","fontFamilyMono":"monospace","fontFamilyJapanese":"sans-serif","fontSizeBasePx":16,"lineHeight":1.5},"metrics":{"spacingUnitPx":8,"borderRadiusPx":4,"sidebarWidthPx":240,"overlayMaxWidthPx":800},"__proto__":{"polluted":true}}');
+  const validated = validateTheme(payload);
+  assert.equal(Object.prototype.polluted, undefined);
+  assert.equal(validated.polluted, undefined);
+});
+
 test("Theme Schema Validator — isolates hostile own getter mutations and provides defensive copy", () => {
   const rawTheme = JSON.parse(JSON.stringify(BUILTIN_THEMES["default-light"]));
   const validated = validateTheme(rawTheme);
