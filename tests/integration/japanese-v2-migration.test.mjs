@@ -267,7 +267,7 @@ describe("Export/Import round-trip", () => {
   function makeValidSnapshot() {
     const now = "2024-06-01T00:00:00.000Z";
     return {
-      schemaVersion: 5,
+      schemaVersion: 6,
       notes: [
         { id: "note-1", title: "Test", content: "", tags: [], createdAt: now, updatedAt: now, pinned: false, archived: false, version: 1 }
       ],
@@ -424,7 +424,7 @@ describe("Export/Import round-trip", () => {
 
   test("import with empty arrays succeeds", async () => {
     const snapshot = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       notes: [],
       learningItems: [],
       cards: [],
