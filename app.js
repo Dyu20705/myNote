@@ -32,6 +32,11 @@ import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
+import { createThemeSwitcher } from "./ui/themeSwitcher.js";
+import { applyThemeTokens } from "./core/theme/themeEngine.js";
+import { listThemes } from "./core/theme/themeStorage.js";
+import { BUILTIN_THEMES } from "./core/theme/themeSchema.js";
+import { getSettings, putSettings } from "./core/storage.js";
 import {
   presentApplicationRecoveryState,
   presentBoardState,
@@ -902,6 +907,7 @@ function commandContext(overrides = {}) {
   };
 }
 
+window.__EXECUTE_COMMAND__ = executeCommand;
 function executeCommand(id, overrides = {}) {
   return commandRegistry.execute(id, commandContext(overrides));
 }
@@ -924,6 +930,8 @@ palette = createPalette({
   getContext: commandContext,
 });
 
+let themeSwitcher = null;
+let appSettings = null;
 const unregisterApplicationCommands = [
   registerCommand({
     id: "palette.open",
@@ -1109,6 +1117,16 @@ const unregisterApplicationCommands = [
     run: () => exportJson(),
   }),
   registerCommand({
+    id: "theme.switch",
+    title: "Switch Theme",
+    description: "Change the application theme",
+    run: (context) => {
+      if (themeSwitcher) {
+        themeSwitcher.show();
+      }
+    },
+  }),
+  registerCommand({
     id: "recovery.reset",
     title: "Reset local database",
     description: "Clear local note data after explicit confirmation",
@@ -1262,6 +1280,29 @@ async function bootstrap() {
   const db = await openDatabase();
   await migrateLegacyStorageIfNeeded(db, normalizeNote);
   await migrateV1ReviewsToV2(db);
+  // Load settings and theme
+  appSettings = await getSettings(db, "app");
+  if (!appSettings) {
+    appSettings = { activeThemeId: "system", isCustomTheme: false };
+    await putSettings(db, "app", appSettings);
+  }
+
+  const allThemes = [...Object.values(BUILTIN_THEMES), ...(await listThemes(db))];
+  const activeTheme = allThemes.find(t => t.id === appSettings.activeThemeId) || BUILTIN_THEMES.system;
+
+  applyThemeTokens(activeTheme.tokens);
+
+  if (!themeSwitcher) {
+    themeSwitcher = createThemeSwitcher({
+      db,
+      onThemeChange: async (themeId, isCustom) => {
+        appSettings.activeThemeId = themeId;
+        appSettings.isCustomTheme = isCustom;
+        await putSettings(db, "app", appSettings);
+      }
+    });
+  }
+
   const loaded = (await listNotesFromDb(db))
     .map(normalizeNote)
     .filter(Boolean)
@@ -1343,6 +1384,7 @@ async function startApplication() {
 renderApplicationRecovery();
 runAction(() => startApplication());
 
+window.executeCommand = executeCommand;
 export const commandRuntime = Object.freeze({
   registry: commandRegistry,
   execute: executeCommand,

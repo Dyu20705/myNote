@@ -3,7 +3,7 @@ import { validateStudyReview } from "./studyReview.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 export const STORE_NOTES = "notes";
 export const STORE_STUDY_REVIEWS = "studyReviews";
 export const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
@@ -801,4 +801,32 @@ export async function importDatabase(db, snapshot) {
     await abortAndSettleTransaction(tx, done);
     throw error;
   }
+}
+
+export function getSettings(db, key) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction("settings", "readonly");
+      const store = transaction.objectStore("settings");
+      const request = store.get(key);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+export function putSettings(db, key, value) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction("settings", "readwrite");
+      const store = transaction.objectStore("settings");
+      const request = store.put(value, key);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
