@@ -1120,7 +1120,7 @@ const unregisterApplicationCommands = [
     id: "theme.switch",
     title: "Switch Theme",
     description: "Change the application theme",
-    run: (context) => {
+    run: () => {
       if (themeSwitcher) {
         themeSwitcher.show();
       }
