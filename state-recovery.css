@@ -29,6 +29,10 @@
 
 .application-recovery {
   display: flex;
+}
+
+.application-recovery[hidden] {
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: var(--mn-space-4);

@@ -1283,18 +1283,19 @@ async function bootstrap() {
   // Load settings and theme
   appSettings = await getSettings(db, "app");
   if (!appSettings) {
-    appSettings = { activeThemeId: "system", isCustomTheme: false };
+    appSettings = { activeThemeId: "default-light", isCustomTheme: false };
     await putSettings(db, "app", appSettings);
   }
 
   const allThemes = [...Object.values(BUILTIN_THEMES), ...(await listThemes(db))];
-  const activeTheme = allThemes.find(t => t.id === appSettings.activeThemeId) || BUILTIN_THEMES.system;
+  const activeTheme = allThemes.find(t => t.id === appSettings.activeThemeId) || BUILTIN_THEMES["default-light"];
 
-  applyThemeTokens(activeTheme.tokens);
+  applyThemeTokens({ colors: activeTheme.colors, typography: activeTheme.typography, metrics: activeTheme.metrics });
 
   if (!themeSwitcher) {
     themeSwitcher = createThemeSwitcher({
       db,
+      activeThemeId: appSettings.activeThemeId,
       onThemeChange: async (themeId, isCustom) => {
         appSettings.activeThemeId = themeId;
         appSettings.isCustomTheme = isCustom;

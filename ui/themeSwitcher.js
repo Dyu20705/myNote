@@ -27,27 +27,15 @@ export function createThemeSwitcher({ db, onThemeChange }) {
       select.appendChild(option);
     }
 
-    // Set to current settings or system
-    const request = new Promise((resolve) => {
-        const tx = db.transaction("settings", "readonly");
-        const store = tx.objectStore("settings");
-        const req = store.get("app");
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(null);
-    });
-    const settings = await request;
-    if (settings && settings.activeThemeId) {
-        select.value = settings.activeThemeId;
-    } else {
-        select.value = "system";
-    }
+    const activeThemeId = arguments[0].activeThemeId || "default-light";
+    select.value = activeThemeId;
   };
 
   select.addEventListener("change", async (e) => {
     const themeId = e.target.value;
     const theme = allThemes.find(t => t.id === themeId);
     if (theme) {
-      applyThemeTokens(theme.tokens);
+      applyThemeTokens({ colors: theme.colors, typography: theme.typography, metrics: theme.metrics });
       if (onThemeChange) {
         const isCustom = !Object.keys(BUILTIN_THEMES).includes(themeId);
         await onThemeChange(themeId, isCustom);

@@ -85,7 +85,7 @@ test("fresh database remains empty until explicit create", async ({ page }) => {
   await expect(page.locator("#noteList .empty-state button")).toHaveText("New note");
 
   const storedCount = await page.evaluate(async () => {
-    const request = globalThis.indexedDB.open("myNoteDB", 5);
+    const request = globalThis.indexedDB.open("myNoteDB", 6);
     const db = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -205,6 +205,7 @@ test("bootstrap storage failure is persistent and non-destructive until explicit
   expect(dialogCount).toBe(0);
 
   await page.locator("#retryApplicationStorageButton").click();
+  await page.waitForTimeout(500);
   await expect(page.locator("#applicationRecovery")).toBeHidden();
 });
 

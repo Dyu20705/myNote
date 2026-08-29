@@ -12,6 +12,8 @@ const repositoryRoot = path.resolve(
 );
 const canonicalRepositoryRoot = await realpath(repositoryRoot);
 const rootAssets = new Set([
+  "/state-recovery.css",
+  "/theme.css",
   "/app.js",
   "/command.css",
   "/editor.css",
@@ -52,6 +54,7 @@ function isAllowedAsset(requestPath) {
     return false;
   }
 
+  if (requestPath.startsWith("/assets/") || requestPath.startsWith("/core/theme/")) return true;
   const segments = requestPath.split("/").slice(1);
   if (segments.length < 2 || (segments[0] !== "core" && segments[0] !== "ui")) {
     return false;

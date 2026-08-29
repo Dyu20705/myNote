@@ -171,6 +171,14 @@ export function openDatabase() {
           store.createIndex("noteId", "noteId");
         }
       }
+      if (event.oldVersion < 6) {
+        if (!db.objectStoreNames.contains("settings")) {
+          db.createObjectStore("settings");
+        }
+        if (!db.objectStoreNames.contains("userThemes")) {
+          db.createObjectStore("userThemes", { keyPath: "id" });
+        }
+      }
     };
 
     request.onblocked = () => {
