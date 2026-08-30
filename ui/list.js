@@ -116,8 +116,8 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     virtualized: false,
   };
 
-  function projectSections(notesById, orderedIds) {
-    return createNoteBoardSections({ notesById, orderedIds })
+  function projectSections(notesById, orderedIds, query = "") {
+    return createNoteBoardSections({ notesById, orderedIds, query })
       .filter((section) => section.orderedIds.length > 0);
   }
 
@@ -154,7 +154,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
   }
 
   function renderWindow() {
-    const { notesById, boardIds } = currentPayload;
+    const { notesById, boardIds, query } = currentPayload;
     const scrollTop = scrollOwner.scrollTop;
     const viewport = Math.max(
       scrollOwner.clientHeight || VIRTUAL_ROW_HEIGHT * 6,
@@ -170,7 +170,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     const visibleCount = Math.ceil(viewport / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
     const endIndex = Math.min(boardIds.length, startIndex + visibleCount);
     const visibleIds = boardIds.slice(startIndex, endIndex);
-    const sections = projectSections(notesById, visibleIds);
+    const sections = projectSections(notesById, visibleIds, query);
     const retainedIds = new Set();
     const fragment = document.createDocumentFragment();
 
@@ -279,8 +279,8 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     }
   }
 
-  function render({ notesById, orderedIds, activeId, query, emptyPresentation, viewMode = "list" }) {
-    const sections = projectSections(notesById, orderedIds);
+  function render({ notesById, orderedIds, activeId, query = "", emptyPresentation, viewMode = "list" }) {
+    const sections = projectSections(notesById, orderedIds, query);
     const boardIds = sections.flatMap((section) => section.orderedIds);
     const virtualized = boardIds.length >= VIRTUALIZATION_THRESHOLD;
     currentPayload = {
