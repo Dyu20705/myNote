@@ -118,7 +118,7 @@ body[data-workspace="japanese"] #activeNoteLabel {
 }
 
 .japanese-create-menu {
-  position: absolute;
+  grid-column: 1;
   z-index: 30;
   top: calc(100% + var(--mn-space-1));
   right: 0;
@@ -571,4 +571,42 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
 .japanese-filter-field :is(input, select)[aria-invalid="true"] {
   border: 3px double var(--mn-danger-border);
   box-shadow: 0 0 0 2px rgb(244 63 94 / 25%);
+}
+
+/* Flashcard 3D flip */
+.flashcard-container {
+  perspective: 1000px;
+  min-height: 200px;
+  margin: var(--mn-space-3) 0;
+}
+.flashcard {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  width: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flashcard.flipped {
+  transform: rotateY(180deg);
+}
+.flashcard-front, .flashcard-back {
+  width: 100%;
+  backface-visibility: hidden;
+  grid-column: 1;
+  grid-row: 1;
+  
+  background: var(--mn-surface-raised);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-lg);
+  padding: var(--mn-space-4);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+.flashcard-back {
+  transform: rotateY(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .flashcard {
+    transition: none;
+  }
 }

@@ -199,7 +199,11 @@ function deriveDueQueue(notes, reviews, nowIso) {
 
 export function buildDueReviewQueue(input) {
   try {
-    assertExactObject(input, ["notes", "reviews", "nowIso"]);
+    if ("limit" in input) {
+      assertExactObject(input, ["notes", "reviews", "nowIso", "limit"]);
+    } else {
+      assertExactObject(input, ["notes", "reviews", "nowIso"]);
+    }
     if (!Array.isArray(input.notes) || !Array.isArray(input.reviews)) {
       throw createInvalidStateInputError();
     }
@@ -285,12 +289,19 @@ export function selectWorkspace(state, workspace) {
 export function startReviewSession(state, input) {
   try {
     assertState(state);
-    assertExactObject(input, ["nowIso"]);
-    const result = buildDueReviewQueue({
+    const hasLimit = "limit" in input;
+    if (hasLimit) {
+      assertExactObject(input, ["nowIso", "limit"]);
+    } else {
+      assertExactObject(input, ["nowIso"]);
+    }
+    const buildInput = {
       notes: state.notes,
       reviews: state.studyReviews,
       nowIso: input.nowIso,
-    });
+    };
+    if (hasLimit) buildInput.limit = input.limit;
+    const result = buildDueReviewQueue(buildInput);
     const queue = result.queue.map((item) => ({ ...item }));
     return {
       ...state,

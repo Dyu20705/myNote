@@ -10,6 +10,7 @@ import {
   putNoteToDb,
   putStudyReviewToDb,
   restoreNoteWithReviewToDb,
+  getSettings,
 } from "../core/storage.js";
 import { createJapaneseFilterController } from "./japanese-filters.js";
 import { presentJapaneseReviewState } from "./statePresentation.js";
@@ -247,6 +248,31 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   });
 
   function renderDashboard(state = store.getState()) {
+    if (state.workspace === "japanese") {
+      const db = state.db;
+      if (db) {
+        getSettings(db, "gamificationState").then(gamificationState => {
+          gamificationState = gamificationState || { xp: 0, streak: 0, achievements: [] };
+          const xpEl = document.getElementById("gamificationXp");
+          if (xpEl) xpEl.textContent = gamificationState.xp;
+          const streakEl = document.getElementById("gamificationStreak");
+          if (streakEl) streakEl.textContent = gamificationState.streak;
+          const achEl = document.getElementById("gamificationAchievements");
+          if (achEl) achEl.textContent = gamificationState.achievements.length;
+        }).catch(e => console.error(e));
+        
+        getSettings(db, "dailyGoalsState").then(dailyGoalsState => {
+          dailyGoalsState = dailyGoalsState || { reviewsToday: 0, targetReviewsPerDay: 50 };
+          const progressEl = document.getElementById("dailyGoalProgress");
+          const textEl = document.getElementById("dailyGoalText");
+          if (progressEl && textEl) {
+            progressEl.value = dailyGoalsState.reviewsToday;
+            progressEl.max = dailyGoalsState.targetReviewsPerDay;
+            textEl.textContent = dailyGoalsState.reviewsToday + " / " + dailyGoalsState.targetReviewsPerDay;
+          }
+        }).catch(e => console.error(e));
+      }
+    }
     const japanese = state.workspace === "japanese";
     const archive = state.workspace === "archive";
     const unavailable = Boolean(state.studyDataUnavailable);
@@ -501,7 +527,13 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.reviewComplete.hidden = !complete;
     elements.revealReview.hidden = complete;
     elements.reviewRatings.hidden = complete || !session.revealed;
-    elements.reviewContent.hidden = complete || !session.revealed;
+    if (!session.revealed) {
+      document.getElementById("flashcardElement")?.classList.remove("flipped");
+      document.getElementById("reviewContent").hidden = true;
+    } else {
+      document.getElementById("flashcardElement")?.classList.add("flipped");
+      document.getElementById("reviewContent").hidden = complete;
+    }
     if (complete) {
       elements.reviewProgress.textContent = "";
       elements.reviewStatus.textContent = "Review complete";
@@ -573,6 +605,22 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   elements.startReview.addEventListener("click", () => {
     openReview(elements.startReview).catch(() => undefined);
   });
+  document.getElementById("quickStudy5Button")?.addEventListener("click", () => {
+    actions.startReview(currentContext().nowIso, 5);
+    renderReview();
+    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
+  });
+  document.getElementById("quickStudy10Button")?.addEventListener("click", () => {
+    actions.startReview(currentContext().nowIso, 10);
+    renderReview();
+    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
+  });
+  document.getElementById("quickStudy15Button")?.addEventListener("click", () => {
+    actions.startReview(currentContext().nowIso, 15);
+    renderReview();
+    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
+  });
+
   elements.reviewEntry.addEventListener("click", () => {
     openReview(elements.reviewEntry).catch(() => undefined);
   });
@@ -599,12 +647,24 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     });
   }
   elements.reviewDialog.addEventListener("keydown", (event) => {
-    if (!store.getState().reviewSession?.revealed) return;
-    const ratings = { "1": "again", "2": "hard", "3": "good", "4": "easy" };
-    const rating = ratings[event.key];
-    if (rating) {
+    const session = store.getState().reviewSession;
+    if (!session) return;
+    
+    if (!session.revealed && event.code === "Space") {
       event.preventDefault();
-      submitRating(rating).catch(() => undefined);
+      actions.revealReview();
+      renderReview();
+    elements.reviewRatings.querySelector("button")?.focus();
+      return;
+    }
+    
+    if (session.revealed) {
+      const ratings = { "1": "again", "2": "hard", "3": "good", "4": "easy" };
+      const rating = ratings[event.key];
+      if (rating) {
+        event.preventDefault();
+        submitRating(rating).catch(() => undefined);
+      }
     }
   });
 

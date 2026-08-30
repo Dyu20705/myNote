@@ -344,8 +344,8 @@ export function createJapaneseActions(input) {
     return getState();
   }
 
-  function startReview(nowIso) {
-    setState((state) => startReviewSession(state, { nowIso }));
+  function startReview(nowIso, limit) {
+    setState((state) => startReviewSession(state, limit !== undefined ? { nowIso, limit } : { nowIso }));
     return getState();
   }
 

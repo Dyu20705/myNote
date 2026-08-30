@@ -287,8 +287,16 @@
       </div>
       <p id="reviewProgress" class="review-progress"></p>
       <p id="reviewStatus" class="review-status">Content hidden until reveal</p>
-      <h3 id="reviewNoteTitle" class="review-note-title"></h3>
-      <pre id="reviewContent" class="review-content" hidden></pre>
+      <div class="flashcard-container">
+        <div class="flashcard" id="flashcardElement">
+          <div class="flashcard-front">
+            <h3 id="reviewNoteTitle" class="review-note-title"></h3>
+          </div>
+          <div class="flashcard-back">
+            <pre id="reviewContent" class="review-content" hidden></pre>
+          </div>
+        </div>
+      </div>
       <button id="revealReviewButton" class="primary-button" type="button">Reveal review content</button>
       <div id="reviewRatings" class="review-ratings" role="group" aria-label="Rate review" hidden>
         <button type="button" data-review-rating="again">Again</button>
