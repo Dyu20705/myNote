@@ -36,7 +36,7 @@ async function expectInsideViewport(locator, inset = 0) {
 
 async function seedDrawing(page, noteId) {
   await page.evaluate(async (id) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 5);
+    const request = globalThis.indexedDB.open("myNoteDB", 6);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -66,7 +66,7 @@ async function seedDrawing(page, noteId) {
 
 async function readDrawings(page, noteId) {
   return page.evaluate(async (id) => {
-    const request = globalThis.indexedDB.open("myNoteDB", 5);
+    const request = globalThis.indexedDB.open("myNoteDB", 6);
     const database = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

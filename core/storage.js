@@ -1,9 +1,10 @@
 import { validateKanjiInkEntry } from "./kanjiInkEntry.js";
 import { validateStudyReview } from "./studyReview.js";
+import { validateTheme } from "./theme/themeSchema.js";
 
 const LEGACY_STORAGE_KEY = "my-note-v2";
 const DB_NAME = "myNoteDB";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 export const STORE_NOTES = "notes";
 export const STORE_STUDY_REVIEWS = "studyReviews";
 export const STORE_KANJI_INK_ENTRIES = "kanjiInkEntries";
@@ -12,6 +13,8 @@ export const STORE_CARDS = "cards";
 export const STORE_REVIEW_STATES = "reviewStates";
 export const STORE_REVIEW_LOGS = "reviewLogs";
 export const STORE_STUDY_ARTIFACTS = "studyArtifacts";
+export const STORE_USER_THEMES = "userThemes";
+export const STORE_SETTINGS = "settings";
 const pendingDependentRestores = new WeakMap();
 
 function createMigrationOutcome(status, count, errorCode) {
@@ -169,6 +172,14 @@ export function openDatabase() {
         if (!db.objectStoreNames.contains(STORE_STUDY_ARTIFACTS)) {
           const store = db.createObjectStore(STORE_STUDY_ARTIFACTS, { keyPath: "id" });
           store.createIndex("noteId", "noteId");
+        }
+      }
+      if (event.oldVersion < 6) {
+        if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
+          db.createObjectStore(STORE_SETTINGS, { keyPath: "key" });
+        }
+        if (!db.objectStoreNames.contains(STORE_USER_THEMES)) {
+          db.createObjectStore(STORE_USER_THEMES, { keyPath: "id" });
         }
       }
     };
@@ -639,7 +650,9 @@ export async function exportDatabase(db) {
     STORE_REVIEW_STATES,
     STORE_REVIEW_LOGS,
     STORE_STUDY_ARTIFACTS,
-    STORE_KANJI_INK_ENTRIES
+    STORE_KANJI_INK_ENTRIES,
+    STORE_USER_THEMES,
+    STORE_SETTINGS,
   ], "readonly");
   
   const [
@@ -648,14 +661,18 @@ export async function exportDatabase(db) {
     reviewStates,
     reviewLogs,
     studyArtifacts,
-    kanjiInkEntries
+    kanjiInkEntries,
+    userThemes,
+    settings,
   ] = await Promise.all([
     requestResult(tx.objectStore(STORE_LEARNING_ITEMS).getAll()),
     requestResult(tx.objectStore(STORE_CARDS).getAll()),
     requestResult(tx.objectStore(STORE_REVIEW_STATES).getAll()),
     requestResult(tx.objectStore(STORE_REVIEW_LOGS).getAll()),
     requestResult(tx.objectStore(STORE_STUDY_ARTIFACTS).getAll()),
-    requestResult(tx.objectStore(STORE_KANJI_INK_ENTRIES).getAll())
+    requestResult(tx.objectStore(STORE_KANJI_INK_ENTRIES).getAll()),
+    requestResult(tx.objectStore(STORE_USER_THEMES).getAll()),
+    requestResult(tx.objectStore(STORE_SETTINGS).getAll()),
   ]);
 
   return {
@@ -666,7 +683,9 @@ export async function exportDatabase(db) {
     reviewStates,
     reviewLogs,
     studyArtifacts,
-    kanjiInkEntries
+    kanjiInkEntries,
+    userThemes,
+    settings,
   };
 }
 
@@ -687,12 +706,14 @@ export async function importDatabase(db, snapshot) {
   const reviewLogs = Array.isArray(snapshot.reviewLogs) ? snapshot.reviewLogs : [];
   const studyArtifacts = Array.isArray(snapshot.studyArtifacts) ? snapshot.studyArtifacts : [];
   const kanjiInkEntries = Array.isArray(snapshot.kanjiInkEntries) ? snapshot.kanjiInkEntries : [];
+  const userThemes = Array.isArray(snapshot.userThemes) ? snapshot.userThemes : [];
+  const settings = Array.isArray(snapshot.settings) ? snapshot.settings : [];
 
   // Validate no duplicate IDs within each entity type
   function assertUniqueIds(entities, label, keyPath = "id") {
     const seen = new Set();
     for (const entity of entities) {
-      const id = keyPath === "cardId" ? entity.cardId : entity.id;
+      const id = keyPath === "cardId" ? entity.cardId : (keyPath === "key" ? entity.key : entity.id);
       if (typeof id !== "string" || id.length === 0) {
         throw new TypeError(`${label}: missing or invalid id`);
       }
@@ -711,6 +732,8 @@ export async function importDatabase(db, snapshot) {
   assertUniqueIds(reviewLogs, "reviewLogs");
   assertUniqueIds(studyArtifacts, "studyArtifacts");
   assertUniqueIds(kanjiInkEntries, "kanjiInkEntries");
+  assertUniqueIds(userThemes, "userThemes");
+  assertUniqueIds(settings, "settings", "key");
 
   // Validate referential integrity: Card.itemId → LearningItem.id
   for (const card of cards) {
@@ -760,6 +783,11 @@ export async function importDatabase(db, snapshot) {
     }
   }
 
+  // Validate userThemes schema
+  for (const theme of userThemes) {
+    validateTheme(theme);
+  }
+
   // KanjiInkEntry.noteId dangling references are permitted per ADR §2.17–2.18
 
   // Atomically write all entities
@@ -770,7 +798,9 @@ export async function importDatabase(db, snapshot) {
     STORE_REVIEW_STATES,
     STORE_REVIEW_LOGS,
     STORE_STUDY_ARTIFACTS,
-    STORE_KANJI_INK_ENTRIES
+    STORE_KANJI_INK_ENTRIES,
+    STORE_USER_THEMES,
+    STORE_SETTINGS,
   ], "readwrite");
   const done = transactionDone(tx);
 
@@ -796,9 +826,121 @@ export async function importDatabase(db, snapshot) {
     const inkStore = tx.objectStore(STORE_KANJI_INK_ENTRIES);
     for (const entry of kanjiInkEntries) inkStore.put(entry);
 
+    const themeStore = tx.objectStore(STORE_USER_THEMES);
+    for (const theme of userThemes) themeStore.put(theme);
+
+    const settingsStore = tx.objectStore(STORE_SETTINGS);
+    for (const setting of settings) settingsStore.put(setting);
+
     await done;
   } catch (error) {
     await abortAndSettleTransaction(tx, done);
     throw error;
   }
+}
+
+export function getSettings(db, key) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(STORE_SETTINGS, "readonly");
+      const store = transaction.objectStore(STORE_SETTINGS);
+      const request = store.get(key);
+      request.onsuccess = () => resolve(request.result ? request.result.value : undefined);
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function putSettings(db, key, value) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(STORE_SETTINGS, "readwrite");
+      const store = transaction.objectStore(STORE_SETTINGS);
+      const request = store.put({ key, value });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function saveUserThemeToDb(db, theme) {
+  const validated = validateTheme(theme);
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(STORE_USER_THEMES, "readwrite");
+      const store = transaction.objectStore(STORE_USER_THEMES);
+      const request = store.put(validated);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function getUserThemeFromDb(db, id) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(STORE_USER_THEMES, "readonly");
+      const store = transaction.objectStore(STORE_USER_THEMES);
+      const request = store.get(id);
+      request.onsuccess = () => {
+        if (!request.result) {
+          resolve(undefined);
+          return;
+        }
+        try {
+          resolve(validateTheme(request.result));
+        } catch {
+          resolve(undefined);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function listUserThemesFromDb(db) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(STORE_USER_THEMES, "readonly");
+      const store = transaction.objectStore(STORE_USER_THEMES);
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const results = request.result || [];
+        const validated = [];
+        for (const t of results) {
+          try {
+            validated.push(validateTheme(t));
+          } catch {
+            console.warn("Corrupt user theme skipped from database:", t?.id);
+          }
+        }
+        resolve(validated);
+      };
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function deleteUserThemeFromDb(db, id) {
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(STORE_USER_THEMES, "readwrite");
+      const store = transaction.objectStore(STORE_USER_THEMES);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
