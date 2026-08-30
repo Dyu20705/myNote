@@ -20,18 +20,24 @@ import { createStore } from "./core/state.js";
 import {
   deleteNoteFromDb,
   exportDatabase,
+  getSettings,
   listNotesFromDb,
   migrateLegacyStorageIfNeeded,
   openDatabase,
   putNoteToDb,
+  putSettings,
   resetDatabase,
 } from "./core/storage.js";
 import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
+import { BUILTIN_THEMES } from "./core/theme/themeSchema.js";
+import { applyThemeTokens } from "./core/theme/themeEngine.js";
+import { getTheme } from "./core/theme/themeStorage.js";
 import { createJapaneseApp } from "./japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
+import { createThemeSwitcher } from "./ui/themeSwitcher.js";
 import {
   presentApplicationRecoveryState,
   presentBoardState,
@@ -66,6 +72,11 @@ const els = {
   commandInput: document.getElementById("commandInput"),
   commandList: document.getElementById("commandList"),
   reviewDialog: document.getElementById("reviewDialog"),
+  themeSwitcherDialog: document.getElementById("themeSwitcherDialog"),
+  closeThemeSwitcherButton: document.getElementById("closeThemeSwitcherButton"),
+  themeList: document.getElementById("themeList"),
+  cancelThemeSwitcherButton: document.getElementById("cancelThemeSwitcherButton"),
+  applyThemeSwitcherButton: document.getElementById("applyThemeSwitcherButton"),
   applicationRecovery: document.getElementById("applicationRecovery"),
   applicationRecoveryMessage: document.getElementById("applicationRecoveryMessage"),
   retryApplicationStorageButton: document.getElementById("retryApplicationStorageButton"),
@@ -924,6 +935,27 @@ palette = createPalette({
   getContext: commandContext,
 });
 
+let themeSwitcher;
+if (els.themeSwitcherDialog && els.themeList) {
+  themeSwitcher = createThemeSwitcher({
+    dialog: els.themeSwitcherDialog,
+    listElement: els.themeList,
+    closeButton: els.closeThemeSwitcherButton,
+    cancelButton: els.cancelThemeSwitcherButton,
+    applyButton: els.applyThemeSwitcherButton,
+    dbProvider: () => store.getState().db,
+    onApply: async (theme) => {
+      const db = store.getState().db;
+      if (db) {
+        await putSettings(db, "app", {
+          activeThemeId: theme.id,
+          isCustomTheme: !BUILTIN_THEMES[theme.id],
+        });
+      }
+    },
+  });
+}
+
 const unregisterApplicationCommands = [
   registerCommand({
     id: "palette.open",
@@ -940,6 +972,12 @@ const unregisterApplicationCommands = [
     shortcuts: [{ key: "Escape" }],
     scope: "palette",
     run: () => palette.close(),
+  }),
+  registerCommand({
+    id: "theme.switch",
+    title: "Switch theme",
+    description: "Open the theme switcher to preview and select themes",
+    run: (context) => themeSwitcher?.open(context.opener),
   }),
   registerCommand({
     id: "notes.create",
@@ -1291,6 +1329,19 @@ async function bootstrap() {
   backlinkIndex.rebuild(loaded);
   setBacklinksFromIndex();
 
+  try {
+    const appSettings = await getSettings(db, "app");
+    const activeThemeId = appSettings?.activeThemeId;
+    if (activeThemeId) {
+      const theme = await getTheme(db, activeThemeId);
+      if (theme) {
+        applyThemeTokens(theme);
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore persisted theme:", error);
+  }
+
   if (searchUnavailable) {
     store.setState({
       filteredIds: loaded.map((note) => note.id),
@@ -1351,6 +1402,7 @@ export const commandRuntime = Object.freeze({
     for (const unregister of unregisterApplicationCommands) unregister();
     japaneseApp?.destroy();
     palette.destroy();
+    themeSwitcher?.destroy();
     noteEditorOverlay.destroy();
     commandRegistry.destroy();
   },
