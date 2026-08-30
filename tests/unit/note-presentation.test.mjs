@@ -125,3 +125,23 @@ test("createNoteBoardSections partitions upstream order without taking query own
     message: "NOTE_PRESENTATION_OPTIONS_INVALID",
   });
 });
+
+test("createNoteBoardSections categorizes search results when query is provided", async () => {
+  const { createNoteBoardSections } = await loadModule();
+  const notes = [
+    Object.freeze({ id: "note-title", title: "React Components", content: "Details", tags: [] }),
+    Object.freeze({ id: "note-tag", title: "Web Dev", content: "Notes", tags: ["react", "frontend"] }),
+    Object.freeze({ id: "note-japanese", title: "Kanji 漢", content: "Learning", template: "kanji", tags: ["kanji"] }),
+    Object.freeze({ id: "note-content", title: "General", content: "Mentions React in body", tags: [] }),
+  ];
+  const notesById = new Map(notes.map((note) => [note.id, note]));
+  const orderedIds = ["note-title", "note-tag", "note-japanese", "note-content"];
+
+  const sections = createNoteBoardSections({ notesById, orderedIds, query: "react" });
+  assert.deepEqual(sections, [
+    { id: "title", label: "TITLE MATCHES", orderedIds: ["note-title"] },
+    { id: "tags", label: "TAG MATCHES", orderedIds: ["note-tag"] },
+    { id: "japanese", label: "JAPANESE STUDY", orderedIds: ["note-japanese"] },
+    { id: "notes", label: "CONTENT MATCHES", orderedIds: ["note-content"] },
+  ]);
+});
