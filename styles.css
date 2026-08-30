@@ -473,8 +473,27 @@ strong {
 
 .note-board-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: var(--mn-space-4);
+}
+
+.note-list[data-view-mode="list"] .note-board-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--mn-space-2);
+}
+
+.note-list[data-view-mode="list"] .note-item {
+  min-height: auto;
+  padding: var(--mn-space-3) var(--mn-space-4);
+}
+
+.note-list[data-view-mode="grid"] .note-board-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: var(--mn-space-4);
+}
+
+.note-list[data-view-mode="grid"] .note-item {
+  min-height: 152px;
 }
 
 .note-list[data-virtualized="true"] .note-board-grid {

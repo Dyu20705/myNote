@@ -69,6 +69,7 @@ const els = {
   newJapaneseNoteButton: document.getElementById("newJapaneseNoteButton"),
   refreshButton: document.getElementById("refreshButton"),
   saveButton: document.getElementById("saveButton"),
+  viewModeButton: document.getElementById("viewModeButton"),
   noteList: document.getElementById("noteList"),
   titleInput: document.getElementById("titleInput"),
   contentInput: document.getElementById("contentInput"),
@@ -103,6 +104,7 @@ const store = createStore({
   activeId: null,
   filteredIds: [],
   query: "",
+  viewMode: "list",
   dirty: false,
   saveMessage: "Ready",
   savePhase: "idle",
@@ -313,6 +315,30 @@ const listView = createListView({
   formatDate,
 });
 
+function renderViewMode() {
+  if (!els.viewModeButton) return;
+  const viewMode = store.getState().viewMode || "list";
+  els.viewModeButton.textContent = viewMode === "list" ? "Grid view" : "List view";
+  els.viewModeButton.setAttribute("aria-label", viewMode === "list" ? "Switch to grid view" : "Switch to list view");
+}
+
+function toggleViewMode() {
+  const current = store.getState().viewMode || "list";
+  const next = current === "list" ? "grid" : "list";
+  store.setState({ viewMode: next });
+  renderViewMode();
+  renderList();
+
+  const db = store.getState().db;
+  if (db) {
+    getSettings(db, "app")
+      .then((settings) => {
+        putSettings(db, "app", { ...(settings || {}), viewMode: next }).catch(() => {});
+      })
+      .catch(() => {});
+  }
+}
+
 function renderList() {
   const startedAt = performance.now();
   const state = store.getState();
@@ -322,6 +348,7 @@ function renderList() {
     activeId: state.activeId,
     query: state.query,
     emptyPresentation: boardPresentation(state),
+    viewMode: state.viewMode || "list",
   });
   updateMetrics({ renderMs: performance.now() - startedAt });
 }
@@ -336,6 +363,7 @@ function synchronizeSearchInput() {
 function renderAll() {
   synchronizeSearchInput();
   renderTopline();
+  renderViewMode();
   renderEditor();
   renderList();
   renderBacklinks();
@@ -344,6 +372,7 @@ function renderAll() {
 function renderWorkspace(_snapshot, context = {}) {
   synchronizeSearchInput();
   renderTopline();
+  renderViewMode();
   renderList();
   if (context.activeChanged) {
     renderEditor();
@@ -1273,6 +1302,14 @@ const unregisterApplicationCommands = [
     run: () => jumpBoundary(false),
   }),
   registerCommand({
+    id: "notes.toggle-view-mode",
+    title: "Toggle list/grid view",
+    description: "Switch between list and grid note views",
+    shortcuts: [{ key: "g", primaryModifier: true, shiftKey: true }],
+    scope: "global",
+    run: () => toggleViewMode(),
+  }),
+  registerCommand({
     id: "editor.focus",
     title: "Focus editor",
     description: "Move focus to the note editor",
@@ -1308,6 +1345,7 @@ els.searchInput.addEventListener("input", (event) => {
 els.newNoteButton.addEventListener("click", () => {
   runAction(() => executeCommand("notes.create", { source: "control", target: els.newNoteButton }));
 });
+els.viewModeButton?.addEventListener("click", toggleViewMode);
 els.refreshButton.addEventListener("click", () => {
   runAction(() => reconcileCurrentView());
 });
@@ -1485,8 +1523,11 @@ async function bootstrap() {
         applyThemeTokens(theme);
       }
     }
+    if (appSettings?.viewMode) {
+      store.setState({ viewMode: appSettings.viewMode });
+    }
   } catch (error) {
-    console.warn("Could not restore persisted theme:", error);
+    console.warn("Could not restore persisted settings:", error);
   }
 
   if (searchUnavailable) {
