@@ -38,6 +38,16 @@ import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
 import { createThemeSwitcher } from "./ui/themeSwitcher.js";
+import { createEditorToolbar } from "./ui/editorToolbar.js";
+import {
+  insertBold,
+  insertItalic,
+  insertStrikethrough,
+  insertInlineCode,
+  insertLink,
+  cycleHeading,
+  insertTaskItem,
+} from "./core/markdownActions.js";
 import {
   presentApplicationRecoveryState,
   presentBoardState,
@@ -62,6 +72,7 @@ const els = {
   noteList: document.getElementById("noteList"),
   titleInput: document.getElementById("titleInput"),
   contentInput: document.getElementById("contentInput"),
+  editorToolbar: document.getElementById("editorToolbar"),
   noteEditorOverlay: document.getElementById("noteEditorOverlay"),
   noteEditorOverlayLabel: document.getElementById("noteEditorOverlayLabel"),
   closeNoteEditorButton: document.getElementById("closeNoteEditorButton"),
@@ -473,6 +484,7 @@ function classifyFailureKind(op, fallback = "edit") {
 function openNoteEditor({ opener = document.activeElement, mode = "edit" } = {}) {
   if (!activeNote() || !noteEditorOverlay) return false;
   noteEditorOverlay.open({ opener, mode });
+  editorToolbar?.syncSelection();
   return true;
 }
 
@@ -602,7 +614,10 @@ noteEditorOverlay = createNoteEditorOverlay({
   modeLabel: els.noteEditorOverlayLabel,
   titleInput: els.titleInput,
   board: els.noteList,
-  beforeClose: () => autosave.flush(),
+  beforeClose: () => {
+    editorToolbar?.hide();
+    return autosave.flush();
+  },
   fallbackFocus: () => (els.newNoteButton.hidden ? els.newJapaneseNoteButton : els.newNoteButton),
 });
 
@@ -749,6 +764,55 @@ function insertCodeBlock() {
   field.selectionStart = field.selectionEnd = before.length + 8;
   field.focus();
   markDirtyAndQueueSave();
+}
+
+function handleToolbarAction(actionId) {
+  const field = els.contentInput;
+  if (!field) return;
+  const value = field.value;
+  const start = field.selectionStart ?? 0;
+  const end = field.selectionEnd ?? 0;
+  let result;
+
+  switch (actionId) {
+    case "bold":
+      result = insertBold(value, start, end);
+      break;
+    case "italic":
+      result = insertItalic(value, start, end);
+      break;
+    case "strikethrough":
+      result = insertStrikethrough(value, start, end);
+      break;
+    case "code":
+      result = insertInlineCode(value, start, end);
+      break;
+    case "link":
+      result = insertLink(value, start, end);
+      break;
+    case "heading":
+      result = cycleHeading(value, start);
+      break;
+    case "task":
+      result = insertTaskItem(value, start);
+      break;
+    case "kanji-draw":
+      executeCommand("notes.kanji-ink", {
+        source: "editor-toolbar",
+        target: field,
+      });
+      return;
+    default:
+      return;
+  }
+
+  if (result) {
+    field.value = result.value;
+    field.selectionStart = result.selectionStart;
+    field.selectionEnd = result.selectionEnd;
+    field.focus();
+    markDirtyAndQueueSave();
+  }
 }
 
 function triggerDownload(blob, filename) {
@@ -956,7 +1020,73 @@ if (els.themeSwitcherDialog && els.themeList) {
   });
 }
 
+let editorToolbar;
+if (els.editorToolbar && els.contentInput) {
+  editorToolbar = createEditorToolbar({
+    container: els.editorToolbar,
+    textarea: els.contentInput,
+    onAction: handleToolbarAction,
+  });
+}
+
 const unregisterApplicationCommands = [
+  registerCommand({
+    id: "editor.bold",
+    title: "Bold text",
+    description: "Wrap selection in bold markdown syntax",
+    shortcuts: [{ key: "b", primaryModifier: true }],
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to edit",
+    run: () => handleToolbarAction("bold"),
+  }),
+  registerCommand({
+    id: "editor.italic",
+    title: "Italic text",
+    description: "Wrap selection in italic markdown syntax",
+    shortcuts: [{ key: "i", primaryModifier: true }],
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to edit",
+    run: () => handleToolbarAction("italic"),
+  }),
+  registerCommand({
+    id: "editor.strikethrough",
+    title: "Strikethrough text",
+    description: "Wrap selection in strikethrough markdown syntax",
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to edit",
+    run: () => handleToolbarAction("strikethrough"),
+  }),
+  registerCommand({
+    id: "editor.link",
+    title: "Insert link",
+    description: "Insert markdown link for selection",
+    shortcuts: [{ key: "k", primaryModifier: true, shiftKey: true }],
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to edit",
+    run: () => handleToolbarAction("link"),
+  }),
+  registerCommand({
+    id: "editor.heading",
+    title: "Cycle heading level",
+    description: "Cycle current line heading level (H1, H2, H3, paragraph)",
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to edit",
+    run: () => handleToolbarAction("heading"),
+  }),
+  registerCommand({
+    id: "editor.task",
+    title: "Toggle task item",
+    description: "Toggle task checklist item prefix for current line",
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to edit",
+    run: () => handleToolbarAction("task"),
+  }),
   registerCommand({
     id: "palette.open",
     title: "Open command palette",
@@ -1403,6 +1533,7 @@ export const commandRuntime = Object.freeze({
     japaneseApp?.destroy();
     palette.destroy();
     themeSwitcher?.destroy();
+    editorToolbar?.destroy();
     noteEditorOverlay.destroy();
     commandRegistry.destroy();
   },
