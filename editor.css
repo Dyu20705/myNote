@@ -207,6 +207,53 @@
   padding: 7px var(--mn-space-3);
 }
 
+.editor-toolbar {
+  width: min(100%, var(--mn-content-readable));
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mn-space-1);
+  padding: var(--mn-space-1) var(--mn-space-2);
+  margin-top: var(--mn-space-2);
+  margin-bottom: var(--mn-space-2);
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-surface-raised);
+}
+
+.editor-toolbar[hidden] {
+  display: none;
+}
+
+.editor-toolbar-button {
+  min-width: var(--mn-control-sm);
+  height: var(--mn-control-sm);
+  padding: 0 var(--mn-space-2);
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--mn-radius-sm);
+  color: var(--mn-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.editor-toolbar-button:hover,
+.editor-toolbar-button:focus-visible {
+  border-color: var(--mn-border-default);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-hover);
+}
+
+.editor-toolbar-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--mn-space-1);
+  background: var(--mn-border-subtle);
+}
+
 .editor-panel > .content-input {
   align-self: stretch;
   min-height: 160px;
