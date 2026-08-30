@@ -136,7 +136,7 @@
               <p>XP: <span id="gamificationXp">0</span></p>
               <p>Streak: <span id="gamificationStreak">0</span> days</p>
               <p>Achievements: <span id="gamificationAchievements">0</span></p>
-              <p>Daily Goal: <progress id="dailyGoalProgress" value="0" max="50"></progress></p>
+              <p>Daily Goal: <progress id="dailyGoalProgress" value="0" max="50"></progress> <span id="dailyGoalText">0 / 50</span> <button id="dailyGoalSettingsButton" type="button" class="icon-button" aria-label="Configure Daily Goal">⚙️</button></p>
             </div>
             <div class="quick-study-actions">
               <button id="quickStudy5Button" type="button" class="secondary-button">Quick Study (5)</button>
@@ -337,5 +337,19 @@
     <script type="module" src="app.js"></script>
     <script type="module" src="ui/editorChrome.js"></script>
     <script type="module" src="ui/kanjiInkImportCommand.js"></script>
+
+    <dialog id="dailyGoalSettingsDialog" class="modal-dialog" aria-labelledby="dailyGoalSettingsTitle">
+      <form method="dialog" id="dailyGoalSettingsForm">
+        <h2 id="dailyGoalSettingsTitle">Configure Daily Goal</h2>
+        <label>
+          Target Reviews:
+          <input type="number" id="dailyGoalTargetInput" min="1" max="1000" value="50">
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="secondary-button" id="dailyGoalSettingsCancel">Cancel</button>
+          <button type="submit" class="primary-button">Save</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

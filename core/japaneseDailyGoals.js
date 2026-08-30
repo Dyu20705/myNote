@@ -5,6 +5,7 @@ export function getInitialDailyGoalsState() {
     currentDate: null,
     reviewsToday: 0,
     newItemsToday: 0,
+    lastProcessedLogId: null,
   };
 }
 
@@ -19,9 +20,16 @@ export function updateDailyGoalsState(currentState, reviewLog, isNewItem) {
     currentDate: currentState.currentDate || null,
     reviewsToday: currentState.reviewsToday || 0,
     newItemsToday: currentState.newItemsToday || 0,
+    lastProcessedLogId: currentState.lastProcessedLogId || null,
   };
 
-  const reviewDate = reviewLog.reviewedAt.split('T')[0];
+  if (reviewLog.id && nextState.lastProcessedLogId === reviewLog.id) {
+    return currentState;
+  }
+  nextState.lastProcessedLogId = reviewLog.id;
+
+  const dateObj = new Date(reviewLog.reviewedAt);
+  const reviewDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
   
   if (nextState.currentDate !== reviewDate) {
     nextState.currentDate = reviewDate;

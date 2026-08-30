@@ -8,8 +8,8 @@ import {
   STORE_STUDY_ARTIFACTS,
   STORE_SETTINGS
 } from "./storage.js";
-import { updateGamificationState } from "./gamificationEngine.js";
-import { updateDailyGoalsState } from "./dailyGoals.js";
+import { updateGamificationState } from "./japaneseGamification.js";
+import { updateDailyGoalsState } from "./japaneseDailyGoals.js";
 
 function requestResult(request) {
   return new Promise((resolve, reject) => {
@@ -167,7 +167,7 @@ export async function commitReviewTransaction(db, nextState, reviewLog, isNewIte
   
   // Need to use requestResult inside the async function but we can just use the callbacks or promise
   const gamificationReq = settingsStore.get("gamificationState");
-  const dailyGoalsReq = settingsStore.get("dailyGoalsState");
+  const japaneseDailyGoalsReq = settingsStore.get("japaneseDailyGoalsState");
 
   gamificationReq.onsuccess = () => {
     const currentState = gamificationReq.result ? gamificationReq.result.value : null;
@@ -175,10 +175,10 @@ export async function commitReviewTransaction(db, nextState, reviewLog, isNewIte
     settingsStore.put({ key: "gamificationState", value: nextGamiState });
   };
 
-  dailyGoalsReq.onsuccess = () => {
-    const currentState = dailyGoalsReq.result ? dailyGoalsReq.result.value : null;
+  japaneseDailyGoalsReq.onsuccess = () => {
+    const currentState = japaneseDailyGoalsReq.result ? japaneseDailyGoalsReq.result.value : null;
     const nextGoalsState = updateDailyGoalsState(currentState, reviewLog, isNewItem);
-    settingsStore.put({ key: "dailyGoalsState", value: nextGoalsState });
+    settingsStore.put({ key: "japaneseDailyGoalsState", value: nextGoalsState });
   };
 
   await done;

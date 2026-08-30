@@ -47,6 +47,9 @@ function createDialog() {
         ${iconButton("kanjiMarkerButton", "Marker", "kanji-marker.svg", "kanji-icon-button kanji-tool-button")}
         ${iconButton("kanjiEraserButton", "Eraser", "kanji-eraser.svg", "kanji-icon-button kanji-tool-button")}
         <span class="kanji-toolbar-divider" aria-hidden="true"></span>
+        ${iconButton("replayKanjiButton", "Replay", "kanji-redo.svg", "kanji-icon-button")}
+        ${iconButton("guidanceKanjiButton", "Toggle Guidance", "kanji-pen.svg", "kanji-icon-button")}
+        <span class="kanji-toolbar-divider" aria-hidden="true"></span>
         ${iconButton("undoKanjiStrokeButton", "Undo", "kanji-undo.svg")}
         ${iconButton("redoKanjiStrokeButton", "Redo", "kanji-redo.svg")}
         ${iconButton("clearKanjiButton", "Clear", "kanji-clear.svg")}
@@ -55,6 +58,7 @@ function createDialog() {
         <canvas id="kanjiInkCanvas" tabindex="0" aria-label="Kanji drawing canvas" data-paper-pattern="${KANJI_PAPER_PATTERN.semanticName}" data-paper-rule-count="${KANJI_PAPER_PATTERN.ruleCount}"></canvas>
       </div>
       <footer class="kanji-ink-footer">
+        ${iconButton("exportKanjiPngButton", "Export PNG", "kanji-save.svg", "kanji-icon-button")}
         ${iconButton("saveKanjiButton", "Save drawing", "kanji-save.svg", "kanji-icon-button kanji-save-button")}
       </footer>
       <p id="kanjiInkStatus" class="kanji-ink-status"></p>
@@ -129,6 +133,8 @@ const elements = {
   pen: document.getElementById("kanjiPenButton"),
   marker: document.getElementById("kanjiMarkerButton"),
   eraser: document.getElementById("kanjiEraserButton"),
+  replay: document.getElementById("replayKanjiButton"),
+  guidance: document.getElementById("guidanceKanjiButton"),
   undo: document.getElementById("undoKanjiStrokeButton"),
   redo: document.getElementById("redoKanjiStrokeButton"),
   clear: document.getElementById("clearKanjiButton"),
@@ -138,6 +144,7 @@ const elements = {
   discardConfirmation: document.getElementById("kanjiDiscardConfirmation"),
   keepDrawing: document.getElementById("keepKanjiDrawingButton"),
   discardDrawing: document.getElementById("discardKanjiDrawingButton"),
+  exportPng: document.getElementById("exportKanjiPngButton"),
 };
 if (Object.values(elements).some((element) => !element)) throw new Error("KANJI_INK_UI_MISSING_CONTROL");
 
@@ -150,6 +157,8 @@ let pointerFallbackAttached = false;
 let strokeStartedAt = 0;
 let liveStroke = null;
 let pointerLimitMessage = "";
+let isReplaying = false;
+let showGuidance = false;
 let lastDeletedEntry = null;
 let syncSequence = 0;
 let syncScheduled = false;
@@ -264,8 +273,14 @@ function normalizedStroke(stroke) {
     : stroke;
 }
 
-function drawStrokes(context, strokes, width, height, inkColor = KANJI_PAPER_PATTERN.inkColor) {
+function drawStrokes(context, strokes, width, height, inkColor = KANJI_PAPER_PATTERN.inkColor, progress = 1.0) {
+  const totalStrokes = strokes.length;
+  const strokesToDraw = progress === 1.0 ? totalStrokes : Math.floor(progress * totalStrokes) + 1;
+  const partialStrokeProgress = progress === 1.0 ? 1.0 : (progress * totalStrokes) % 1;
+  let i = 0;
   for (const input of strokes) {
+    if (i >= strokesToDraw) break;
+    const isLast = (i === strokesToDraw - 1 && progress < 1.0);
     const stroke = normalizedStroke(input);
     if (!stroke?.points || stroke.points.length < 2) continue;
     context.save();
@@ -276,13 +291,21 @@ function drawStrokes(context, strokes, width, height, inkColor = KANJI_PAPER_PAT
     context.lineJoin = "round";
     context.beginPath();
     context.moveTo(stroke.points[0].x * width, stroke.points[0].y * height);
-    for (const point of stroke.points.slice(1)) context.lineTo(point.x * width, point.y * height);
+    const ptCount = isLast ? Math.max(1, Math.floor(stroke.points.length * partialStrokeProgress)) : stroke.points.length;
+    for (let j = 1; j < ptCount; j++) { context.lineTo(stroke.points[j].x * width, stroke.points[j].y * height); }
     context.stroke();
     context.restore();
+    if (showGuidance && stroke.tool !== "eraser" && stroke.points.length > 0) {
+      context.fillStyle = "blue";
+      context.font = "14px sans-serif";
+      context.fillText((i + 1).toString(), stroke.points[0].x * width + 5, stroke.points[0].y * height - 5);
+    }
+    i++;
   }
 }
 
 function renderCanvas() {
+  if (isReplaying) return;
   const { context, width, height } = configureCanvas();
   drawPaper(context, width, height);
   drawStrokes(context, controller?.snapshot().strokes || [], width, height);
@@ -759,6 +782,38 @@ for (const [tool, button] of [["pen", elements.pen], ["marker", elements.marker]
     renderController();
   });
 }
+elements.exportPng.addEventListener("click", async () => {
+  const file = await exportCurrentKanjiPng();
+  if (file) triggerDownload(file);
+});
+
+elements.replay.addEventListener("click", () => {
+  if (!controller || isReplaying || controller.snapshot().strokes.length === 0) return;
+  isReplaying = true;
+  let progress = 0;
+  const animate = () => {
+    progress += 0.02;
+    if (progress > 1.0) {
+      isReplaying = false;
+      renderCanvas();
+      return;
+    }
+    const width = elements.canvas.width;
+    const height = elements.canvas.height;
+    const context = elements.canvas.getContext("2d");
+    context.clearRect(0, 0, width, height);
+    drawPaper(context, width, height);
+    drawStrokes(context, controller.snapshot().strokes, width, height, KANJI_PAPER_PATTERN.inkColor, progress);
+    requestAnimationFrame(animate);
+  };
+  requestAnimationFrame(animate);
+});
+
+elements.guidance.addEventListener("click", () => {
+  showGuidance = !showGuidance;
+  renderCanvas();
+});
+
 elements.undo.addEventListener("click", () => {
   pointerLimitMessage = "";
   controller?.undo();
@@ -829,6 +884,26 @@ const unregisterCommands = [
     run: (context) => openDialog(null, context.opener),
   }),
   commandRuntime.registry.register({
+    id: "export.kanji-png",
+    title: "Export Kanji drawing as PNG",
+    description: "Export current Kanji drawing as high-resolution transparent PNG",
+    shortcuts: [],
+    scope: "shell",
+    isAvailable: () => true,
+    unavailableReason: () => (!controller || controller.snapshot().strokes.length === 0) ? "Kanji drawing is empty" : false,
+    run: async () => {
+      const file = await exportCurrentKanjiPng();
+      if (file) {
+        const url = URL.createObjectURL(file.content);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }
+  }),
+  commandRuntime.registry.register({
     id: "export.kanji-json",
     title: "Export Kanji data as JSON",
     description: "Download lossless note-linked handwriting records",
@@ -851,6 +926,27 @@ const unregisterCommands = [
 ];
 
 scheduleSynchronization();
+
+async function exportCurrentKanjiPng() {
+  if (!controller) return null;
+  const snapshot = controller.snapshot();
+  if (snapshot.strokes.length === 0) return null;
+  const width = 1024;
+  const height = 1024;
+  const offscreen = document.createElement("canvas");
+  offscreen.width = width;
+  offscreen.height = height;
+  const context = offscreen.getContext("2d");
+  // Transparent background
+  context.clearRect(0, 0, width, height);
+  drawStrokes(context, snapshot.strokes, width, height);
+  
+  return new Promise((resolve) => {
+    offscreen.toBlob((blob) => {
+      resolve({ filename: "kanji-export.png", content: blob });
+    }, "image/png");
+  });
+}
 
 export const kanjiInkApp = Object.freeze({
   open: openDialog,

@@ -11,6 +11,7 @@ export function getInitialGamificationState() {
     streak: 0,
     lastReviewDate: null,
     achievements: [],
+    lastProcessedLogId: null,
   };
 }
 
@@ -24,10 +25,17 @@ export function updateGamificationState(currentState, reviewLog) {
     streak: currentState.streak || 0,
     lastReviewDate: currentState.lastReviewDate || null,
     achievements: Array.isArray(currentState.achievements) ? [...currentState.achievements] : [],
+    lastProcessedLogId: currentState.lastProcessedLogId || null,
   };
+
+  if (reviewLog.id && nextState.lastProcessedLogId === reviewLog.id) {
+    return currentState;
+  }
+  nextState.lastProcessedLogId = reviewLog.id;
   
   const xp = XP_MAP[reviewLog.grade] || 0;
-  const reviewDate = reviewLog.reviewedAt.split('T')[0]; // Extract local date roughly, assuming ISO string
+  const dateObj = new Date(reviewLog.reviewedAt);
+  const reviewDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
 
   if (!nextState.lastReviewDate) {
     nextState.streak = 1;
@@ -41,7 +49,9 @@ export function updateGamificationState(currentState, reviewLog) {
     
     if (diffDays === 1) {
       nextState.streak += 1;
-    } else if (diffDays > 1) {
+    } else if (diffDays === 2) {
+      // 24h grace window: streak is preserved but not incremented
+    } else if (diffDays > 2) {
       // Streak broken
       nextState.streak = 1;
     }

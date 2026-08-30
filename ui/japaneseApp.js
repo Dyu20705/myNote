@@ -11,8 +11,12 @@ import {
   putStudyReviewToDb,
   restoreNoteWithReviewToDb,
   getSettings,
+  putSettings,
 } from "../core/storage.js";
 import { createJapaneseFilterController } from "./japanese-filters.js";
+import { updateGamificationState } from "../core/japaneseGamification.js";
+import { updateDailyGoalsState } from "../core/japaneseDailyGoals.js";
+
 import { presentJapaneseReviewState } from "./statePresentation.js";
 
 function pad(value) {
@@ -261,14 +265,14 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
           if (achEl) achEl.textContent = gamificationState.achievements.length;
         }).catch(e => console.error(e));
         
-        getSettings(db, "dailyGoalsState").then(dailyGoalsState => {
-          dailyGoalsState = dailyGoalsState || { reviewsToday: 0, targetReviewsPerDay: 50 };
+        getSettings(db, "japaneseDailyGoalsState").then(japaneseDailyGoalsState => {
+          japaneseDailyGoalsState = japaneseDailyGoalsState || { reviewsToday: 0, targetReviewsPerDay: 50 };
           const progressEl = document.getElementById("dailyGoalProgress");
           const textEl = document.getElementById("dailyGoalText");
           if (progressEl && textEl) {
-            progressEl.value = dailyGoalsState.reviewsToday;
-            progressEl.max = dailyGoalsState.targetReviewsPerDay;
-            textEl.textContent = dailyGoalsState.reviewsToday + " / " + dailyGoalsState.targetReviewsPerDay;
+            progressEl.value = japaneseDailyGoalsState.reviewsToday;
+            progressEl.max = japaneseDailyGoalsState.targetReviewsPerDay;
+            textEl.textContent = japaneseDailyGoalsState.reviewsToday + " / " + japaneseDailyGoalsState.targetReviewsPerDay;
           }
         }).catch(e => console.error(e));
       }
@@ -589,9 +593,34 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     reviewPhase = "rating-pending";
     renderReview();
     for (const button of buttons) button.disabled = true;
+
     try {
-      await actions.rateReview(session.currentNoteId, rating, currentContext().nowIso);
+      const now = currentContext().nowIso;
+      await actions.rateReview(session.currentNoteId, rating, now);
+      
+      const db = store.getState().db;
+      if (db) {
+        const logId = session.currentNoteId + "-" + Date.now();
+        const gradeMap = { again: 1, hard: 2, good: 3, easy: 4 };
+        const gradeStr = typeof rating === "string" ? rating.toLowerCase() : "";
+        const numericGrade = gradeMap[gradeStr] || 4;
+        const reviewLog = { id: logId, grade: numericGrade, reviewedAt: now };
+        
+        try {
+          let gamificationState = await getSettings(db, "gamificationState") || { xp: 0, streak: 0, achievements: [] };
+        gamificationState = updateGamificationState(gamificationState, reviewLog);
+        await putSettings(db, "gamificationState", gamificationState);
+        
+        let dailyGoalsState = await getSettings(db, "japaneseDailyGoalsState") || { reviewsToday: 0, targetReviewsPerDay: 50 };
+        dailyGoalsState = updateDailyGoalsState(dailyGoalsState, reviewLog, false);
+        await putSettings(db, "japaneseDailyGoalsState", dailyGoalsState);
+        } catch (err) {
+          console.error("GAMIFICATION ERROR:", err);
+        }
+      }
+      
       reviewPhase = "ready";
+
     } catch {
       reviewPhase = "rating-failed";
       failed = true;
@@ -670,6 +699,47 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   coordinator.ready.then(() => renderDashboard()).catch(() => undefined);
 
+  // Daily Goal Settings
+  const dailyGoalSettingsButton = document.getElementById("dailyGoalSettingsButton");
+  const dailyGoalSettingsDialog = document.getElementById("dailyGoalSettingsDialog");
+  const dailyGoalSettingsCancel = document.getElementById("dailyGoalSettingsCancel");
+  const dailyGoalSettingsForm = document.getElementById("dailyGoalSettingsForm");
+  const dailyGoalTargetInput = document.getElementById("dailyGoalTargetInput");
+
+  if (dailyGoalSettingsButton && dailyGoalSettingsDialog) {
+    dailyGoalSettingsButton.addEventListener("click", async () => {
+      try {
+        const db = store.getState().db;
+        const state = await getSettings(db, "japaneseDailyGoalsState") || { targetReviewsPerDay: 50 };
+        dailyGoalTargetInput.value = state.targetReviewsPerDay;
+        dailyGoalSettingsDialog.showModal();
+      } catch (e) {
+        console.error(e);
+      }
+    });
+    
+    dailyGoalSettingsCancel.addEventListener("click", () => {
+      dailyGoalSettingsDialog.close();
+    });
+    
+    dailyGoalSettingsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const newTarget = parseInt(dailyGoalTargetInput.value, 10);
+      if (!isNaN(newTarget) && newTarget > 0) {
+        try {
+          const db = store.getState().db;
+          const state = await getSettings(db, "japaneseDailyGoalsState") || { reviewsToday: 0, newItemsToday: 0 };
+          state.targetReviewsPerDay = newTarget;
+          await putSettings(db, "japaneseDailyGoalsState", state);
+          dailyGoalSettingsDialog.close();
+          renderDashboard(); // refresh
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  }
+
   return {
     ready: coordinator.ready,
     openCreateMenu() {
@@ -689,3 +759,4 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     },
   };
 }
+

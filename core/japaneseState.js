@@ -161,9 +161,9 @@ function assertExactObject(input, fields) {
   }
 }
 
-function deriveDueQueue(notes, reviews, nowIso) {
+function deriveDueQueue(notes, reviews, nowIso, limit) {
   const { notesById, reviewsById, statusMap } = analyzeRecords(notes, reviews);
-  const queue = [];
+  let queue = [];
 
   for (const review of reviewsById.values()) {
     const note = notesById.get(review.noteId);
@@ -192,7 +192,7 @@ function deriveDueQueue(notes, reviews, nowIso) {
   return {
     notesById,
     reviewsById,
-    queue: queue.map(({ noteId, notebookType }) => ({ noteId, notebookType })),
+    queue: (limit !== undefined ? queue.slice(0, limit) : queue).map(({ noteId, notebookType }) => ({ noteId, notebookType })),
     ...finalizeStatus(statusMap),
   };
 }
@@ -207,7 +207,7 @@ export function buildDueReviewQueue(input) {
     if (!Array.isArray(input.notes) || !Array.isArray(input.reviews)) {
       throw createInvalidStateInputError();
     }
-    const result = deriveDueQueue(input.notes, input.reviews, input.nowIso);
+    const result = deriveDueQueue(input.notes, input.reviews, input.nowIso, input.limit);
     return {
       queue: result.queue,
       status: result.status,
@@ -302,7 +302,7 @@ export function startReviewSession(state, input) {
     };
     if (hasLimit) buildInput.limit = input.limit;
     const result = buildDueReviewQueue(buildInput);
-    const queue = result.queue.map((item) => ({ ...item }));
+    let queue = result.queue.map((item) => ({ ...item }));
     return {
       ...state,
       studyStatus: result.status,
