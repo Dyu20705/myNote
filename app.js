@@ -32,7 +32,7 @@ import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
 import { BUILTIN_THEMES } from "./core/theme/themeSchema.js";
 import { applyThemeTokens } from "./core/theme/themeEngine.js";
 import { getTheme } from "./core/theme/themeStorage.js";
-import { createJapaneseApp } from "./japaneseApp.js";
+import { createJapaneseApp } from "./ui/japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
@@ -1084,6 +1084,25 @@ const unregisterApplicationCommands = [
     isAvailable: () => Boolean(activeNote()),
     unavailableReason: () => "No active note to edit",
     run: () => handleToolbarAction("task"),
+  }),
+  registerCommand({
+    id: "editor.toggle-details",
+    title: "Toggle note details",
+    description: "Open or close note details inspector",
+    shortcuts: [{ key: "i", primaryModifier: true }],
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to inspect",
+    run: () => {
+      const inspector = document.getElementById("noteInspector");
+      const detailsBtn = document.getElementById("detailsButton");
+      const closeDetailsBtn = document.getElementById("closeDetailsButton");
+      if (inspector?.hidden) {
+        detailsBtn?.click();
+      } else {
+        closeDetailsBtn?.click();
+      }
+    },
   }),
   registerCommand({
     id: "palette.open",

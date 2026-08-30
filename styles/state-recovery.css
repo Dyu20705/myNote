@@ -35,6 +35,10 @@
   padding: var(--mn-space-3) var(--mn-space-4);
 }
 
+.application-recovery[hidden] {
+  display: none !important;
+}
+
 .application-recovery p,
 .japanese-availability-status {
   margin: 0;

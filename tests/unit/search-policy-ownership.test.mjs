@@ -10,7 +10,7 @@ async function source(path) {
 
 test("Japanese search filtering uses the policy API instead of replacing searchClient.query", async () => {
   const [japaneseApp, filterController] = await Promise.all([
-    source("japaneseApp.js"),
+    source("ui/japaneseApp.js"),
     source("ui/japanese-filters.js"),
   ]);
 
@@ -23,11 +23,11 @@ test("Japanese filter controller is composed through the single application entr
   const [index, app, japaneseApp] = await Promise.all([
     source("index.html"),
     source("app.js"),
-    source("japaneseApp.js"),
+    source("ui/japaneseApp.js"),
   ]);
 
   assert.doesNotMatch(index, /<script[^>]+src="japaneseApp\.js"/);
   assert.match(index, /<script[^>]+src="app\.js"/);
-  assert.match(app, /import \{ createJapaneseApp \} from "\.\/japaneseApp\.js"/);
+  assert.match(app, /import \{ createJapaneseApp \} from "\.\/ui\/japaneseApp\.js"/);
   assert.match(japaneseApp, /createJapaneseFilterController\s*\(/);
 });

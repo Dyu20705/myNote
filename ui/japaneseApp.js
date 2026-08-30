@@ -1,7 +1,7 @@
-import { createJapaneseActions } from "./core/japaneseActions.js";
-import { JapaneseNoteFilter } from "./core/japaneseFilters.js";
-import { advanceReviewSession } from "./core/japaneseState.js";
-import { createJapaneseWorkspaceCoordinator } from "./core/japaneseWorkspaceCoordinator.js";
+import { createJapaneseActions } from "../core/japaneseActions.js";
+import { JapaneseNoteFilter } from "../core/japaneseFilters.js";
+import { advanceReviewSession } from "../core/japaneseState.js";
+import { createJapaneseWorkspaceCoordinator } from "../core/japaneseWorkspaceCoordinator.js";
 import {
   deleteNoteFromDb,
   deleteNoteWithReviewFromDb,
@@ -10,9 +10,9 @@ import {
   putNoteToDb,
   putStudyReviewToDb,
   restoreNoteWithReviewToDb,
-} from "./core/storage.js";
-import { createJapaneseFilterController } from "./ui/japanese-filters.js";
-import { presentJapaneseReviewState } from "./ui/statePresentation.js";
+} from "../core/storage.js";
+import { createJapaneseFilterController } from "./japanese-filters.js";
+import { presentJapaneseReviewState } from "./statePresentation.js";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -150,7 +150,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
 
   const stylesheet = document.createElement("link");
   stylesheet.rel = "stylesheet";
-  stylesheet.href = "japanese.css";
+  stylesheet.href = "styles/japanese.css";
   stylesheet.dataset.japaneseStylesheet = "true";
   if (!document.head.querySelector("[data-japanese-stylesheet]")) {
     document.head.append(stylesheet);

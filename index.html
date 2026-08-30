@@ -6,9 +6,9 @@
     <title>myNote</title>
     <meta name="description" content="Minimal local note app." />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="command.css" />
-    <link rel="stylesheet" href="editor.css" />
-    <link rel="stylesheet" href="state-recovery.css" />
+    <link rel="stylesheet" href="styles/command.css" />
+    <link rel="stylesheet" href="styles/editor.css" />
+    <link rel="stylesheet" href="styles/state-recovery.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -212,9 +212,25 @@
               </div>
               <button id="closeDetailsButton" class="quiet-button" type="button" aria-label="Close details">Close</button>
             </div>
+            <section id="noteStatsRegion" class="inspector-region" aria-labelledby="statsHeading">
+              <h3 id="statsHeading">Statistics</h3>
+              <dl id="noteStatsList" class="metadata-list"></dl>
+            </section>
+            <section id="noteTagsRegion" class="inspector-region" aria-labelledby="tagsHeading" hidden>
+              <h3 id="tagsHeading">Tags</h3>
+              <div id="noteTagsList" class="tags-list"></div>
+            </section>
+            <section id="outgoingLinksRegion" class="inspector-region" aria-labelledby="outgoingLinksHeading" hidden>
+              <h3 id="outgoingLinksHeading">Outgoing links</h3>
+              <div id="outgoingLinksList" class="outgoing-links-list"></div>
+            </section>
             <section id="backlinksRegion" class="inspector-region" aria-labelledby="backlinksHeading" hidden>
               <h3 id="backlinksHeading">Backlinks</h3>
               <div id="backlinksList" class="backlinks-list"></div>
+            </section>
+            <section id="japaneseStudyRegion" class="inspector-region" aria-labelledby="japaneseStudyHeading" hidden>
+              <h3 id="japaneseStudyHeading">Japanese study status</h3>
+              <dl id="japaneseStudyList" class="metadata-list"></dl>
             </section>
             <section id="noteMetadataRegion" class="inspector-region" aria-labelledby="metadataHeading">
               <h3 id="metadataHeading">Metadata</h3>

@@ -345,9 +345,52 @@
   overflow-wrap: anywhere;
 }
 
-.note-inspector .backlinks-list {
+.note-inspector .backlinks-list,
+.note-inspector .outgoing-links-list {
   display: grid;
   gap: var(--mn-space-2);
+}
+
+.outgoing-link-item,
+.backlink-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mn-space-2);
+  padding: var(--mn-space-1) var(--mn-space-2);
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-default);
+  font-size: 0.84rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.outgoing-link-item:hover,
+.outgoing-link-item:focus-visible,
+.backlink-item:hover,
+.backlink-item:focus-visible {
+  border-color: var(--mn-border-default);
+  background: var(--mn-surface-hover);
+  color: var(--mn-primary);
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mn-space-1) var(--mn-space-2);
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--mn-space-2);
+  border: 1px solid var(--mn-border-subtle);
+  border-radius: var(--mn-radius-full);
+  color: var(--mn-text-secondary);
+  background: var(--mn-surface-sunken);
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 .note-actions-popover {
