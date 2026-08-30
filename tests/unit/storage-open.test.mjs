@@ -10,7 +10,7 @@ function installIndexedDbStub(schedule) {
   globalThis.indexedDB = {
     open(name, version) {
       assert.equal(name, "myNoteDB");
-      assert.equal(version, 5);
+      assert.equal(version, 6);
       schedule(request);
       return request;
     },

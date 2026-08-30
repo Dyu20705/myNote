@@ -267,7 +267,7 @@ describe("Export/Import round-trip", () => {
   function makeValidSnapshot() {
     const now = "2024-06-01T00:00:00.000Z";
     return {
-      schemaVersion: 5,
+      schemaVersion: 6,
       notes: [
         { id: "note-1", title: "Test", content: "", tags: [], createdAt: now, updatedAt: now, pinned: false, archived: false, version: 1 }
       ],
@@ -286,7 +286,9 @@ describe("Export/Import round-trip", () => {
       studyArtifacts: [
         { id: "art-1", noteId: "note-1", type: "output", createdAt: now, updatedAt: now }
       ],
-      kanjiInkEntries: []
+      kanjiInkEntries: [],
+      userThemes: [],
+      settings: []
     };
   }
 
@@ -395,6 +397,8 @@ describe("Export/Import round-trip", () => {
     assert.equal(exported2.reviewLogs.length, exported1.reviewLogs.length);
     assert.equal(exported2.studyArtifacts.length, exported1.studyArtifacts.length);
     assert.equal(exported2.kanjiInkEntries.length, exported1.kanjiInkEntries.length);
+    assert.equal(exported2.userThemes.length, exported1.userThemes.length);
+    assert.equal(exported2.settings.length, exported1.settings.length);
 
     // Verify entity IDs preserved
     assert.equal(exported2.notes[0].id, "note-1");
@@ -424,14 +428,16 @@ describe("Export/Import round-trip", () => {
 
   test("import with empty arrays succeeds", async () => {
     const snapshot = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       notes: [],
       learningItems: [],
       cards: [],
       reviewStates: [],
       reviewLogs: [],
       studyArtifacts: [],
-      kanjiInkEntries: []
+      kanjiInkEntries: [],
+      userThemes: [],
+      settings: []
     };
     await importDatabase(db, snapshot);
     const exported = await exportDatabase(db);
