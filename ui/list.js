@@ -220,7 +220,66 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     container.append(empty);
   }
 
-  function render({ notesById, orderedIds, activeId, query, emptyPresentation }) {
+  function getGridColumnCount() {
+    const items = [...container.querySelectorAll(".note-item")];
+    if (items.length < 2) return 1;
+    const firstTop = items[0].getBoundingClientRect().top;
+    let count = 0;
+    for (const item of items) {
+      if (Math.abs(item.getBoundingClientRect().top - firstTop) < 15) {
+        count += 1;
+      } else {
+        break;
+      }
+    }
+    return Math.max(1, count);
+  }
+
+  function handleKeyNavigation(event) {
+    const target = event.target?.closest?.(".note-item");
+    if (!target) return;
+
+    const items = [...container.querySelectorAll(".note-item")];
+    const currentIndex = items.indexOf(target);
+    if (currentIndex === -1) return;
+
+    const isGrid = container.dataset.viewMode === "grid";
+    const cols = isGrid ? getGridColumnCount() : 1;
+    let nextIndex;
+
+    switch (event.key) {
+      case "ArrowRight":
+        nextIndex = Math.min(items.length - 1, currentIndex + 1);
+        break;
+      case "ArrowLeft":
+        nextIndex = Math.max(0, currentIndex - 1);
+        break;
+      case "ArrowDown":
+        nextIndex = Math.min(items.length - 1, currentIndex + cols);
+        break;
+      case "ArrowUp":
+        nextIndex = Math.max(0, currentIndex - cols);
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = items.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    if (nextIndex !== -1 && nextIndex !== currentIndex) {
+      event.preventDefault();
+      const nextItem = items[nextIndex];
+      nextItem.focus();
+      const noteId = nextItem.dataset.id;
+      if (noteId) onSelect(noteId, nextItem);
+    }
+  }
+
+  function render({ notesById, orderedIds, activeId, query, emptyPresentation, viewMode = "list" }) {
     const sections = projectSections(notesById, orderedIds);
     const boardIds = sections.flatMap((section) => section.orderedIds);
     const virtualized = boardIds.length >= VIRTUALIZATION_THRESHOLD;
@@ -233,6 +292,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
       virtualized,
     };
     container.dataset.virtualized = String(virtualized);
+    container.dataset.viewMode = viewMode;
 
     if (boardIds.length === 0) {
       clearToEmpty(emptyPresentation);
@@ -242,6 +302,8 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     if (virtualized) renderWindow();
     else renderCompleteBoard(sections);
   }
+
+  container.addEventListener("keydown", handleKeyNavigation);
 
   scrollOwner.addEventListener("scroll", () => {
     if (currentPayload.virtualized) renderWindow();
