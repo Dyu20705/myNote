@@ -39,6 +39,7 @@ import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
 import { createThemeSwitcher } from "./ui/themeSwitcher.js";
 import { createEditorToolbar } from "./ui/editorToolbar.js";
+import { registerApplicationCommands } from "./ui/applicationCommands.js";
 import {
   insertBold,
   insertItalic,
@@ -1058,285 +1059,32 @@ if (els.editorToolbar && els.contentInput) {
   });
 }
 
-const unregisterApplicationCommands = [
-  registerCommand({
-    id: "editor.bold",
-    title: "Bold text",
-    description: "Wrap selection in bold markdown syntax",
-    shortcuts: [{ key: "b", primaryModifier: true }],
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => handleToolbarAction("bold"),
-  }),
-  registerCommand({
-    id: "editor.italic",
-    title: "Italic text",
-    description: "Wrap selection in italic markdown syntax",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => handleToolbarAction("italic"),
-  }),
-  registerCommand({
-    id: "editor.strikethrough",
-    title: "Strikethrough text",
-    description: "Wrap selection in strikethrough markdown syntax",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => handleToolbarAction("strikethrough"),
-  }),
-  registerCommand({
-    id: "editor.link",
-    title: "Insert link placeholder",
-    description: "Insert markdown link placeholder for selection",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => handleToolbarAction("link"),
-  }),
-  registerCommand({
-    id: "editor.heading",
-    title: "Cycle heading level",
-    description: "Cycle current line heading level (H1, H2, H3, paragraph)",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => handleToolbarAction("heading"),
-  }),
-  registerCommand({
-    id: "editor.task",
-    title: "Toggle task item",
-    description: "Toggle task checklist item prefix for current line",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => handleToolbarAction("task"),
-  }),
-  registerCommand({
-    id: "editor.toggle-details",
-    title: "Toggle note details",
-    description: "Open or close note details inspector",
-    shortcuts: [{ key: "i", primaryModifier: true }],
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to inspect",
-    run: () => {
-      const inspector = document.getElementById("noteInspector");
-      const detailsBtn = document.getElementById("detailsButton");
-      const closeDetailsBtn = document.getElementById("closeDetailsButton");
-      if (inspector?.hidden) {
-        detailsBtn?.click();
-      } else {
-        closeDetailsBtn?.click();
-      }
-    },
-  }),
-  registerCommand({
-    id: "palette.open",
-    title: "Open command palette",
-    description: "Search available application commands",
-    shortcuts: [{ key: "k", primaryModifier: true }],
-    scope: "global",
-    run: (context) => palette.open(context.opener),
-  }),
-  registerCommand({
-    id: "palette.close",
-    title: "Close command palette",
-    description: "Close the command palette and return focus",
-    shortcuts: [{ key: "Escape" }],
-    scope: "palette",
-    run: () => palette.close(),
-  }),
-  registerCommand({
-    id: "theme.switch",
-    title: "Switch theme",
-    description: "Open the theme switcher to preview and select themes",
-    run: (context) => themeSwitcher?.open(context.opener),
-  }),
-  registerCommand({
-    id: "notes.create",
-    title: "New note",
-    description: "Create an ordinary note",
-    shortcuts: [{ key: "n", primaryModifier: true }],
-    isAvailable: (context) => context.workspace === "notes",
-    unavailableReason: () => "Switch to Notes workspace to create an ordinary note",
-    run: (context) => createNote({}, { opener: context.opener }),
-  }),
-  registerCommand({
-    id: "notes.daily",
-    title: "Open daily note",
-    description: "Open or create today’s ordinary daily note",
-    run: () => openDailyNote(),
-  }),
-  registerCommand({
-    id: "notes.search",
-    title: "Focus search",
-    description: "Focus the note search field",
-    shortcuts: [{ key: "/" }],
-    run: () => focusSearch(),
-  }),
-  registerCommand({
-    id: "editor.save",
-    title: "Save note",
-    description: "Flush the active note to local storage",
-    shortcuts: [{ key: "Enter", primaryModifier: true }],
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to save",
-    run: () => autosave.flush(),
-  }),
-  registerCommand({
-    id: "editor.insert-code",
-    title: "Insert code block",
-    description: "Insert a fenced code block into the active editor",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => insertCodeBlock(),
-  }),
-  registerCommand({
-    id: "notes.pin",
-    title: "Toggle pin active note",
-    description: "Pin or unpin the selected note",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to pin",
-    run: () => mutateActiveNote((note) => ({ ...note, pinned: !note.pinned }), "pin"),
-  }),
-  registerCommand({
-    id: "notes.archive",
-    title: "Archive active note",
-    description: "Archive the selected note without deleting it",
-    isAvailable: () => {
-      const note = activeNote();
-      console.log("NOTE FOR ARCHIVE", note); return note && !note.archived;
-    },
-    unavailableReason: () => "No active note to archive",
-    run: () => mutateActiveNote((note) => ({ ...note, archived: true }), "archive"),
-  }),
-  registerCommand({
-    id: "notes.unarchive",
-    title: "Unarchive active note",
-    description: "Restore the selected note from the archive",
-    isAvailable: () => {
-      const note = activeNote();
-      return note && note.archived;
-    },
-    unavailableReason: () => "No archived note is active",
-    run: () => mutateActiveNote((note) => ({ ...note, archived: false }), "unarchive"),
-  }),
-  registerCommand({
-    id: "notes.delete",
-    title: "Delete active note",
-    description: "Delete through the shared lifecycle boundary",
-    shortcuts: [{ key: "Delete" }],
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to delete",
-    run: () => deleteActiveNote(),
-  }),
-  registerCommand({
-    id: "notes.recent",
-    title: "Switch recent note",
-    description: "Switch to the previously active note",
-    shortcuts: [{ key: "Tab", primaryModifier: true }],
-    isAvailable: () => store.getState().recentIds.length >= 2,
-    unavailableReason: () => "No recent note is available",
-    run: () => switchRecentNote(),
-  }),
-  registerCommand({
-    id: "history.undo",
-    title: "Undo last command",
-    description: "Undo the latest application command",
-    shortcuts: [{ key: "z", primaryModifier: true }],
-    isAvailable: () => commandStack.canUndo(),
-    unavailableReason: () => "Nothing to undo",
-    run: () => undoLastCommand(),
-  }),
-  registerCommand({
-    id: "history.redo",
-    title: "Redo last command",
-    description: "Redo the latest undone application command",
-    shortcuts: [
-      { key: "z", primaryModifier: true, shiftKey: true },
-      { key: "y", primaryModifier: true },
-    ],
-    isAvailable: () => commandStack.canRedo(),
-    unavailableReason: () => "Nothing to redo",
-    run: () => redoLastCommand(),
-  }),
-  registerCommand({
-    id: "notes.next",
-    title: "Select next note",
-    description: "Move to the next visible note",
-    shortcuts: [{ key: "j" }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => moveSelection(1),
-  }),
-  registerCommand({
-    id: "notes.previous",
-    title: "Select previous note",
-    description: "Move to the previous visible note",
-    shortcuts: [{ key: "k" }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => moveSelection(-1),
-  }),
-  registerCommand({
-    id: "notes.last",
-    title: "Select last note",
-    description: "Move to the last visible note",
-    shortcuts: [{ key: "g", shiftKey: true }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => jumpBoundary(true),
-  }),
-  registerCommand({
-    id: "notes.first",
-    title: "Select first note",
-    description: "Move to the first visible note",
-    shortcuts: [{ sequence: ["g", "g"] }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => jumpBoundary(false),
-  }),
-  registerCommand({
-    id: "notes.toggle-view-mode",
-    title: "Toggle list/grid view",
-    description: "Switch between list and grid note views",
-    shortcuts: [{ key: "g", primaryModifier: true, shiftKey: true }],
-    scope: "global",
-    run: () => toggleViewMode(),
-  }),
-  registerCommand({
-    id: "editor.focus",
-    title: "Focus editor",
-    description: "Move focus to the note editor",
-    shortcuts: [{ key: "i" }],
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: (context) => focusEditor(context.opener),
-  }),
-  registerCommand({
-    id: "export.markdown",
-    title: "Export all as Markdown",
-    description: "Download every note as Markdown",
-    run: () => exportMarkdown(),
-  }),
-  registerCommand({
-    id: "export.json",
-    title: "Export all as JSON",
-    description: "Download every note as JSON",
-    run: () => exportJson(),
-  }),
-  registerCommand({
-    id: "recovery.reset",
-    title: "Reset local database",
-    description: "Clear local note data after explicit confirmation",
-    run: (context) => openResetConfirmation(context.opener),
-  }),
-];
+const unregisterApplicationCommands = registerApplicationCommands({
+  registerCommand,
+  activeNote,
+  handleToolbarAction,
+  palette,
+  themeSwitcher,
+  createNote,
+  openDailyNote,
+  focusSearch,
+  autosave,
+  insertCodeBlock,
+  mutateActiveNote,
+  deleteActiveNote,
+  store,
+  switchRecentNote,
+  commandStack,
+  undoLastCommand,
+  redoLastCommand,
+  moveSelection,
+  jumpBoundary,
+  toggleViewMode,
+  focusEditor,
+  exportMarkdown,
+  exportJson,
+  openResetConfirmation,
+});
 
 els.searchInput.addEventListener("input", (event) => {
   const query = event.target.value.trim();
