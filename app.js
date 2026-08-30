@@ -1086,6 +1086,25 @@ const unregisterApplicationCommands = [
     run: () => handleToolbarAction("task"),
   }),
   registerCommand({
+    id: "editor.toggle-details",
+    title: "Toggle note details",
+    description: "Open or close note details inspector",
+    shortcuts: [{ key: "i", primaryModifier: true }],
+    scope: "editor",
+    isAvailable: () => Boolean(activeNote()),
+    unavailableReason: () => "No active note to inspect",
+    run: () => {
+      const inspector = document.getElementById("noteInspector");
+      const detailsBtn = document.getElementById("detailsButton");
+      const closeDetailsBtn = document.getElementById("closeDetailsButton");
+      if (inspector?.hidden) {
+        detailsBtn?.click();
+      } else {
+        closeDetailsBtn?.click();
+      }
+    },
+  }),
+  registerCommand({
     id: "palette.open",
     title: "Open command palette",
     description: "Search available application commands",
