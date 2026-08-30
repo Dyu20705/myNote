@@ -6,11 +6,11 @@ function toolbarError() {
 
 const TOOLBAR_ACTIONS = [
   { id: "bold", label: "Bold", title: "Bold (Ctrl+B)", text: "B", tag: "strong" },
-  { id: "italic", label: "Italic", title: "Italic (Ctrl+I)", text: "I", tag: "em" },
+  { id: "italic", label: "Italic", title: "Italic", text: "I", tag: "em" },
   { id: "strikethrough", label: "Strikethrough", title: "Strikethrough", text: "S", tag: "s" },
   { id: "code", label: "Inline code", title: "Inline code", text: "<>", tag: "code" },
   { id: "separator-1", isSeparator: true },
-  { id: "link", label: "Insert link", title: "Insert link", text: "Link", tag: "span" },
+  { id: "link", label: "Insert link", title: "Insert link placeholder", text: "Link", tag: "span" },
   { id: "heading", label: "Heading", title: "Cycle heading (#)", text: "H", tag: "strong" },
   { id: "task", label: "Task item", title: "Task item", text: "☑", tag: "span" },
   { id: "separator-2", isSeparator: true },
@@ -126,11 +126,7 @@ export function createEditorToolbar(options = {}) {
     syncVisibilityFromSelection();
   }
 
-  container.addEventListener("keydown", handleKeydown);
-  textarea.addEventListener?.("select", handleTextareaEvents);
-  textarea.addEventListener?.("pointerup", handleTextareaEvents);
-  textarea.addEventListener?.("keyup", handleTextareaEvents);
-  textarea.addEventListener?.("blur", () => {
+  function handleBlur() {
     if (typeof globalThis.requestAnimationFrame === "function") {
       globalThis.requestAnimationFrame(() => {
         const isToolbarFocused = doc.activeElement && (container === doc.activeElement || container.contains?.(doc.activeElement));
@@ -139,8 +135,20 @@ export function createEditorToolbar(options = {}) {
           container.hidden = true;
         }
       });
+    } else {
+      const isToolbarFocused = doc.activeElement && (container === doc.activeElement || container.contains?.(doc.activeElement));
+      if (!isToolbarFocused && doc.activeElement !== textarea) {
+        active = false;
+        container.hidden = true;
+      }
     }
-  });
+  }
+
+  container.addEventListener("keydown", handleKeydown);
+  textarea.addEventListener?.("select", handleTextareaEvents);
+  textarea.addEventListener?.("pointerup", handleTextareaEvents);
+  textarea.addEventListener?.("keyup", handleTextareaEvents);
+  textarea.addEventListener?.("blur", handleBlur);
 
   render();
 
@@ -176,6 +184,7 @@ export function createEditorToolbar(options = {}) {
       textarea.removeEventListener?.("select", handleTextareaEvents);
       textarea.removeEventListener?.("pointerup", handleTextareaEvents);
       textarea.removeEventListener?.("keyup", handleTextareaEvents);
+      textarea.removeEventListener?.("blur", handleBlur);
       container.replaceChildren();
     },
   });

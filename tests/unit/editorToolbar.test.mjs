@@ -52,6 +52,9 @@ function createMockElement(tagName = "div", attributes = {}) {
         listeners[event] = listeners[event].filter((item) => item !== fn);
       }
     },
+    getListenerCount(event) {
+      return listeners[event]?.length ?? 0;
+    },
     dispatchEvent(event) {
       if (listeners[event.type]) {
         for (const fn of listeners[event.type]) {
@@ -63,7 +66,7 @@ function createMockElement(tagName = "div", attributes = {}) {
   };
 }
 
-test("Editor Toolbar — Creation & Validation", async (t) => {
+test("Editor Toolbar — Creation, Validation & Lifecycle", async (t) => {
   await t.test("throws when options are missing or invalid", () => {
     assert.throws(() => createEditorToolbar(), /EDITOR_TOOLBAR_OPTIONS_INVALID/);
     assert.throws(() => createEditorToolbar({}), /EDITOR_TOOLBAR_OPTIONS_INVALID/);
@@ -76,7 +79,7 @@ test("Editor Toolbar — Creation & Validation", async (t) => {
     );
   });
 
-  await t.test("renders action buttons in container", () => {
+  await t.test("renders action buttons with accessible attributes", () => {
     const container = createMockElement("div", { hidden: true });
     const textarea = createMockElement("textarea");
     const actionsCalled = [];
@@ -96,6 +99,15 @@ test("Editor Toolbar — Creation & Validation", async (t) => {
     const boldButton = buttons.find((btn) => btn.dataset.action === "bold");
     assert.ok(boldButton, "Bold button must exist");
     assert.equal(boldButton.getAttribute("aria-label"), "Bold");
+    assert.equal(boldButton.title, "Bold (Ctrl+B)");
+
+    const italicButton = buttons.find((btn) => btn.dataset.action === "italic");
+    assert.ok(italicButton, "Italic button must exist");
+    assert.equal(italicButton.title, "Italic"); // Ctrl+I removed for #130 inspector reservation
+
+    const linkButton = buttons.find((btn) => btn.dataset.action === "link");
+    assert.ok(linkButton, "Link button must exist");
+    assert.equal(linkButton.title, "Insert link placeholder");
 
     // Click bold button
     boldButton.dispatchEvent({ type: "click", preventDefault() {} });
@@ -126,5 +138,34 @@ test("Editor Toolbar — Creation & Validation", async (t) => {
     assert.equal(container.hidden, true);
 
     toolbar.destroy();
+  });
+
+  await t.test("destroy deterministically unregisters all textarea and container event listeners", () => {
+    const container = createMockElement("div", { hidden: true });
+    const textarea = createMockElement("textarea");
+    const toolbar = createEditorToolbar({
+      container,
+      textarea,
+      onAction: () => {},
+      document: {
+        createElement: (tag) => createMockElement(tag),
+      },
+    });
+
+    // Check listeners installed
+    assert.equal(container.getListenerCount("keydown"), 1);
+    assert.equal(textarea.getListenerCount("select"), 1);
+    assert.equal(textarea.getListenerCount("pointerup"), 1);
+    assert.equal(textarea.getListenerCount("keyup"), 1);
+    assert.equal(textarea.getListenerCount("blur"), 1);
+
+    toolbar.destroy();
+
+    // Check listeners removed
+    assert.equal(container.getListenerCount("keydown"), 0);
+    assert.equal(textarea.getListenerCount("select"), 0);
+    assert.equal(textarea.getListenerCount("pointerup"), 0);
+    assert.equal(textarea.getListenerCount("keyup"), 0);
+    assert.equal(textarea.getListenerCount("blur"), 0);
   });
 });
