@@ -49,6 +49,43 @@ export const BUILTIN_THEMES = deepFreeze({
     },
   },
 
+  "default-dark": {
+    id: "default-dark",
+    version: THEME_SCHEMA_VERSION,
+    name: "Default Dark",
+    isDark: true,
+    author: "myNote Core",
+    colors: {
+      background: "#000000",
+      surface: "#0a0b0d",
+      surfaceHover: "#171a20",
+      textPrimary: "#f4f6f8",
+      textSecondary: "#b8c0cc",
+      textMuted: "#8b95a5",
+      border: "#313743",
+      borderFocus: "#38bdf8",
+      primary: "#0ea5e9",
+      primaryHover: "#0284c7",
+      accent: "#7950f2",
+      statusSuccess: "#4ade80",
+      statusWarning: "#fbbf24",
+      statusError: "#fb7185",
+    },
+    typography: {
+      fontFamilyPrimary: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontFamilyMono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+      fontFamilyJapanese: '"Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif',
+      fontSizeBasePx: 14,
+      lineHeight: 1.5,
+    },
+    metrics: {
+      spacingUnitPx: 8,
+      borderRadiusPx: 6,
+      sidebarWidthPx: 288,
+      overlayMaxWidthPx: 760,
+    },
+  },
+
   "nordic-dark": {
     id: "nordic-dark",
     version: THEME_SCHEMA_VERSION,

@@ -61,6 +61,33 @@
   --text: var(--mn-text-primary);
   --muted: var(--mn-text-muted);
   --focus: var(--mn-focus-ring);
+
+  /* Theme System Contract Tokens */
+  --theme-color-background: var(--mn-bg-canvas);
+  --theme-color-surface: var(--mn-surface-base);
+  --theme-color-surface-hover: var(--mn-surface-hover);
+  --theme-color-text-primary: var(--mn-text-primary);
+  --theme-color-text-secondary: var(--mn-text-secondary);
+  --theme-color-text-muted: var(--mn-text-muted);
+  --theme-color-border: var(--mn-border-default);
+  --theme-color-border-focus: var(--mn-focus-ring);
+  --theme-color-primary: var(--mn-action-primary-bg);
+  --theme-color-primary-hover: var(--mn-action-primary-hover);
+  --theme-color-accent: #7950f2;
+  --theme-color-status-success: var(--mn-success-text);
+  --theme-color-status-warning: var(--mn-warning-text);
+  --theme-color-status-error: var(--mn-danger-text);
+
+  --theme-font-primary: var(--mn-font-ui);
+  --theme-font-mono: var(--mn-font-mono);
+  --theme-font-japanese: var(--mn-font-japanese);
+  --theme-font-size-base: 14px;
+  --theme-line-height: 1.5;
+
+  --theme-metric-spacing-unit: 8px;
+  --theme-metric-border-radius: 6px;
+  --theme-metric-sidebar-width: 288px;
+  --theme-metric-overlay-max-width: 760px;
 }
 
 * {
