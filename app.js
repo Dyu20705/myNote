@@ -907,7 +907,7 @@ function commandContext(overrides = {}) {
   };
 }
 
-window.__EXECUTE_COMMAND__ = executeCommand;
+// window.__EXECUTE_COMMAND__ is removed as part of strict architectural limits
 function executeCommand(id, overrides = {}) {
   return commandRegistry.execute(id, commandContext(overrides));
 }
@@ -1385,7 +1385,7 @@ async function startApplication() {
 renderApplicationRecovery();
 runAction(() => startApplication());
 
-window.executeCommand = executeCommand;
+// window.executeCommand is removed as part of strict architectural limits
 export const commandRuntime = Object.freeze({
   registry: commandRegistry,
   execute: executeCommand,

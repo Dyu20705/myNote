@@ -162,7 +162,7 @@ describe("Kanji ink storage schema and lifecycle", { concurrency: false }, () =>
     assert.equal(database.version, 6);
     assert.deepEqual(
       [...database.objectStoreNames].sort(),
-      ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "studyArtifacts", "studyReviews"],
+      ["cards", "kanjiInkEntries", "learningItems", "notes", "reviewLogs", "reviewStates", "settings", "studyArtifacts", "studyReviews", "userThemes"],
     );
     assert.deepEqual([...store.indexNames], ["noteId", "updatedAt"]);
     assert.deepEqual(await listKanjiInkEntriesFromDb(database, "note-ink"), {
