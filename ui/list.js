@@ -274,8 +274,6 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
       event.preventDefault();
       const nextItem = items[nextIndex];
       nextItem.focus();
-      const noteId = nextItem.dataset.id;
-      if (noteId) onSelect(noteId, nextItem);
     }
   }
 

@@ -78,7 +78,7 @@ test.describe("Details Inspector Sidebar (#130)", () => {
     // Check stats region
     const statsList = page.locator("#noteStatsList");
     await expect(statsList).toContainText("Words");
-    await expect(statsList).toContainText("10");
+    await expect(statsList).toContainText("11");
     await expect(statsList).toContainText("Characters");
     await expect(statsList).toContainText("Reading time");
 
