@@ -32,7 +32,7 @@ import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
 import { BUILTIN_THEMES } from "./core/theme/themeSchema.js";
 import { applyThemeTokens } from "./core/theme/themeEngine.js";
 import { getTheme } from "./core/theme/themeStorage.js";
-import { createJapaneseApp } from "./japaneseApp.js";
+import { createJapaneseApp } from "./ui/japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";

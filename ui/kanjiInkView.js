@@ -17,7 +17,7 @@ function ensureStylesheet() {
   if (document.querySelector('link[data-kanji-ink-styles]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("../kanji-ink.css", import.meta.url).href;
+  link.href = new URL("../styles/kanji-ink.css", import.meta.url).href;
   link.dataset.kanjiInkStyles = "true";
   link.addEventListener("load", () => {
     if (viewDestroyed) return;
