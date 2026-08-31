@@ -415,6 +415,11 @@ function createMockDomContainer() {
     getComputedStyle() {
       return {
         gridTemplateColumns: "300px 300px 300px",
+        height: "152px",
+        rowGap: "16px",
+        gap: "16px",
+        marginBottom: "16px",
+        marginTop: "32px",
       };
     },
   };

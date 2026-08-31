@@ -11,14 +11,8 @@ const VIRTUALIZATION_THRESHOLD = 500;
  * Fixed card bounding boxes and multi-line text clamping in styles.css enforce this invariant
  * across variable content lengths without DOM height recalculation drift.
  */
-const VIRTUAL_ROW_HEIGHT_GRID = 168;
-const VIRTUAL_ROW_HEIGHT_LIST = 96;
 const VIRTUAL_OVERSCAN = 8;
 let nextListViewId = 0;
-
-function getRowHeight(viewMode) {
-  return viewMode === "grid" ? VIRTUAL_ROW_HEIGHT_GRID : VIRTUAL_ROW_HEIGHT_LIST;
-}
 
 function appendText(parent, className, text, tagName = "span") {
   const node = document.createElement(tagName);
@@ -183,105 +177,190 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     container.replaceChildren(...roots);
   }
 
-  function computeGridColumns(viewMode) {
-    if (viewMode !== "grid") return 1;
-    if (typeof window !== "undefined" && window.getComputedStyle) {
-      // 1. Inspect existing rendered grid in container
-      const existingGrid = container.querySelector(".note-board-grid");
-      if (existingGrid) {
-        const template = window.getComputedStyle(existingGrid).gridTemplateColumns;
-        if (template && template !== "none") {
-          const cols = template.trim().split(/\s+/).filter(Boolean).length;
-          if (cols > 0) return cols;
-        }
-      }
+  function measureSectionGeometry(viewMode) {
+    const isGrid = viewMode === "grid";
+    const defaultMetrics = {
+      cols: isGrid ? 3 : 1,
+      cardHeight: isGrid ? 152 : 88,
+      gap: isGrid ? 16 : 8,
+      rowStride: isGrid ? 168 : 96,
+      headingHeight: 14.4,
+      headingMarginBottom: 16,
+      sectionMarginTop: 32,
+    };
 
-      // 2. If no grid is mounted yet, measure via a lightweight layout probe inheriting CSS styles
-      const probe = document.createElement("div");
-      probe.className = "note-board-grid";
-      probe.style.visibility = "hidden";
-      probe.style.position = "absolute";
-      probe.style.pointerEvents = "none";
-      container.append(probe);
-      const template = window.getComputedStyle(probe).gridTemplateColumns;
-      probe.remove();
+    if (typeof window === "undefined" || !window.getComputedStyle) {
+      return defaultMetrics;
+    }
+
+    let probeSection1 = container.querySelector(".note-board-section");
+    let probeSection2;
+    let createdProbe = false;
+    let probeRoot = null;
+
+    if (!probeSection1) {
+      createdProbe = true;
+      probeRoot = document.createElement("div");
+      probeRoot.style.visibility = "hidden";
+      probeRoot.style.position = "absolute";
+      probeRoot.style.pointerEvents = "none";
+      probeRoot.style.inset = "0";
+
+      probeSection1 = document.createElement("section");
+      probeSection1.className = "note-board-section";
+      const h1 = document.createElement("h3");
+      h1.className = "note-board-heading";
+      h1.textContent = "PROBE 1";
+      const g1 = document.createElement("div");
+      g1.className = "note-board-grid";
+      const item1 = document.createElement("div");
+      item1.className = "note-item";
+      g1.append(item1);
+      probeSection1.append(h1, g1);
+
+      const s2 = document.createElement("section");
+      s2.className = "note-board-section";
+      const h2 = document.createElement("h3");
+      h2.className = "note-board-heading";
+      h2.textContent = "PROBE 2";
+      s2.append(h2);
+
+      probeRoot.append(probeSection1, s2);
+      container.append(probeRoot);
+      probeSection2 = s2;
+    } else {
+      probeSection2 = container.querySelectorAll(".note-board-section")[1] || null;
+    }
+
+    const headingEl = probeSection1.querySelector(".note-board-heading");
+    const gridEl = probeSection1.querySelector(".note-board-grid");
+    const itemEl = probeSection1.querySelector(".note-item");
+
+    let cols = 1;
+    if (isGrid && gridEl) {
+      const template = window.getComputedStyle(gridEl).gridTemplateColumns;
       if (template && template !== "none") {
-        const cols = template.trim().split(/\s+/).filter(Boolean).length;
-        if (cols > 0) return cols;
+        cols = Math.max(1, template.trim().split(/\s+/).filter(Boolean).length);
+      } else {
+        const width = container.clientWidth || scrollOwner.clientWidth || 800;
+        cols = Math.max(1, Math.floor(width / 300));
       }
     }
 
-    // Fallback if computed styles are unavailable (e.g. non-browser environment)
-    const width = container.clientWidth || scrollOwner.clientWidth || 800;
-    return Math.max(1, Math.floor(width / 300));
-  }
+    let cardHeight = defaultMetrics.cardHeight;
+    if (itemEl) {
+      const csItem = window.getComputedStyle(itemEl);
+      const h = parseFloat(csItem.height);
+      if (h > 0) cardHeight = h;
+    }
 
-  const SECTION_HEADING_HEIGHT = 32;
-  const SECTION_MARGIN_TOP = 32;
+    let gap = defaultMetrics.gap;
+    if (gridEl) {
+      const csGrid = window.getComputedStyle(gridEl);
+      const g = parseFloat(csGrid.rowGap || csGrid.gap);
+      if (!isNaN(g) && g >= 0) gap = g;
+    }
+
+    const rowStride = cardHeight + gap;
+
+    let headingHeight = defaultMetrics.headingHeight;
+    let headingMarginBottom = defaultMetrics.headingMarginBottom;
+    if (headingEl) {
+      const csH = window.getComputedStyle(headingEl);
+      const h = parseFloat(csH.height) || headingEl.offsetHeight;
+      if (h > 0) headingHeight = h;
+      const mb = parseFloat(csH.marginBottom);
+      if (!isNaN(mb)) headingMarginBottom = mb;
+    }
+
+    let sectionMarginTop = defaultMetrics.sectionMarginTop;
+    if (probeSection2) {
+      const csS2 = window.getComputedStyle(probeSection2);
+      const mt = parseFloat(csS2.marginTop);
+      if (!isNaN(mt)) sectionMarginTop = mt;
+    }
+
+    if (createdProbe && probeRoot) {
+      probeRoot.remove();
+    }
+
+    return {
+      cols,
+      cardHeight,
+      gap,
+      rowStride,
+      headingHeight,
+      headingMarginBottom,
+      sectionMarginTop,
+    };
+  }
 
   function renderWindow() {
     const { notesById, sections, activeId, viewMode } = currentPayload;
-    const cols = computeGridColumns(viewMode);
-    const rowHeight = getRowHeight(viewMode);
+    const geometry = measureSectionGeometry(viewMode);
+    const { cols, gap, rowStride, headingHeight, headingMarginBottom, sectionMarginTop } = geometry;
+
+    const headingTotalHeight = headingHeight + headingMarginBottom;
 
     const scrollTop = scrollOwner.scrollTop;
     const viewport = Math.max(
-      scrollOwner.clientHeight || rowHeight * 6,
-      rowHeight * 6,
+      scrollOwner.clientHeight || rowStride * 6,
+      rowStride * 6,
     );
 
-    const visibleYStart = Math.max(0, scrollTop - VIRTUAL_OVERSCAN * rowHeight);
-    const visibleYEnd = scrollTop + viewport + VIRTUAL_OVERSCAN * rowHeight;
+    const visibleYStart = Math.max(0, scrollTop - VIRTUAL_OVERSCAN * rowStride);
+    const visibleYEnd = scrollTop + viewport + VIRTUAL_OVERSCAN * rowStride;
 
+    // Compute cumulative layout coordinates for all non-empty sections
     let currentY = 0;
     const sectionLayouts = sections.map((section, index) => {
       const isFirst = index === 0;
-      const headerOverhead = isFirst ? SECTION_HEADING_HEIGHT : (SECTION_MARGIN_TOP + SECTION_HEADING_HEIGHT);
-      const yStart = currentY;
-      const gridYStart = yStart + headerOverhead;
+      const sectionStart = isFirst ? currentY : (currentY + sectionMarginTop);
+      const gridYStart = sectionStart + headingTotalHeight;
       const totalItems = section.orderedIds.length;
       const totalRows = Math.ceil(totalItems / cols);
-      const gridHeight = totalRows * rowHeight;
-      const yEnd = gridYStart + gridHeight;
-      currentY = yEnd;
+      const gridHeight = totalRows > 0 ? (totalRows * rowStride - gap) : 0;
+      const sectionEnd = gridYStart + gridHeight;
+      currentY = sectionEnd;
 
       return {
         section,
         totalItems,
         totalRows,
-        yStart,
+        sectionStart,
         gridYStart,
         gridHeight,
-        yEnd,
+        sectionEnd,
       };
     });
 
+    const totalScrollHeight = currentY;
     const fragment = document.createDocumentFragment();
     const retainedIds = new Set();
 
-    let topSkippedHeight = 0;
-    let bottomSkippedHeight = 0;
-    const visibleSectionNodes = [];
+    let firstVisibleIndex = -1;
+    let lastVisibleIndex = -1;
+    const visibleSections = [];
 
-    for (const layout of sectionLayouts) {
+    for (let i = 0; i < sectionLayouts.length; i++) {
+      const layout = sectionLayouts[i];
       if (layout.totalItems === 0) continue;
 
-      // 1. Completely above viewport
-      if (layout.yEnd < visibleYStart) {
-        topSkippedHeight += (layout.yEnd - layout.yStart);
+      // Check if section intersects [visibleYStart, visibleYEnd]
+      if (layout.sectionEnd < visibleYStart) {
+        continue;
+      }
+      if (layout.sectionStart > visibleYEnd) {
         continue;
       }
 
-      // 2. Completely below viewport
-      if (layout.yStart > visibleYEnd) {
-        bottomSkippedHeight += (layout.yEnd - layout.yStart);
-        continue;
-      }
+      if (firstVisibleIndex === -1) firstVisibleIndex = i;
+      lastVisibleIndex = i;
 
-      // 3. Intersects viewport: compute row range within this section
-      const rawStartRow = Math.max(0, Math.floor((visibleYStart - layout.gridYStart) / rowHeight));
+      // Section is visible: calculate row window within section grid
+      const rawStartRow = Math.max(0, Math.floor((visibleYStart - layout.gridYStart) / rowStride));
       const startRow = Math.min(rawStartRow, Math.max(0, layout.totalRows - 1));
-      const rawEndRow = Math.ceil((visibleYEnd - layout.gridYStart) / rowHeight);
+      const rawEndRow = Math.ceil((visibleYEnd - layout.gridYStart) / rowStride);
       const endRow = Math.min(layout.totalRows, Math.max(startRow + 1, rawEndRow));
 
       const startIndex = startRow * cols;
@@ -301,27 +380,35 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
         return node;
       });
 
-      const topSpacerHeight = startRow * rowHeight;
-      const bottomSpacerHeight = Math.max(0, (layout.totalRows - endRow) * rowHeight);
+      // Compute intra-grid top and bottom spacers (R * stride - gap)
+      const topSpacerHeight = startRow > 0 ? (startRow * rowStride - gap) : 0;
+      const bottomRows = layout.totalRows - endRow;
+      const bottomSpacerHeight = bottomRows > 0 ? (bottomRows * rowStride - gap) : 0;
 
       const sectionEl = createSection(layout.section, nodes, viewId, topSpacerHeight, bottomSpacerHeight);
-      visibleSectionNodes.push(sectionEl);
+      visibleSections.push(sectionEl);
     }
 
-    if (topSkippedHeight > 0) {
-      const topSpacer = document.createElement("div");
-      topSpacer.className = "list-spacer";
-      topSpacer.style.height = `${topSkippedHeight}px`;
-      fragment.append(topSpacer);
+    if (firstVisibleIndex > 0) {
+      const topSpacerHeight = sectionLayouts[firstVisibleIndex].sectionStart;
+      if (topSpacerHeight > 0) {
+        const topSpacer = document.createElement("div");
+        topSpacer.className = "list-spacer";
+        topSpacer.style.height = `${topSpacerHeight}px`;
+        fragment.append(topSpacer);
+      }
     }
 
-    fragment.append(...visibleSectionNodes);
+    fragment.append(...visibleSections);
 
-    if (bottomSkippedHeight > 0) {
-      const bottomSpacer = document.createElement("div");
-      bottomSpacer.className = "list-spacer";
-      bottomSpacer.style.height = `${bottomSkippedHeight}px`;
-      fragment.append(bottomSpacer);
+    if (lastVisibleIndex !== -1 && lastVisibleIndex < sectionLayouts.length - 1) {
+      const bottomSpacerHeight = totalScrollHeight - sectionLayouts[lastVisibleIndex].sectionEnd;
+      if (bottomSpacerHeight > 0) {
+        const bottomSpacer = document.createElement("div");
+        bottomSpacer.className = "list-spacer";
+        bottomSpacer.style.height = `${bottomSpacerHeight}px`;
+        fragment.append(bottomSpacer);
+      }
     }
 
     pruneCache(retainedIds);
@@ -358,7 +445,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
 
   function getGridColumnCount() {
     const items = [...container.querySelectorAll(".note-item")];
-    if (items.length < 2) return computeGridColumns(currentPayload.viewMode);
+    if (items.length < 2) return measureSectionGeometry(currentPayload.viewMode).cols;
     const firstTop = items[0].getBoundingClientRect().top;
     let count = 0;
     for (const item of items) {

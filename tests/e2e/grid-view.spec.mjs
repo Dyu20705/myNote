@@ -462,4 +462,112 @@ test.describe("Grid View & View Mode Switcher (#131)", () => {
     expect(result.midContentCardsCount).toBeGreaterThan(0);
     expect(result.bottomHasLastNote).toBe(true);
   });
+
+  test("verifies exact browser layout geometry, section boundaries, and edge case row calculations", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const { createListView } = await import("/ui/list.js");
+
+      const scrollOwner = globalThis.document.createElement("div");
+      scrollOwner.className = "notes-panel";
+      scrollOwner.style.height = "600px";
+      scrollOwner.style.width = "1000px";
+      scrollOwner.style.overflowY = "auto";
+      scrollOwner.style.position = "relative";
+
+      const container = globalThis.document.createElement("div");
+      container.id = "noteList";
+      container.className = "note-list";
+      scrollOwner.append(container);
+      globalThis.document.body.append(scrollOwner);
+
+      // Edge case dataset:
+      // Section 1 (pinned): 2 notes -> 1 row (tests 2-item & 1-row exact height: 152px, NOT 168px)
+      // Section 2 (normal): 598 notes -> 200 rows in 3 cols
+      const notes = Array.from({ length: 600 }, (_, index) => ({
+        id: `note-${index}`,
+        title: index < 2 ? `Pinned Note ${index}` : `Normal Note ${index}`,
+        content: `Content for note ${index}`,
+        tags: [],
+        updatedAt: new Date(Date.now() - index * 60000).toISOString(),
+        pinned: index < 2,
+      }));
+
+      const notesById = new Map(notes.map((n) => [n.id, n]));
+      const orderedIds = notes.map((n) => n.id);
+
+      const view = createListView({
+        container,
+        onSelect() {},
+        formatDate: () => "Aug 12",
+      });
+
+      view.render({
+        notesById,
+        orderedIds,
+        activeId: null,
+        query: "",
+        viewMode: "grid",
+      });
+
+      // 1. Measure section 1 (Pinned: 2 items = 1 row) geometry in browser DOM
+      const pinnedSection = container.querySelector('.note-board-section[data-section-id="pinned"]');
+      const pinnedHeading = pinnedSection.querySelector(".note-board-heading");
+      const pinnedGrid = pinnedSection.querySelector(".note-board-grid");
+
+      const pinnedHeadingRect = pinnedHeading.getBoundingClientRect();
+      const pinnedGridRect = pinnedGrid.getBoundingClientRect();
+
+      // Heading to grid distance (should match heading margin-bottom)
+      const headingToGridGap = pinnedGridRect.top - pinnedHeadingRect.bottom;
+
+      // 1-row Grid height should be exactly card height (152px), not 168px
+      const pinnedGridHeight = pinnedGridRect.height;
+
+      // Measure section 2 (Notes) geometry
+      const notesSection = container.querySelector('.note-board-section[data-section-id="notes"]');
+      const notesHeading = notesSection.querySelector(".note-board-heading");
+      const notesHeadingRect = notesHeading.getBoundingClientRect();
+
+      // Distance between Section 1 (Pinned) bottom and Section 2 (Notes) heading top
+      const interSectionDistance = notesHeadingRect.top - pinnedGridRect.bottom;
+
+      // 2. Measure scrollHeight consistency at top vs middle
+      const topScrollHeight = scrollOwner.scrollHeight;
+
+      scrollOwner.scrollTop = 15000;
+      scrollOwner.dispatchEvent(new globalThis.Event("scroll"));
+      const midScrollHeight = scrollOwner.scrollHeight;
+
+      scrollOwner.scrollTop = scrollOwner.scrollHeight;
+      scrollOwner.dispatchEvent(new globalThis.Event("scroll"));
+      const bottomScrollHeight = scrollOwner.scrollHeight;
+
+      scrollOwner.remove();
+
+      return {
+        headingToGridGap,
+        pinnedGridHeight,
+        interSectionDistance,
+        topScrollHeight,
+        midScrollHeight,
+        bottomScrollHeight,
+      };
+    });
+
+    // 1-row grid height is exactly card height 152px (within 1px sub-pixel tolerance)
+    expect(result.pinnedGridHeight).toBeGreaterThanOrEqual(151);
+    expect(result.pinnedGridHeight).toBeLessThanOrEqual(153);
+
+    // Heading margin bottom is 16px
+    expect(result.headingToGridGap).toBeGreaterThanOrEqual(15);
+    expect(result.headingToGridGap).toBeLessThanOrEqual(17);
+
+    // Inter-section gap matches margin-top 32px (within 1px sub-pixel tolerance)
+    expect(result.interSectionDistance).toBeGreaterThanOrEqual(31);
+    expect(result.interSectionDistance).toBeLessThanOrEqual(33);
+
+    // scrollHeight is continuous and stable across scroll positions (within 2px tolerance)
+    expect(Math.abs(result.topScrollHeight - result.midScrollHeight)).toBeLessThanOrEqual(2);
+    expect(Math.abs(result.topScrollHeight - result.bottomScrollHeight)).toBeLessThanOrEqual(2);
+  });
 });

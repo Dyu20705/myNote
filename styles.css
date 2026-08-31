@@ -463,6 +463,10 @@ strong {
   margin-top: var(--mn-space-8);
 }
 
+.note-list > .list-spacer + .note-board-section {
+  margin-top: 0;
+}
+
 .note-board-heading {
   margin: 0 0 var(--mn-space-4);
   color: var(--mn-text-muted);
