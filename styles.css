@@ -483,8 +483,12 @@ strong {
 }
 
 .note-list[data-view-mode="list"] .note-item {
-  min-height: auto;
+  min-height: 88px;
+  height: 88px;
+  max-height: 88px;
   padding: var(--mn-space-3) var(--mn-space-4);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .note-list[data-view-mode="grid"] .note-board-grid {
@@ -494,6 +498,10 @@ strong {
 
 .note-list[data-view-mode="grid"] .note-item {
   min-height: 152px;
+  height: 152px;
+  max-height: 152px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .note-item-container {
@@ -516,6 +524,8 @@ strong {
   background: var(--mn-surface-raised);
   cursor: pointer;
   overflow-wrap: anywhere;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .list-spacer {
@@ -540,6 +550,10 @@ strong {
   font-size: 0.95rem;
   font-weight: 600;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .note-item-date {
@@ -551,14 +565,21 @@ strong {
   margin: 0;
   color: var(--mn-text-secondary);
   font-size: 0.88rem;
-  line-height: 1.5;
+  line-height: 1.4;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .note-item-tags {
   color: var(--mn-text-muted);
   font-size: 0.8rem;
   overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-item-delete {

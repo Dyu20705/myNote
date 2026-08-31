@@ -4,9 +4,21 @@ import {
 } from "./notePresentation.js";
 
 const VIRTUALIZATION_THRESHOLD = 500;
-const VIRTUAL_ROW_HEIGHT = 168;
+/**
+ * Invariant Row Geometries:
+ * - Grid View: 152px card height + 16px row gap (--mn-space-4) = 168px deterministic row height.
+ * - List View: 88px card height + 8px row gap (--mn-space-2) = 96px deterministic row height.
+ * Fixed card bounding boxes and multi-line text clamping in styles.css enforce this invariant
+ * across variable content lengths without DOM height recalculation drift.
+ */
+const VIRTUAL_ROW_HEIGHT_GRID = 168;
+const VIRTUAL_ROW_HEIGHT_LIST = 96;
 const VIRTUAL_OVERSCAN = 8;
 let nextListViewId = 0;
+
+function getRowHeight(viewMode) {
+  return viewMode === "grid" ? VIRTUAL_ROW_HEIGHT_GRID : VIRTUAL_ROW_HEIGHT_LIST;
+}
 
 function appendText(parent, className, text, tagName = "span") {
   const node = document.createElement(tagName);
@@ -168,22 +180,23 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
   function renderWindow() {
     const { notesById, boardIds, query, viewMode } = currentPayload;
     const cols = computeGridColumns(viewMode);
+    const rowHeight = getRowHeight(viewMode);
     const totalItems = boardIds.length;
     const totalRows = Math.ceil(totalItems / cols);
 
     const scrollTop = scrollOwner.scrollTop;
     const viewport = Math.max(
-      scrollOwner.clientHeight || VIRTUAL_ROW_HEIGHT * 6,
-      VIRTUAL_ROW_HEIGHT * 6,
+      scrollOwner.clientHeight || rowHeight * 6,
+      rowHeight * 6,
     );
 
     const rawStartRow = Math.max(
       0,
-      Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN,
+      Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN,
     );
     const maxStartRow = Math.max(0, totalRows - 1);
     const startRow = Math.min(rawStartRow, maxStartRow);
-    const visibleRowCount = Math.ceil(viewport / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+    const visibleRowCount = Math.ceil(viewport / rowHeight) + VIRTUAL_OVERSCAN * 2;
     const endRow = Math.min(totalRows, startRow + visibleRowCount);
 
     const startIndex = startRow * cols;
@@ -195,7 +208,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
 
     const topSpacer = document.createElement("div");
     topSpacer.className = "list-spacer";
-    topSpacer.style.height = `${startRow * VIRTUAL_ROW_HEIGHT}px`;
+    topSpacer.style.height = `${startRow * rowHeight}px`;
     fragment.append(topSpacer);
     fragment.append(...createCardNodes(sections, retainedIds));
     pruneCache(retainedIds);
@@ -204,7 +217,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     bottomSpacer.className = "list-spacer";
     bottomSpacer.style.height = `${Math.max(
       0,
-      (totalRows - endRow) * VIRTUAL_ROW_HEIGHT,
+      (totalRows - endRow) * rowHeight,
     )}px`;
     fragment.append(bottomSpacer);
 
