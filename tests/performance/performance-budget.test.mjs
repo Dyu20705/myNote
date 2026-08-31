@@ -493,5 +493,8 @@ test("lazy Kanji stroke guide dictionary asset dynamic import resolves within bu
     assert.equal(meta.strokes, 8);
   }
   const lookupDuration = performance.now() - t1;
-  assert.ok(lookupDuration < 20, `10k dictionary lookups took ${lookupDuration.toFixed(2)}ms`);
+  assert.ok(
+    lookupDuration < PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs,
+    `10k dictionary lookups took ${lookupDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs}ms)`
+  );
 });
