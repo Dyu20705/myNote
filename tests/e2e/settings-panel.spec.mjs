@@ -102,10 +102,21 @@ test.describe("Settings Panel UI and Tabs", () => {
     await expect(saveGoalsBtn).toBeVisible();
     await saveGoalsBtn.click();
 
-    // 11. Test Focus Trap: pressing Tab cycles focus inside the modal dialog
+    // 11. Test Focus Trap Boundary: Tab and Shift+Tab wrap at boundaries within modal dialog
+    const closeBtn = page.locator("#closeSettingsButton");
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.focus();
+    await expect(closeBtn).toBeFocused();
+
+    // From first element, Shift+Tab wraps to last focusable control in dialog
+    await page.keyboard.press("Shift+Tab");
+    const activeShift = await dialog.evaluate((d) => d.contains(globalThis.document.activeElement));
+    expect(activeShift).toBe(true);
+
+    // From last element, Tab wraps back to first element in dialog
     await page.keyboard.press("Tab");
-    const activeInsideDialog = await dialog.evaluate((d) => d.contains(globalThis.document.activeElement));
-    expect(activeInsideDialog).toBe(true);
+    const activeTab = await dialog.evaluate((d) => d.contains(globalThis.document.activeElement));
+    expect(activeTab).toBe(true);
 
     // 12. Close settings with Escape
     await page.keyboard.press("Escape");
