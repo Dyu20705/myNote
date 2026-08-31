@@ -531,6 +531,7 @@ strong {
 .list-spacer {
   width: 100%;
   pointer-events: none;
+  grid-column: 1 / -1;
 }
 
 .note-item.active {

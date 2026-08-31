@@ -83,7 +83,7 @@ function patchNode(node, note, isActive, formatDate) {
   renderButton(button, note, isActive, formatDate);
 }
 
-function createSection(section, nodes, viewId) {
+function createSection(section, nodes, viewId, topSpacerHeight = 0, bottomSpacerHeight = 0) {
   const root = document.createElement("section");
   root.className = "note-board-section";
   root.dataset.sectionId = section.id;
@@ -96,7 +96,23 @@ function createSection(section, nodes, viewId) {
 
   const grid = document.createElement("div");
   grid.className = "note-board-grid";
+
+  if (topSpacerHeight > 0) {
+    const topSpacer = document.createElement("div");
+    topSpacer.className = "list-spacer";
+    topSpacer.style.height = `${topSpacerHeight}px`;
+    grid.append(topSpacer);
+  }
+
   grid.append(...nodes);
+
+  if (bottomSpacerHeight > 0) {
+    const bottomSpacer = document.createElement("div");
+    bottomSpacer.className = "list-spacer";
+    bottomSpacer.style.height = `${bottomSpacerHeight}px`;
+    grid.append(bottomSpacer);
+  }
+
   root.append(heading, grid);
   return root;
 }
@@ -125,6 +141,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     activeId: null,
     query: "",
     boardIds: [],
+    sections: [],
     virtualized: false,
     viewMode: "list",
   };
@@ -199,12 +216,13 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     return Math.max(1, Math.floor(width / 300));
   }
 
+  const SECTION_HEADING_HEIGHT = 32;
+  const SECTION_MARGIN_TOP = 32;
+
   function renderWindow() {
-    const { notesById, boardIds, query, viewMode } = currentPayload;
+    const { notesById, sections, activeId, viewMode } = currentPayload;
     const cols = computeGridColumns(viewMode);
     const rowHeight = getRowHeight(viewMode);
-    const totalItems = boardIds.length;
-    const totalRows = Math.ceil(totalItems / cols);
 
     const scrollTop = scrollOwner.scrollTop;
     const viewport = Math.max(
@@ -212,37 +230,101 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
       rowHeight * 6,
     );
 
-    const rawStartRow = Math.max(
-      0,
-      Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN,
-    );
-    const maxStartRow = Math.max(0, totalRows - 1);
-    const startRow = Math.min(rawStartRow, maxStartRow);
-    const visibleRowCount = Math.ceil(viewport / rowHeight) + VIRTUAL_OVERSCAN * 2;
-    const endRow = Math.min(totalRows, startRow + visibleRowCount);
+    const visibleYStart = Math.max(0, scrollTop - VIRTUAL_OVERSCAN * rowHeight);
+    const visibleYEnd = scrollTop + viewport + VIRTUAL_OVERSCAN * rowHeight;
 
-    const startIndex = startRow * cols;
-    const endIndex = Math.min(totalItems, endRow * cols);
-    const visibleIds = boardIds.slice(startIndex, endIndex);
-    const sections = projectSections(notesById, visibleIds, query);
-    const retainedIds = new Set();
+    let currentY = 0;
+    const sectionLayouts = sections.map((section, index) => {
+      const isFirst = index === 0;
+      const headerOverhead = isFirst ? SECTION_HEADING_HEIGHT : (SECTION_MARGIN_TOP + SECTION_HEADING_HEIGHT);
+      const yStart = currentY;
+      const gridYStart = yStart + headerOverhead;
+      const totalItems = section.orderedIds.length;
+      const totalRows = Math.ceil(totalItems / cols);
+      const gridHeight = totalRows * rowHeight;
+      const yEnd = gridYStart + gridHeight;
+      currentY = yEnd;
+
+      return {
+        section,
+        totalItems,
+        totalRows,
+        yStart,
+        gridYStart,
+        gridHeight,
+        yEnd,
+      };
+    });
+
     const fragment = document.createDocumentFragment();
+    const retainedIds = new Set();
 
-    const topSpacer = document.createElement("div");
-    topSpacer.className = "list-spacer";
-    topSpacer.style.height = `${startRow * rowHeight}px`;
-    fragment.append(topSpacer);
-    fragment.append(...createCardNodes(sections, retainedIds));
+    let topSkippedHeight = 0;
+    let bottomSkippedHeight = 0;
+    const visibleSectionNodes = [];
+
+    for (const layout of sectionLayouts) {
+      if (layout.totalItems === 0) continue;
+
+      // 1. Completely above viewport
+      if (layout.yEnd < visibleYStart) {
+        topSkippedHeight += (layout.yEnd - layout.yStart);
+        continue;
+      }
+
+      // 2. Completely below viewport
+      if (layout.yStart > visibleYEnd) {
+        bottomSkippedHeight += (layout.yEnd - layout.yStart);
+        continue;
+      }
+
+      // 3. Intersects viewport: compute row range within this section
+      const rawStartRow = Math.max(0, Math.floor((visibleYStart - layout.gridYStart) / rowHeight));
+      const startRow = Math.min(rawStartRow, Math.max(0, layout.totalRows - 1));
+      const rawEndRow = Math.ceil((visibleYEnd - layout.gridYStart) / rowHeight);
+      const endRow = Math.min(layout.totalRows, Math.max(startRow + 1, rawEndRow));
+
+      const startIndex = startRow * cols;
+      const endIndex = Math.min(layout.totalItems, endRow * cols);
+      const visibleIds = layout.section.orderedIds.slice(startIndex, endIndex);
+
+      const nodes = visibleIds.map((id) => {
+        const note = notesById.get(id);
+        let node = nodeCache.get(id);
+        if (!node) {
+          node = createNode(note, id === activeId, onSelect, formatDate);
+          nodeCache.set(id, node);
+        } else {
+          patchNode(node, note, id === activeId, formatDate);
+        }
+        retainedIds.add(id);
+        return node;
+      });
+
+      const topSpacerHeight = startRow * rowHeight;
+      const bottomSpacerHeight = Math.max(0, (layout.totalRows - endRow) * rowHeight);
+
+      const sectionEl = createSection(layout.section, nodes, viewId, topSpacerHeight, bottomSpacerHeight);
+      visibleSectionNodes.push(sectionEl);
+    }
+
+    if (topSkippedHeight > 0) {
+      const topSpacer = document.createElement("div");
+      topSpacer.className = "list-spacer";
+      topSpacer.style.height = `${topSkippedHeight}px`;
+      fragment.append(topSpacer);
+    }
+
+    fragment.append(...visibleSectionNodes);
+
+    if (bottomSkippedHeight > 0) {
+      const bottomSpacer = document.createElement("div");
+      bottomSpacer.className = "list-spacer";
+      bottomSpacer.style.height = `${bottomSkippedHeight}px`;
+      fragment.append(bottomSpacer);
+    }
+
     pruneCache(retainedIds);
-
-    const bottomSpacer = document.createElement("div");
-    bottomSpacer.className = "list-spacer";
-    bottomSpacer.style.height = `${Math.max(
-      0,
-      (totalRows - endRow) * rowHeight,
-    )}px`;
-    fragment.append(bottomSpacer);
-
     container.replaceChildren(fragment);
   }
 
@@ -341,6 +423,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
       activeId,
       query,
       boardIds,
+      sections,
       virtualized,
       viewMode,
     };

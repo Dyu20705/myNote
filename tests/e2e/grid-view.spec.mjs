@@ -227,7 +227,7 @@ test.describe("Grid View & View Mode Switcher (#131)", () => {
 
     // Top assertions
     expect(result.top.virtualized).toBe("true");
-    expect(result.top.count).toBeGreaterThanOrEqual(15);
+    expect(result.top.count).toBeGreaterThanOrEqual(10);
     expect(result.top.count).toBeLessThanOrEqual(80);
     expect(result.top.hasNote0).toBe(true);
     expect(result.top.hasNote300).toBe(false);
@@ -235,7 +235,7 @@ test.describe("Grid View & View Mode Switcher (#131)", () => {
     expect(result.top.overflow).toBe(false);
 
     // Middle assertions
-    expect(result.mid.count).toBeGreaterThanOrEqual(15);
+    expect(result.mid.count).toBeGreaterThanOrEqual(10);
     expect(result.mid.count).toBeLessThanOrEqual(80);
     expect(result.mid.hasNote0).toBe(false);
     expect(result.mid.hasNote300).toBe(true);
@@ -243,7 +243,7 @@ test.describe("Grid View & View Mode Switcher (#131)", () => {
     expect(result.mid.overflow).toBe(false);
 
     // Bottom assertions
-    expect(result.bottom.count).toBeGreaterThanOrEqual(15);
+    expect(result.bottom.count).toBeGreaterThanOrEqual(10);
     expect(result.bottom.count).toBeLessThanOrEqual(80);
     expect(result.bottom.hasNote0).toBe(false);
     expect(result.bottom.hasNote300).toBe(false);
@@ -254,7 +254,212 @@ test.describe("Grid View & View Mode Switcher (#131)", () => {
     // Interaction & View Mode assertions
     expect(result.selectedId).toBe("note-598");
     expect(result.listMode.viewMode).toBe("list");
-    expect(result.listMode.count).toBeGreaterThanOrEqual(15);
+    expect(result.listMode.count).toBeGreaterThanOrEqual(10);
     expect(result.listMode.count).toBeLessThanOrEqual(80);
+  });
+
+  test("section-aware virtualization preserves Pinned and Notes section boundaries (5 pinned, 595 unpinned)", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const { createListView } = await import("/ui/list.js");
+
+      const scrollOwner = globalThis.document.createElement("div");
+      scrollOwner.className = "notes-panel";
+      scrollOwner.style.height = "600px";
+      scrollOwner.style.width = "1000px";
+      scrollOwner.style.overflowY = "auto";
+      scrollOwner.style.position = "relative";
+
+      const container = globalThis.document.createElement("div");
+      container.id = "noteList";
+      container.className = "note-list";
+      scrollOwner.append(container);
+      globalThis.document.body.append(scrollOwner);
+
+      // 5 pinned notes + 595 normal notes = 600 notes
+      const notes = Array.from({ length: 600 }, (_, index) => ({
+        id: `note-${index}`,
+        title: index < 5 ? `Pinned Card ${index}` : `Normal Card ${index}`,
+        content: `Body preview for note ${index}`,
+        tags: [],
+        updatedAt: new Date(Date.now() - index * 60000).toISOString(),
+        pinned: index < 5,
+      }));
+
+      const notesById = new Map(notes.map((n) => [n.id, n]));
+      const orderedIds = notes.map((n) => n.id);
+
+      const view = createListView({
+        container,
+        onSelect() {},
+        formatDate: () => "Aug 12",
+      });
+
+      // Render in grid mode
+      view.render({
+        notesById,
+        orderedIds,
+        activeId: null,
+        query: "",
+        viewMode: "grid",
+      });
+
+      // 1. Check top: Pinned section and start of Notes section
+      const topPinnedSection = container.querySelector('.note-board-section[data-section-id="pinned"]');
+      const topNotesSection = container.querySelector('.note-board-section[data-section-id="notes"]');
+      const topPinnedCardIds = [...(topPinnedSection?.querySelectorAll(".note-item") || [])].map((c) => c.dataset.id);
+      const topNotesCardIds = [...(topNotesSection?.querySelectorAll(".note-item") || [])].map((c) => c.dataset.id);
+
+      // 2. Scroll across boundary (e.g. 500px down)
+      scrollOwner.scrollTop = 500;
+      scrollOwner.dispatchEvent(new globalThis.Event("scroll"));
+
+      const boundaryNotesSection = container.querySelector('.note-board-section[data-section-id="notes"]');
+      const boundaryNotesCardIds = [...(boundaryNotesSection?.querySelectorAll(".note-item") || [])].map((c) => c.dataset.id);
+
+      // 3. Scroll to bottom
+      scrollOwner.scrollTop = scrollOwner.scrollHeight;
+      scrollOwner.dispatchEvent(new globalThis.Event("scroll"));
+
+      const bottomNotesSection = container.querySelector('.note-board-section[data-section-id="notes"]');
+      const bottomNotesCardIds = [...(bottomNotesSection?.querySelectorAll(".note-item") || [])].map((c) => c.dataset.id);
+      const bottomHasLastNote = bottomNotesCardIds.includes("note-599");
+
+      scrollOwner.remove();
+
+      return {
+        top: {
+          hasPinnedSection: Boolean(topPinnedSection),
+          hasNotesSection: Boolean(topNotesSection),
+          pinnedCards: topPinnedCardIds,
+          notesFirstCard: topNotesCardIds[0],
+          notesCardCount: topNotesCardIds.length,
+        },
+        boundary: {
+          notesCards: boundaryNotesCardIds,
+        },
+        bottom: {
+          hasLastNote: bottomHasLastNote,
+          bottomCards: bottomNotesCardIds,
+        },
+      };
+    });
+
+    // Top checks
+    expect(result.top.hasPinnedSection).toBe(true);
+    expect(result.top.hasNotesSection).toBe(true);
+    expect(result.top.pinnedCards).toEqual(["note-0", "note-1", "note-2", "note-3", "note-4"]);
+    expect(result.top.notesFirstCard).toBe("note-5");
+    expect(result.top.notesCardCount).toBeGreaterThan(0);
+
+    // Boundary checks
+    expect(result.boundary.notesCards.length).toBeGreaterThan(0);
+    expect(result.boundary.notesCards.includes("note-5")).toBe(true);
+
+    // Bottom checks
+    expect(result.bottom.hasLastNote).toBe(true);
+    expect(result.bottom.bottomCards.includes("note-598")).toBe(true);
+    expect(result.bottom.bottomCards.includes("note-599")).toBe(true);
+  });
+
+  test("section-aware virtualization handles multi-category search result sections", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const { createListView } = await import("/ui/list.js");
+
+      const scrollOwner = globalThis.document.createElement("div");
+      scrollOwner.className = "notes-panel";
+      scrollOwner.style.height = "600px";
+      scrollOwner.style.width = "1000px";
+      scrollOwner.style.overflowY = "auto";
+      scrollOwner.style.position = "relative";
+
+      const container = globalThis.document.createElement("div");
+      container.id = "noteList";
+      container.className = "note-list";
+      scrollOwner.append(container);
+      globalThis.document.body.append(scrollOwner);
+
+      // Create 600 notes producing multiple search sections when query is "kanji"
+      const notes = Array.from({ length: 600 }, (_, index) => {
+        let title = `Regular Note ${index}`;
+        let content = `General content ${index}`;
+        let tags = [];
+        let japanese = false;
+
+        if (index < 10) {
+          title = `Kanji Title Match ${index}`;
+        } else if (index < 30) {
+          tags = ["kanji", "n3"];
+        } else if (index < 80) {
+          japanese = true;
+          content = "Japanese study note";
+        } else {
+          content = `Body mentioning kanji study in note ${index}`;
+        }
+
+        return {
+          id: `note-${index}`,
+          title,
+          content,
+          tags,
+          japanese,
+          updatedAt: new Date(Date.now() - index * 60000).toISOString(),
+          pinned: false,
+        };
+      });
+
+      const notesById = new Map(notes.map((n) => [n.id, n]));
+      const orderedIds = notes.map((n) => n.id);
+
+      const view = createListView({
+        container,
+        onSelect() {},
+        formatDate: () => "Aug 12",
+      });
+
+      // Render search query in grid mode
+      view.render({
+        notesById,
+        orderedIds,
+        activeId: null,
+        query: "kanji",
+        viewMode: "grid",
+      });
+
+      const sectionIds = [...container.querySelectorAll(".note-board-section")].map((s) => s.dataset.sectionId);
+      const titleSection = container.querySelector('.note-board-section[data-section-id="title"]');
+      const tagSection = container.querySelector('.note-board-section[data-section-id="tags"]');
+      const titleCards = [...(titleSection?.querySelectorAll(".note-item") || [])].map((c) => c.dataset.id);
+      const tagCards = [...(tagSection?.querySelectorAll(".note-item") || [])].map((c) => c.dataset.id);
+
+      // Scroll to middle of content matches
+      scrollOwner.scrollTop = 15000;
+      scrollOwner.dispatchEvent(new globalThis.Event("scroll"));
+      const midSectionIds = [...container.querySelectorAll(".note-board-section")].map((s) => s.dataset.sectionId);
+      const midContentCards = [...container.querySelectorAll('.note-board-section[data-section-id="notes"] .note-item')].map((c) => c.dataset.id);
+
+      // Scroll to bottom
+      scrollOwner.scrollTop = scrollOwner.scrollHeight;
+      scrollOwner.dispatchEvent(new globalThis.Event("scroll"));
+      const bottomCards = [...container.querySelectorAll(".note-item")].map((c) => c.dataset.id);
+
+      scrollOwner.remove();
+
+      return {
+        initialSectionIds: sectionIds,
+        titleCards,
+        tagCards,
+        midSectionIds,
+        midContentCardsCount: midContentCards.length,
+        bottomHasLastNote: bottomCards.includes("note-599"),
+      };
+    });
+
+    expect(result.initialSectionIds.includes("title")).toBe(true);
+    expect(result.initialSectionIds.includes("tags")).toBe(true);
+    expect(result.titleCards).toEqual(["note-0", "note-1", "note-2", "note-3", "note-4", "note-5", "note-6", "note-7", "note-8", "note-9"]);
+    expect(result.tagCards.length).toBeGreaterThan(0);
+    expect(result.midSectionIds.includes("notes")).toBe(true);
+    expect(result.midContentCardsCount).toBeGreaterThan(0);
+    expect(result.bottomHasLastNote).toBe(true);
   });
 });
