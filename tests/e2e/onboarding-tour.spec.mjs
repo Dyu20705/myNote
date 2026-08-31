@@ -1,32 +1,57 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Onboarding Tour", () => {
-  test("shows tour on first visit, allows stepping through and skipping, persists completion across reload", async ({ page }) => {
+  test("walks through all 5 tour steps to completion, introducing themes and landmarks, and persists completion across reload", async ({ page }) => {
     await page.goto("/");
 
-    // 1. Verify onboarding container or tooltip becomes visible on first visit
     const tourTooltip = page.locator(".onboarding-tooltip");
-    
-    // If tour is active, step through it
+    await expect(tourTooltip).toBeVisible();
+
+    // Step 1: Workspace navigation
+    await expect(page.locator(".onboarding-tooltip-title")).toHaveText("Workspace navigation");
+    const nextBtn = page.locator(".onboarding-next");
+    await expect(nextBtn).toHaveText("Next");
+    await nextBtn.click();
+
+    // Step 2: Quick search
+    await expect(page.locator(".onboarding-tooltip-title")).toHaveText("Quick search and shortcuts");
+    await nextBtn.click();
+
+    // Step 3: Theme customization & settings
+    await expect(page.locator(".onboarding-tooltip-title")).toHaveText("Theme customization & settings");
+    await nextBtn.click();
+
+    // Step 4: Japanese workspace
+    await expect(page.locator(".onboarding-tooltip-title")).toHaveText("Japanese workspace");
+    await nextBtn.click();
+
+    // Step 5: Start creating (final step)
+    await expect(page.locator(".onboarding-tooltip-title")).toHaveText("Start creating");
+    await expect(nextBtn).toHaveText("Get started");
+    await nextBtn.click();
+
+    // Verify tour is finished
+    await expect(tourTooltip).not.toBeVisible();
+
+    // Reload page and ensure tour does not reappear
+    await page.reload();
+    await page.waitForTimeout(300);
+    await expect(tourTooltip).not.toBeVisible();
+  });
+
+  test("skip button immediately dismisses tour and persists completion across reload", async ({ page }) => {
+    await page.goto("/");
+
+    const tourTooltip = page.locator(".onboarding-tooltip");
     if (await tourTooltip.isVisible()) {
-      const nextBtn = page.locator(".onboarding-next");
-      await expect(nextBtn).toBeVisible();
-
-      // Click Next through steps
-      await nextBtn.click();
-      await page.waitForTimeout(100);
-
-      // Verify skip button works
       const skipBtn = page.locator(".onboarding-skip");
-      if (await skipBtn.isVisible()) {
-        await skipBtn.click();
-      }
+      await expect(skipBtn).toBeVisible();
+      await skipBtn.click();
 
       await expect(tourTooltip).not.toBeVisible();
 
-      // Reload page and ensure tour does not reappear
       await page.reload();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(300);
       await expect(tourTooltip).not.toBeVisible();
     }
   });

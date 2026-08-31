@@ -79,6 +79,38 @@
   margin: 0 0 var(--mn-space-2) 0;
 }
 
+.settings-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--mn-space-2);
+}
+
+.settings-section h4 {
+  font-size: 0.88rem;
+  margin: var(--mn-space-3) 0 var(--mn-space-2) 0;
+  color: var(--mn-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-badge-active {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: var(--mn-radius-xs);
+  background: var(--mn-action-primary-bg);
+  color: var(--mn-action-primary-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.settings-empty-notice {
+  font-size: 0.85rem;
+  color: var(--mn-text-muted);
+  font-style: italic;
+  padding: var(--mn-space-2) 0;
+}
+
 /* Theme list in settings */
 .settings-theme-list {
   display: grid;
@@ -87,7 +119,7 @@
 
 .settings-theme-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--mn-space-3);
   padding: var(--mn-space-3) var(--mn-space-3);
@@ -137,7 +169,38 @@
   border: 1px solid var(--mn-border-default);
 }
 
-/* Japanese learning settings */
+/* Custom theme row with management actions */
+.settings-custom-theme-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--mn-space-3);
+  padding: var(--mn-space-3);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-base);
+}
+
+.settings-custom-theme-info {
+  display: flex;
+  align-items: center;
+  gap: var(--mn-space-3);
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-custom-theme-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--mn-space-1);
+}
+
+.settings-custom-theme-actions button {
+  padding: var(--mn-space-1) var(--mn-space-2);
+  font-size: 0.8rem;
+}
+
+/* Japanese learning and typography settings */
 .settings-field {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -151,14 +214,19 @@
   color: var(--mn-text-primary);
 }
 
-.settings-field input[type="number"] {
-  width: 80px;
+.settings-field input[type="number"],
+.settings-field select {
+  width: 140px;
   padding: var(--mn-space-1) var(--mn-space-2);
   border: 1px solid var(--mn-border-default);
   border-radius: var(--mn-radius-sm);
   background: var(--mn-surface-base);
   color: var(--mn-text-primary);
   font-size: 0.88rem;
+}
+
+.settings-field input[type="number"] {
+  width: 80px;
 }
 
 .settings-actions {

@@ -44,6 +44,7 @@
               <button type="button" data-japanese-template="planner" data-command-id="japanese.create.planner">Create this week’s planner</button>
             </div>
           </div>
+          <button id="openSettingsButton" class="shell-button" type="button" aria-label="Open settings">Settings</button>
           <button id="refreshButton" class="shell-button" type="button">Refresh</button>
         </div>
       </header>
@@ -357,8 +358,52 @@
       </div>
       <div data-settings-panel="themes" id="settingsPanelThemes" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
         <div class="settings-section">
-          <h3>Select theme</h3>
-          <div class="settings-theme-list"></div>
+          <div class="settings-section-header">
+            <h3>Theme Management</h3>
+            <button id="settingsImportThemeButton" class="secondary-button" type="button">Import theme…</button>
+          </div>
+          <p>Choose from built-in themes or import and manage custom themes.</p>
+        </div>
+        <div class="settings-section">
+          <h4>Built-in themes</h4>
+          <div class="settings-theme-list settings-builtin-themes" role="list"></div>
+        </div>
+        <div class="settings-section">
+          <h4>Custom themes</h4>
+          <div class="settings-theme-list settings-custom-themes" role="list"></div>
+        </div>
+        <div class="settings-section">
+          <h4>Typography preferences</h4>
+          <div class="settings-field">
+            <label for="settingsFontFamily">Primary font family</label>
+            <select id="settingsFontFamily">
+              <option value="system">System Default</option>
+              <option value="sans-serif">Sans-Serif</option>
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="settingsFontSize">Base font size</label>
+            <select id="settingsFontSize">
+              <option value="14">14px (Compact)</option>
+              <option value="16" selected>16px (Default)</option>
+              <option value="18">18px (Comfortable)</option>
+              <option value="20">20px (Large)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="settingsLineHeight">Line height</label>
+            <select id="settingsLineHeight">
+              <option value="1.4">1.4 (Tight)</option>
+              <option value="1.5" selected>1.5 (Standard)</option>
+              <option value="1.6">1.6 (Relaxed)</option>
+              <option value="1.8">1.8 (Spacious)</option>
+            </select>
+          </div>
+          <div class="settings-actions">
+            <button id="settingsSaveTypography" class="primary-button" type="button">Save typography</button>
+          </div>
         </div>
       </div>
       <div data-settings-panel="japanese" id="settingsPanelJapanese" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>

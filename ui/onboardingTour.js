@@ -15,16 +15,15 @@ const TOUR_STEPS = Object.freeze([
   },
   {
     target: "#searchInput",
-    title: "Quick search",
-    content: "Search across all your notes instantly. Press / to focus search from anywhere.",
+    title: "Quick search and shortcuts",
+    content: "Search across all your notes instantly with / or press Ctrl+K (or Cmd+K) for the full command palette.",
     position: "bottom",
   },
   {
-    target: "#commandPalette",
-    title: "Command palette",
-    content: "Press Ctrl+K (or Cmd+K) to access every command: create notes, switch themes, start reviews, and more.",
+    target: "#openSettingsButton",
+    title: "Theme customization & settings",
+    content: "Personalize your workspace with built-in and custom themes, typography preferences, and daily study targets.",
     position: "bottom",
-    fallbackTarget: "body",
   },
   {
     target: "#japaneseWorkspaceButton",
@@ -35,7 +34,7 @@ const TOUR_STEPS = Object.freeze([
   {
     target: "#newNoteButton",
     title: "Start creating",
-    content: "Create your first note and explore themes, formatting tools, and the command palette. Welcome to myNote!",
+    content: "Create your first note with rich Markdown formatting, task lists, and tags. Welcome to myNote!",
     position: "bottom",
   },
 ]);

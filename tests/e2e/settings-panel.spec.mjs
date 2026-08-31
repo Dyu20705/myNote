@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Settings Panel UI and Tabs", () => {
-  test("opens via command palette, navigates tabs, previews and applies themes, configures daily goals, and closes", async ({ page }) => {
+  test("opens via command palette, navigates tabs, previews and applies themes, configures typography and daily goals, traps focus, and closes", async ({ page }) => {
     await page.goto("/");
 
     // Dismiss tour if present
@@ -37,13 +37,19 @@ test.describe("Settings Panel UI and Tabs", () => {
     await expect(themesPanel).toBeVisible();
     await expect(generalPanel).not.toBeVisible();
 
-    // 6. Verify themes list rendered with built-in themes
-    const themeItems = page.locator(".settings-theme-item");
-    await expect(themeItems.first()).toBeVisible();
-    const count = await themeItems.count();
+    // 6. Verify built-in themes list rendered
+    const builtinItems = page.locator(".settings-builtin-themes .settings-theme-item");
+    await expect(builtinItems.first()).toBeVisible();
+    const count = await builtinItems.count();
     expect(count).toBeGreaterThan(0);
 
-    // 7. Select a theme from settings
+    // 7. Verify custom themes container and import button are present
+    const customContainer = page.locator(".settings-custom-themes");
+    await expect(customContainer).toBeVisible();
+    const importBtn = page.locator("#settingsImportThemeButton");
+    await expect(importBtn).toBeVisible();
+
+    // 8. Select a theme from settings (e.g. nordic-dark)
     const nordicTheme = page.locator(".settings-theme-item[data-theme-id='nordic-dark']");
     if (await nordicTheme.count() > 0) {
       await nordicTheme.click();
@@ -53,21 +59,43 @@ test.describe("Settings Panel UI and Tabs", () => {
       expect(currentBg).toBe("#2e3440");
     }
 
-    // 8. Navigate to Japanese Learning tab
+    // 9. Configure Typography preferences
+    const fontSizeSelect = page.locator("#settingsFontSize");
+    await expect(fontSizeSelect).toBeVisible();
+    await fontSizeSelect.selectOption("18");
+
+    const lineHeightSelect = page.locator("#settingsLineHeight");
+    await expect(lineHeightSelect).toBeVisible();
+    await lineHeightSelect.selectOption("1.6");
+
+    const saveTypographyBtn = page.locator("#settingsSaveTypography");
+    await saveTypographyBtn.click();
+
+    const rootFontSize = await page.locator(":root").evaluate((el) => {
+      return el.style.getPropertyValue("--theme-font-size-base");
+    });
+    expect(rootFontSize).toBe("18px");
+
+    // 10. Navigate to Japanese Learning tab
     const japaneseTab = page.locator("button[data-settings-tab='japanese']");
     await japaneseTab.click();
 
     const japanesePanel = page.locator("#settingsPanelJapanese");
     await expect(japanesePanel).toBeVisible();
 
-    // 9. Verify daily goals inputs
+    // 11. Verify daily goals inputs and saving
     const reviewsInput = page.locator("#settingsTargetReviews");
     await expect(reviewsInput).toBeVisible();
     await reviewsInput.fill("60");
     const saveGoalsBtn = page.locator("#settingsSaveGoals");
     await saveGoalsBtn.click();
 
-    // 10. Close settings with Escape
+    // 12. Test Focus Trap: pressing Tab cycles focus inside the modal dialog
+    await page.keyboard.press("Tab");
+    const activeInsideDialog = await dialog.evaluate((d) => d.contains(globalThis.document.activeElement));
+    expect(activeInsideDialog).toBe(true);
+
+    // 13. Close settings with Escape
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
   });

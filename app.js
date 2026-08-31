@@ -100,6 +100,7 @@ const els = {
   cancelApplicationResetButton: document.getElementById("cancelApplicationResetButton"),
   confirmApplicationResetButton: document.getElementById("confirmApplicationResetButton"),
   settingsDialog: document.getElementById("settingsDialog"),
+  openSettingsButton: document.getElementById("openSettingsButton"),
   onboardingTourContainer: document.getElementById("onboardingTourContainer"),
   themeFileInput: document.getElementById("themeFileInput"),
 };
@@ -1081,6 +1082,7 @@ if (els.settingsDialog) {
     getActiveThemeId: () => {
       return document.documentElement.getAttribute("data-theme-id") || "default-dark";
     },
+    onImportTheme: importThemeFromFile,
     dailyGoalsState: async () => {
       const db = store.getState().db;
       return (await getSettings(db, "japaneseDailyGoalsState")) || { targetReviewsPerDay: 50, targetNewItemsPerDay: 10 };
@@ -1096,6 +1098,12 @@ if (els.settingsDialog) {
     },
     document,
   });
+
+  if (els.openSettingsButton) {
+    els.openSettingsButton.addEventListener("click", () => {
+      settingsPanel?.open(els.openSettingsButton);
+    });
+  }
 }
 
 let onboardingTour;
@@ -1409,6 +1417,14 @@ async function bootstrap() {
     }
     if (appSettings?.viewMode) {
       store.setState({ viewMode: appSettings.viewMode });
+    }
+    if (appSettings?.typography) {
+      if (appSettings.typography.fontSize) {
+        document.documentElement.style.setProperty("--theme-font-size-base", `${appSettings.typography.fontSize}px`);
+      }
+      if (appSettings.typography.lineHeight) {
+        document.documentElement.style.setProperty("--theme-line-height", appSettings.typography.lineHeight);
+      }
     }
   } catch (error) {
     console.warn("Could not restore persisted settings:", error);

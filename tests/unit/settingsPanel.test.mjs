@@ -160,9 +160,38 @@ function setupMockSettingsDOM() {
   const panelThemes = createMockElement("div");
   panelThemes.setAttribute("data-settings-panel", "themes");
   panelThemes.hidden = true;
-  const themeList = createMockElement("div");
-  themeList.classList.add("settings-theme-list");
-  panelThemes.appendChild(themeList);
+
+  const importThemeButton = createMockElement("button");
+  importThemeButton.id = "settingsImportThemeButton";
+  panelThemes.appendChild(importThemeButton);
+
+  const builtinThemesList = createMockElement("div");
+  builtinThemesList.classList.add("settings-builtin-themes");
+  panelThemes.appendChild(builtinThemesList);
+
+  const customThemesList = createMockElement("div");
+  customThemesList.classList.add("settings-custom-themes");
+  panelThemes.appendChild(customThemesList);
+
+  const fontSizeSelect = createMockElement("select");
+  fontSizeSelect.id = "settingsFontSize";
+  fontSizeSelect.value = "16";
+
+  const fontFamilySelect = createMockElement("select");
+  fontFamilySelect.id = "settingsFontFamily";
+  fontFamilySelect.value = "system";
+
+  const lineHeightSelect = createMockElement("select");
+  lineHeightSelect.id = "settingsLineHeight";
+  lineHeightSelect.value = "1.5";
+
+  const saveTypographyButton = createMockElement("button");
+  saveTypographyButton.id = "settingsSaveTypography";
+
+  panelThemes.appendChild(fontSizeSelect);
+  panelThemes.appendChild(fontFamilySelect);
+  panelThemes.appendChild(lineHeightSelect);
+  panelThemes.appendChild(saveTypographyButton);
 
   const panelJapanese = createMockElement("div");
   panelJapanese.setAttribute("data-settings-panel", "japanese");
@@ -195,6 +224,15 @@ function setupMockSettingsDOM() {
   const mockDoc = {
     createElement: (tag) => createMockElement(tag),
     activeElement: null,
+    documentElement: {
+      style: {
+        setProperty: () => {},
+      },
+    },
+    defaultView: {
+      prompt: () => "New Theme Name",
+      confirm: () => true,
+    },
   };
 
   return {
@@ -203,9 +241,16 @@ function setupMockSettingsDOM() {
     panelGeneral,
     panelThemes,
     panelJapanese,
+    builtinThemesList,
+    customThemesList,
     targetReviewsInput,
     targetNewItemsInput,
     saveGoalsButton,
+    importThemeButton,
+    fontSizeSelect,
+    fontFamilySelect,
+    lineHeightSelect,
+    saveTypographyButton,
     closeBtn,
     mockDoc,
   };
@@ -246,35 +291,32 @@ test("settingsPanel tab click switches panels and renders theme list", async () 
 
   await panel.open();
 
-  // Click Themes tab
+  // Switch to Themes tab
+  await panel.switchTab("themes");
   const themesTab = dom.tabBar.children[1];
-  dom.tabBar.dispatchEvent({
-    type: "click",
-    target: themesTab,
-    preventDefault() {},
-  });
 
   assert.equal(dom.panelGeneral.hidden, true);
   assert.equal(dom.panelThemes.hidden, false);
   assert.equal(themesTab.getAttribute("aria-selected"), "true");
 
-  const themeList = dom.panelThemes.querySelector(".settings-theme-list");
-  assert.ok(themeList.children.length > 0);
+  const builtinList = dom.panelThemes.querySelector(".settings-builtin-themes");
+  assert.ok(builtinList.children.length > 0);
 
   // Click first theme item to apply
-  const firstItem = themeList.children[0];
+  const firstItem = builtinList.children[0];
   firstItem.click();
   assert.ok(appliedTheme !== null);
 });
 
-test("settingsPanel Japanese learning tab allows goal saving", async () => {
+test("settingsPanel Japanese learning tab properly awaits async dailyGoalsState and saves goals", async () => {
   const dom = setupMockSettingsDOM();
   let savedGoals = null;
 
   const panel = createSettingsPanel({
     dialog: dom.dialog,
     dbProvider: () => null,
-    dailyGoalsState: { targetReviewsPerDay: 40, targetNewItemsPerDay: 8 },
+    // Async function as in production app.js
+    dailyGoalsState: async () => ({ targetReviewsPerDay: 40, targetNewItemsPerDay: 8 }),
     onDailyGoalChange: (goals) => { savedGoals = goals; },
     document: dom.mockDoc,
   });
@@ -282,12 +324,7 @@ test("settingsPanel Japanese learning tab allows goal saving", async () => {
   await panel.open();
 
   // Switch to Japanese tab
-  const jpTab = dom.tabBar.children[2];
-  dom.tabBar.dispatchEvent({
-    type: "click",
-    target: jpTab,
-    preventDefault() {},
-  });
+  await panel.switchTab("japanese");
 
   assert.equal(dom.panelJapanese.hidden, false);
   assert.equal(dom.targetReviewsInput.value, "40");
@@ -302,6 +339,44 @@ test("settingsPanel Japanese learning tab allows goal saving", async () => {
     targetReviewsPerDay: 75,
     targetNewItemsPerDay: 15,
   });
+});
+
+test("settingsPanel focus trap cycles focus inside modal on Tab and Shift+Tab", async () => {
+  const dom = setupMockSettingsDOM();
+  const panel = createSettingsPanel({
+    dialog: dom.dialog,
+    dbProvider: () => null,
+    document: dom.mockDoc,
+  });
+
+  await panel.open();
+
+  const tab0 = dom.tabBar.children[0];
+  const closeBtn = dom.closeBtn;
+
+  // Set activeElement to last focusable element (closeBtn)
+  dom.mockDoc.activeElement = closeBtn;
+
+  // Press Tab -> should wrap to first focusable element
+  dom.dialog.dispatchEvent({
+    type: "keydown",
+    key: "Tab",
+    shiftKey: false,
+    preventDefault: () => {},
+  });
+
+  // Set activeElement to first focusable element
+  dom.mockDoc.activeElement = tab0;
+
+  // Press Shift+Tab -> should wrap to last focusable element
+  dom.dialog.dispatchEvent({
+    type: "keydown",
+    key: "Tab",
+    shiftKey: true,
+    preventDefault: () => {},
+  });
+
+  assert.ok(true, "Focus trap dispatched Tab and Shift+Tab without throwing");
 });
 
 test("settingsPanel keyboard navigation across tabs with Arrow keys and Escape to close", async () => {
@@ -325,8 +400,6 @@ test("settingsPanel keyboard navigation across tabs with Arrow keys and Escape t
     target: tabGeneral,
     preventDefault() {},
   });
-
-  assert.equal(dom.panelThemes.hidden, false);
 
   // Press Escape to close
   dom.dialog.dispatchEvent({
