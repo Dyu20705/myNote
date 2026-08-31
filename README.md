@@ -2,9 +2,9 @@
 
 A high-performance, local-first note-taking and Japanese study application built with vanilla web technologies, deterministic state management, and IndexedDB persistence.
 
-## Overview
+## Overview in 30 Seconds
 
-myNote is an offline-ready, single-page application designed for fast, distraction-free note management and integrated language study. It operates entirely inside the browser with zero cloud dependencies or external runtime libraries.
+myNote is an offline-ready, single-page application designed for fast, distraction-free note management and integrated language study. It runs entirely inside the browser with zero cloud dependencies or external runtime libraries.
 
 ### Key Capabilities
 
@@ -14,6 +14,20 @@ myNote is an offline-ready, single-page application designed for fast, distracti
 - **Theming & Personalization**: Live CSS variable token engine with built-in themes (Light, Dark, Solarized, Nord, Cyberpunk), custom JSON theme import/export, and configurable typography.
 - **Keyboard-First & Accessible**: Global command palette (`Ctrl/Cmd+K`), comprehensive keyboard navigation, WCAG AA contrast compliance, and accessible modal focus traps.
 - **Resilient Data Layer**: IndexedDB persistence following strict persist-before-commit ordering, single-flight autosave, and lossless Markdown/JSON backup exports.
+
+## Core Architecture & Invariants
+
+myNote enforces an explicit unidirectional data flow across all subsystems:
+
+```text
+UI → Actions → State → Core → Persistence
+```
+
+- **Local-First & Durable**: Canonical data lives on the device in IndexedDB (`notes`, `studyReviews`, `kanjiInkEntries`, `userThemes`, `settings`).
+- **Persist-Before-Commit**: Storage transactions settle before in-memory state, history, or UI notifications report success.
+- **Single Parsing Authority**: Tags, links, AST nodes, checksums, and search tokens derive solely through `core/parser/`.
+- **Resource Bounds**: Strict caps on history depth (300 entries), stroke coordinates (32 strokes / 4096 points), and memory footprint.
+- **Isolated Degradation**: Derived search or backlink index failures degrade gracefully without corrupting canonical data.
 
 ## Quickstart
 
@@ -26,21 +40,52 @@ myNote is an offline-ready, single-page application designed for fast, distracti
 
 ```sh
 npm ci
-node scripts/static-server.mjs
+npm start
+# or: node scripts/serve-static.mjs
 ```
 
-Open `http://localhost:8080` in your browser.
+Open `http://localhost:4180` in your browser.
+
+## Key Shortcuts & Discovery
+
+Open the central command palette (`Ctrl/Cmd+K`) from anywhere to search and run any application command with platform-aware keybindings.
+
+| Shortcut | Scope | Action |
+|---|---|---|
+| `Ctrl/Cmd+K` | Global | Open command palette |
+| `Ctrl/Cmd+N` | Notes board | Create a new note |
+| `/` | Board shell | Focus search input |
+| `Ctrl/Cmd+Enter` | Editor | Save / flush active note |
+| `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` | Shell | Undo / Redo (including note deletion) |
+| `j` / `k` | Board shell | Select next / previous note |
+| `gg` / `G` | Board shell | Select first / last note |
+| `1` / `2` / `3` / `4` | Review modal (revealed) | Rate card (Again / Hard / Good / Easy) |
+| `Space` | Review modal | Flip / reveal flashcard |
+| `Escape` | Modals / Dialogs | Close active dialog and return focus |
+
+For the complete daily workflow guide, see the [Cheatsheet](docs/guides/cheatsheet.md).
+
+## Repository Structure
+
+- `app.js`: Browser bootstrap, runtime composition, and Notes workspace orchestration.
+- `ui/japaneseApp.js`: Japanese study workspace bridge, board filters, and review adapters.
+- `core/`: Canonical model, parser, search worker, storage, gamification, daily goals, and SRS schedulers.
+- `ui/`: Command registry, palette, editor overlay, list/grid virtualization, settings panel, and theme switcher.
+- `styles/`: Modular CSS stylesheets (base layout, editor, Japanese workspace, themes, onboarding).
+- `scripts/`: Static file server (`serve-static.mjs`) and E2E test runner (`run-e2e.mjs`).
+- `tests/`: Deterministic unit, integration, performance, content contract, and Playwright browser journey suites.
+- `docs/`: Technical specifications, architectural invariants, and governance guidelines.
 
 ## Verification
 
-Run the comprehensive repository test and release gate:
+Run the full repository release gate locally:
 
 ```sh
 npm run test:content      # Repository text contracts
-npm run lint              # ESLint checks
-npm run test:unit          # Core, parser, and domain unit tests
+npm run lint              # ESLint syntax and style
+npm run test:unit          # Domain, parser, and component unit tests
 npm run test:perf          # Performance budgets and latency tripwires
-npm run test:integration   # IndexedDB storage and migration lifecycle
+npm run test:integration   # IndexedDB schema, storage, and migration suites
 npm run test:e2e           # Playwright end-to-end browser journeys
 ```
 
