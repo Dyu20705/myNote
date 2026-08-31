@@ -17,6 +17,21 @@ import { getSettings, putSettings } from "../core/storage.js";
 const TAB_IDS = ["general", "themes", "japanese"];
 
 /**
+ * Resolves font family token to system font stack.
+ *
+ * @param {string} fontFamily
+ * @returns {string} CSS font family string
+ */
+export function resolveFontFamily(fontFamily) {
+  if (fontFamily === "sans-serif") return "sans-serif";
+  if (fontFamily === "serif") return "Georgia, Cambria, 'Times New Roman', serif";
+  if (fontFamily === "mono" || fontFamily === "monospace") {
+    return "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace";
+  }
+  return "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+}
+
+/**
  * Creates a Settings Panel controller.
  *
  * @param {object} options
@@ -328,11 +343,14 @@ export function createSettingsPanel({
     const lineHeight = lineHeightSelect?.value || "1.5";
 
     const typography = { fontSize, fontFamily, lineHeight };
+    const resolvedFont = resolveFontFamily(fontFamily);
 
     // Apply to root element
     if (doc.documentElement?.style) {
       doc.documentElement.style.setProperty("--theme-font-size-base", `${fontSize}px`);
       doc.documentElement.style.setProperty("--theme-line-height", lineHeight);
+      doc.documentElement.style.setProperty("--theme-font-primary", resolvedFont);
+      doc.documentElement.style.setProperty("--mn-font-ui", resolvedFont);
     }
 
     const db = await getDb();

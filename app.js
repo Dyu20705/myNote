@@ -38,7 +38,7 @@ import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
 import { createThemeSwitcher } from "./ui/themeSwitcher.js";
-import { createSettingsPanel } from "./ui/settingsPanel.js";
+import { createSettingsPanel, resolveFontFamily } from "./ui/settingsPanel.js";
 import { createOnboardingTour } from "./ui/onboardingTour.js";
 import { createEditorToolbar } from "./ui/editorToolbar.js";
 import { registerApplicationCommands } from "./ui/applicationCommands.js";
@@ -1424,6 +1424,11 @@ async function bootstrap() {
       }
       if (appSettings.typography.lineHeight) {
         document.documentElement.style.setProperty("--theme-line-height", appSettings.typography.lineHeight);
+      }
+      if (appSettings.typography.fontFamily) {
+        const resolved = resolveFontFamily(appSettings.typography.fontFamily);
+        document.documentElement.style.setProperty("--theme-font-primary", resolved);
+        document.documentElement.style.setProperty("--mn-font-ui", resolved);
       }
     }
   } catch (error) {

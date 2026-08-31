@@ -6,16 +6,15 @@ test.describe("Release Gate — Full User Lifecycle Journey", () => {
 
     // 1. Onboarding Tour verification
     const tourTooltip = page.locator(".onboarding-tooltip");
-    if (await tourTooltip.isVisible()) {
-      const skipBtn = page.locator(".onboarding-skip");
-      if (await skipBtn.isVisible()) {
-        await skipBtn.click();
-      }
-      await expect(tourTooltip).not.toBeVisible();
-    }
+    await expect(tourTooltip).toBeVisible();
+    const skipBtn = page.locator(".onboarding-skip");
+    await expect(skipBtn).toBeVisible();
+    await skipBtn.click();
+    await expect(tourTooltip).not.toBeVisible();
 
     // 2. Note Creation & Rich Markdown Formatting
     const newNoteBtn = page.locator("#newNoteButton");
+    await expect(newNoteBtn).toBeVisible();
     await newNoteBtn.click();
 
     const titleInput = page.locator("#titleInput");
@@ -27,10 +26,9 @@ test.describe("Release Gate — Full User Lifecycle Journey", () => {
     await page.keyboard.press("Control+Enter"); // Save note
 
     const closeEditorBtn = page.locator("#closeNoteEditorButton");
-    if (await closeEditorBtn.isVisible()) {
-      await closeEditorBtn.click();
-      await expect(page.locator("#noteEditorOverlay")).not.toBeVisible();
-    }
+    await expect(closeEditorBtn).toBeVisible();
+    await closeEditorBtn.click();
+    await expect(page.locator("#noteEditorOverlay")).not.toBeVisible();
 
     // Verify note is rendered in list
     const noteEntry = page.locator(".note-card-title, .note-item-title").filter({ hasText: "Japanese Study Plan" });
@@ -38,45 +36,54 @@ test.describe("Release Gate — Full User Lifecycle Journey", () => {
 
     // 3. Theme & Typography Customization in Settings
     const openSettingsBtn = page.locator("#openSettingsButton");
-    if (await openSettingsBtn.isVisible()) {
-      await openSettingsBtn.click();
-    } else {
-      await page.keyboard.press("Control+k");
-      const paletteInput = page.locator("#commandInput");
-      await paletteInput.fill("Open settings");
-      await page.keyboard.press("Enter");
-    }
+    await expect(openSettingsBtn).toBeVisible();
+    await openSettingsBtn.click();
 
     const settingsDialog = page.locator("#settingsDialog");
     await expect(settingsDialog).toBeVisible();
 
     // Navigate to Themes tab
     const themesTab = page.locator("button[data-settings-tab='themes']");
+    await expect(themesTab).toBeVisible();
     await themesTab.click();
     await expect(page.locator("#settingsPanelThemes")).toBeVisible();
 
     // Apply Nordic Dark theme
     const nordicTheme = page.locator(".settings-theme-item[data-theme-id='nordic-dark']");
-    if (await nordicTheme.count() > 0) {
-      await nordicTheme.click();
-      const currentBg = await page.locator(":root").evaluate((el) => {
-        return globalThis.getComputedStyle(el).getPropertyValue("--theme-color-background").trim();
-      });
-      expect(currentBg).toBe("#2e3440");
-    }
+    await expect(nordicTheme).toHaveCount(1);
+    await nordicTheme.click();
+
+    const currentBg = await page.locator(":root").evaluate((el) => {
+      return globalThis.getComputedStyle(el).getPropertyValue("--theme-color-background").trim();
+    });
+    expect(currentBg).toBe("#2e3440");
 
     // Update typography preferences
-    const fontSizeSelect = page.locator("#settingsFontSize");
-    if (await fontSizeSelect.isVisible()) {
-      await fontSizeSelect.selectOption("18");
-      const saveTypographyBtn = page.locator("#settingsSaveTypography");
-      await saveTypographyBtn.click();
+    const fontFamilySelect = page.locator("#settingsFontFamily");
+    await expect(fontFamilySelect).toBeVisible();
+    await fontFamilySelect.selectOption("monospace");
 
-      const rootFontSize = await page.locator(":root").evaluate((el) => {
-        return el.style.getPropertyValue("--theme-font-size-base");
-      });
-      expect(rootFontSize).toBe("18px");
-    }
+    const fontSizeSelect = page.locator("#settingsFontSize");
+    await expect(fontSizeSelect).toBeVisible();
+    await fontSizeSelect.selectOption("18");
+
+    const lineHeightSelect = page.locator("#settingsLineHeight");
+    await expect(lineHeightSelect).toBeVisible();
+    await lineHeightSelect.selectOption("1.8");
+
+    const saveTypographyBtn = page.locator("#settingsSaveTypography");
+    await expect(saveTypographyBtn).toBeVisible();
+    await saveTypographyBtn.click();
+
+    const rootFontSize = await page.locator(":root").evaluate((el) => {
+      return el.style.getPropertyValue("--theme-font-size-base");
+    });
+    expect(rootFontSize).toBe("18px");
+
+    const rootLineHeight = await page.locator(":root").evaluate((el) => {
+      return el.style.getPropertyValue("--theme-line-height");
+    });
+    expect(rootLineHeight).toBe("1.8");
 
     // Close settings dialog
     await page.keyboard.press("Escape");
@@ -84,47 +91,24 @@ test.describe("Release Gate — Full User Lifecycle Journey", () => {
 
     // 4. Japanese Study Session, Review Completion & Gamification XP
     const japaneseWorkspaceBtn = page.locator("#japaneseWorkspaceButton");
+    await expect(japaneseWorkspaceBtn).toBeVisible();
     await japaneseWorkspaceBtn.click();
 
+    // Open study details dashboard
+    const studyDetailsToggle = page.locator("#japaneseStudyDetailsToggle");
+    await expect(studyDetailsToggle).toBeVisible();
+    await studyDetailsToggle.click();
+
     const dashboard = page.locator("#japaneseDashboard");
-    await expect(dashboard).toBeAttached();
+    await expect(dashboard).toBeVisible();
 
-    // Create a Japanese vocabulary note
-    await page.keyboard.press("Control+k");
-    const cmdInput = page.locator("#commandInput");
-    await cmdInput.fill("Create vocabulary note");
-    await page.keyboard.press("Enter");
-
-    // Close editor if open
-    if (await closeEditorBtn.isVisible()) {
-      await closeEditorBtn.click();
-    }
-
-    // Test Quick Study button if present
+    // Quick Study button check
     const quickStudyBtn = page.locator("#quickStudy5Button");
-    if (await quickStudyBtn.isVisible() && !await quickStudyBtn.isDisabled()) {
-      await quickStudyBtn.click();
-      const reviewDialog = page.locator("#reviewDialog");
-      if (await reviewDialog.isVisible()) {
-        // Show answer
-        const showAnswerBtn = page.locator("#showAnswerButton");
-        if (await showAnswerBtn.isVisible()) {
-          await showAnswerBtn.click();
-          // Rate Good
-          const rateGoodBtn = page.locator("button[data-rating='good'], button[data-rating='3']");
-          if (await rateGoodBtn.isVisible()) {
-            await rateGoodBtn.click();
-          }
-        }
-        const closeReviewBtn = page.locator("#closeReviewButton");
-        if (await closeReviewBtn.isVisible()) {
-          await closeReviewBtn.click();
-        }
-      }
-    }
+    await expect(quickStudyBtn).toBeVisible();
 
     // 5. Switch back to Notes workspace and verify data persistence across reload
     const notesWorkspaceBtn = page.locator("#notesWorkspaceButton");
+    await expect(notesWorkspaceBtn).toBeVisible();
     await notesWorkspaceBtn.click();
 
     // Reload page to verify persistence across sessions
@@ -139,5 +123,21 @@ test.describe("Release Gate — Full User Lifecycle Journey", () => {
       return globalThis.getComputedStyle(el).getPropertyValue("--theme-color-background").trim();
     });
     expect(persistedBg).toBe("#2e3440");
+
+    // Verify typography persisted after reload
+    const persistedFontSize = await page.locator(":root").evaluate((el) => {
+      return el.style.getPropertyValue("--theme-font-size-base");
+    });
+    expect(persistedFontSize).toBe("18px");
+
+    const persistedLineHeight = await page.locator(":root").evaluate((el) => {
+      return el.style.getPropertyValue("--theme-line-height");
+    });
+    expect(persistedLineHeight).toBe("1.8");
+
+    const persistedFontFamily = await page.locator(":root").evaluate((el) => {
+      return el.style.getPropertyValue("--theme-font-primary");
+    });
+    expect(persistedFontFamily).toContain("monospace");
   });
 });

@@ -48,9 +48,9 @@
   --mn-content-readable: 760px;
   --mn-shell-max: 1440px;
 
-  --mn-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --mn-font-japanese: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
-  --mn-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --mn-font-ui: var(--theme-font-primary, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --mn-font-japanese: var(--theme-font-japanese, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif);
+  --mn-font-mono: var(--theme-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
 
   /* Transitional aliases for selectors outside the #67 visual boundary. */
   --bg: var(--mn-bg-canvas);
@@ -78,9 +78,9 @@
   --theme-color-status-warning: var(--mn-warning-text);
   --theme-color-status-error: var(--mn-danger-text);
 
-  --theme-font-primary: var(--mn-font-ui);
-  --theme-font-mono: var(--mn-font-mono);
-  --theme-font-japanese: var(--mn-font-japanese);
+  --theme-font-primary: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --theme-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --theme-font-japanese: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
   --theme-font-size-base: 14px;
   --theme-line-height: 1.5;
 
@@ -106,8 +106,8 @@ body {
   background: var(--mn-bg-canvas);
   color: var(--mn-text-primary);
   font-family: var(--mn-font-ui);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--theme-font-size-base, 14px);
+  line-height: var(--theme-line-height, 1.5);
 }
 
 [lang="ja"] {
