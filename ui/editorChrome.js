@@ -1,6 +1,8 @@
 import { commandRuntime } from "../app.js";
 import "./kanjiInkApp.js";
 import { createNoteActionRegistry } from "./noteActionRegistry.js";
+import { computeNoteStats } from "../core/noteStats.js";
+import { extractTags, parseWikiLinks } from "../core/parser/index.js";
 
 const elements = {
   titleInput: document.getElementById("titleInput"),
@@ -15,8 +17,16 @@ const elements = {
   detailsButton: document.getElementById("detailsButton"),
   closeDetailsButton: document.getElementById("closeDetailsButton"),
   inspector: document.getElementById("noteInspector"),
+  statsRegion: document.getElementById("noteStatsRegion"),
+  statsList: document.getElementById("noteStatsList"),
+  tagsRegion: document.getElementById("noteTagsRegion"),
+  tagsList: document.getElementById("noteTagsList"),
+  outgoingLinksRegion: document.getElementById("outgoingLinksRegion"),
+  outgoingLinksList: document.getElementById("outgoingLinksList"),
   backlinksRegion: document.getElementById("backlinksRegion"),
   backlinksList: document.getElementById("backlinksList"),
+  japaneseStudyRegion: document.getElementById("japaneseStudyRegion"),
+  japaneseStudyList: document.getElementById("japaneseStudyList"),
   metadataList: document.getElementById("noteMetadataList"),
   supplementaryRegion: document.getElementById("noteSupplementaryRegion"),
   actionsButton: document.getElementById("noteActionsButton"),
@@ -81,6 +91,90 @@ function renderMetadata() {
   if (metadata.states.length > 0) appendMetadata("State", metadata.states.join(", "));
 }
 
+function renderStats() {
+  if (!elements.statsList) return;
+  const stats = computeNoteStats(elements.contentInput.value);
+  elements.statsList.replaceChildren();
+  const appendStat = (term, val) => {
+    const dt = document.createElement("dt");
+    dt.textContent = term;
+    const dd = document.createElement("dd");
+    dd.textContent = val;
+    elements.statsList.append(dt, dd);
+  };
+  appendStat("Words", String(stats.words));
+  appendStat("Characters", String(stats.characters));
+  appendStat("Reading time", `${stats.readingTimeMinutes} min`);
+}
+
+function renderTags() {
+  if (!elements.tagsList || !elements.tagsRegion) return;
+  const tags = extractTags(elements.contentInput.value);
+  elements.tagsList.replaceChildren();
+  if (tags.length === 0) {
+    elements.tagsRegion.hidden = true;
+    return;
+  }
+  elements.tagsRegion.hidden = false;
+  for (const tag of tags) {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    chip.textContent = `#${tag}`;
+    elements.tagsList.append(chip);
+  }
+}
+
+function renderOutgoingLinks() {
+  if (!elements.outgoingLinksList || !elements.outgoingLinksRegion) return;
+  const links = parseWikiLinks(elements.contentInput.value);
+  elements.outgoingLinksList.replaceChildren();
+  if (links.length === 0) {
+    elements.outgoingLinksRegion.hidden = true;
+    return;
+  }
+  elements.outgoingLinksRegion.hidden = false;
+  for (const linkTarget of links) {
+    const linkItem = document.createElement("span");
+    linkItem.className = "outgoing-link-item";
+    linkItem.textContent = `[[${linkTarget}]]`;
+    elements.outgoingLinksList.append(linkItem);
+  }
+}
+
+function renderJapaneseStudyStatus() {
+  if (!elements.japaneseStudyList || !elements.japaneseStudyRegion) return;
+  const card = activeCard();
+  const rawReviewState = card?.getAttribute("data-review-state");
+  let reviewState = null;
+  if (rawReviewState) {
+    try {
+      reviewState = JSON.parse(rawReviewState);
+    } catch {
+      reviewState = null;
+    }
+  }
+
+  elements.japaneseStudyList.replaceChildren();
+  if (!reviewState) {
+    elements.japaneseStudyRegion.hidden = true;
+    return;
+  }
+
+  elements.japaneseStudyRegion.hidden = false;
+  const appendStudyField = (term, val) => {
+    const dt = document.createElement("dt");
+    dt.textContent = term;
+    const dd = document.createElement("dd");
+    dd.textContent = val;
+    elements.japaneseStudyList.append(dt, dd);
+  };
+
+  if (reviewState.due) appendStudyField("Due", String(reviewState.due).slice(0, 10));
+  if (reviewState.intervalDays != null) appendStudyField("Interval", `${reviewState.intervalDays}d`);
+  if (reviewState.stability != null) appendStudyField("Stability", String(reviewState.stability));
+  if (reviewState.difficulty != null) appendStudyField("Difficulty", String(reviewState.difficulty));
+}
+
 function normalizeBacklinks() {
   for (const hint of elements.backlinksList.querySelectorAll(".hint")) {
     if (hint.textContent.trim() === "No backlinks yet") hint.remove();
@@ -90,6 +184,10 @@ function normalizeBacklinks() {
 
 function synchronizeInspector() {
   normalizeBacklinks();
+  renderStats();
+  renderTags();
+  renderOutgoingLinks();
+  renderJapaneseStudyStatus();
   renderMetadata();
   elements.supplementaryRegion.hidden = elements.supplementaryRegion.querySelector("[data-supplementary-entity]") === null;
 }

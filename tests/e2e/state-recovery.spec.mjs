@@ -85,7 +85,7 @@ test("fresh database remains empty until explicit create", async ({ page }) => {
   await expect(page.locator("#noteList .empty-state button")).toHaveText("New note");
 
   const storedCount = await page.evaluate(async () => {
-    const request = globalThis.indexedDB.open("myNoteDB", 5);
+    const request = globalThis.indexedDB.open("myNoteDB", 6);
     const db = await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);

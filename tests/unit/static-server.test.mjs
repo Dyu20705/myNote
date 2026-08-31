@@ -168,16 +168,16 @@ test("static server enforces its application-only security contract", async () =
     assert.equal(moduleAsset.statusCode, 200);
     assert.match(moduleAsset.headers["content-type"], /^text\/javascript/);
 
-    const japaneseModule = await request("/japaneseApp.js");
+    const japaneseModule = await request("/ui/japaneseApp.js");
     assert.equal(japaneseModule.statusCode, 200);
     assert.match(japaneseModule.headers["content-type"], /^text\/javascript/);
 
     for (const stylesheet of [
       "/styles.css",
-      "/japanese.css",
-      "/command.css",
-      "/editor.css",
-      "/kanji-ink.css",
+      "/styles/japanese.css",
+      "/styles/command.css",
+      "/styles/editor.css",
+      "/styles/kanji-ink.css",
     ]) {
       const response = await request(stylesheet);
       assert.equal(response.statusCode, 200, `${stylesheet} must be served`);

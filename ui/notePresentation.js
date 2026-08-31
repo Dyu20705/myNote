@@ -81,28 +81,69 @@ export function deriveNotePreview(content, options = {}) {
   return `${projected.slice(0, maxLength - 1).trimEnd()}…`.padEnd(maxLength, "…");
 }
 
-export function createNoteBoardSections({ notesById, orderedIds } = {}) {
+export function createNoteBoardSections({ notesById, orderedIds, query = "" } = {}) {
   if (!(notesById instanceof Map) || !Array.isArray(orderedIds)) {
     throw presentationError();
   }
 
-  const pinnedIds = [];
-  const noteIds = [];
+  const normalizedQuery = typeof query === "string" ? query.trim().toLowerCase() : "";
+
+  if (!normalizedQuery) {
+    const pinnedIds = [];
+    const noteIds = [];
+    for (const id of orderedIds) {
+      const note = notesById.get(id);
+      if (!note || typeof note !== "object") {
+        continue;
+      }
+      if (note.pinned === true) {
+        pinnedIds.push(id);
+      } else {
+        noteIds.push(id);
+      }
+    }
+
+    return [
+      { id: "pinned", label: "PINNED", orderedIds: pinnedIds },
+      { id: "notes", label: "NOTES", orderedIds: noteIds },
+    ];
+  }
+
+  const titleIds = [];
+  const tagIds = [];
+  const japaneseIds = [];
+  const contentIds = [];
+
   for (const id of orderedIds) {
     const note = notesById.get(id);
     if (!note || typeof note !== "object") {
       continue;
     }
-    if (note.pinned === true) {
-      pinnedIds.push(id);
+
+    const title = typeof note.title === "string" ? note.title.toLowerCase() : "";
+    const tags = Array.isArray(note.tags) ? note.tags.map((t) => String(t).toLowerCase()) : [];
+    const isJapanese = Boolean(
+      note.japanese
+      || note.template
+      || tags.some((t) => ["n5", "n4", "n3", "n2", "n1", "vocabulary", "kanji", "grammar", "japanese"].includes(t)),
+    );
+
+    if (title.includes(normalizedQuery)) {
+      titleIds.push(id);
+    } else if (tags.some((t) => t.includes(normalizedQuery.replace(/^#/, "")))) {
+      tagIds.push(id);
+    } else if (isJapanese) {
+      japaneseIds.push(id);
     } else {
-      noteIds.push(id);
+      contentIds.push(id);
     }
   }
 
   return [
-    { id: "pinned", label: "PINNED", orderedIds: pinnedIds },
-    { id: "notes", label: "NOTES", orderedIds: noteIds },
+    { id: "title", label: "TITLE MATCHES", orderedIds: titleIds },
+    { id: "tags", label: "TAG MATCHES", orderedIds: tagIds },
+    { id: "japanese", label: "JAPANESE STUDY", orderedIds: japaneseIds },
+    { id: "notes", label: "CONTENT MATCHES", orderedIds: contentIds },
   ];
 }
 

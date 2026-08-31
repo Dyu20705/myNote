@@ -13,12 +13,7 @@ const repositoryRoot = path.resolve(
 const canonicalRepositoryRoot = await realpath(repositoryRoot);
 const rootAssets = new Set([
   "/app.js",
-  "/command.css",
-  "/editor.css",
   "/index.html",
-  "/japanese.css",
-  "/japaneseApp.js",
-  "/kanji-ink.css",
   "/styles.css",
 ]);
 const mimeTypes = {
@@ -53,7 +48,7 @@ function isAllowedAsset(requestPath) {
   }
 
   const segments = requestPath.split("/").slice(1);
-  if (segments.length < 2 || (segments[0] !== "core" && segments[0] !== "ui")) {
+  if (segments.length < 2 || (segments[0] !== "core" && segments[0] !== "ui" && segments[0] !== "styles")) {
     return false;
   }
 
@@ -61,7 +56,7 @@ function isAllowedAsset(requestPath) {
     if (!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(segment)) {
       return false;
     }
-    return index < segments.length - 1 || segment.endsWith(".js");
+    return index < segments.length - 1 || segment.endsWith(".js") || segment.endsWith(".css");
   });
 }
 

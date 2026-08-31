@@ -20,18 +20,37 @@ import { createStore } from "./core/state.js";
 import {
   deleteNoteFromDb,
   exportDatabase,
+  getSettings,
   listNotesFromDb,
   migrateLegacyStorageIfNeeded,
   openDatabase,
   putNoteToDb,
+  putSettings,
   resetDatabase,
 } from "./core/storage.js";
 import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
-import { createJapaneseApp } from "./japaneseApp.js";
+import { BUILTIN_THEMES } from "./core/theme/themeSchema.js";
+import { applyThemeTokens } from "./core/theme/themeEngine.js";
+import { getTheme, importThemeFromJson, saveTheme } from "./core/theme/themeStorage.js";
+import { createJapaneseApp } from "./ui/japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
+import { createThemeSwitcher } from "./ui/themeSwitcher.js";
+import { createSettingsPanel, resolveFontFamily } from "./ui/settingsPanel.js";
+import { createOnboardingTour } from "./ui/onboardingTour.js";
+import { createEditorToolbar } from "./ui/editorToolbar.js";
+import { registerApplicationCommands } from "./ui/applicationCommands.js";
+import {
+  insertBold,
+  insertItalic,
+  insertStrikethrough,
+  insertInlineCode,
+  insertLink,
+  cycleHeading,
+  insertTaskItem,
+} from "./core/markdownActions.js";
 import {
   presentApplicationRecoveryState,
   presentBoardState,
@@ -53,9 +72,11 @@ const els = {
   newJapaneseNoteButton: document.getElementById("newJapaneseNoteButton"),
   refreshButton: document.getElementById("refreshButton"),
   saveButton: document.getElementById("saveButton"),
+  viewModeButton: document.getElementById("viewModeButton"),
   noteList: document.getElementById("noteList"),
   titleInput: document.getElementById("titleInput"),
   contentInput: document.getElementById("contentInput"),
+  editorToolbar: document.getElementById("editorToolbar"),
   noteEditorOverlay: document.getElementById("noteEditorOverlay"),
   noteEditorOverlayLabel: document.getElementById("noteEditorOverlayLabel"),
   closeNoteEditorButton: document.getElementById("closeNoteEditorButton"),
@@ -66,6 +87,11 @@ const els = {
   commandInput: document.getElementById("commandInput"),
   commandList: document.getElementById("commandList"),
   reviewDialog: document.getElementById("reviewDialog"),
+  themeSwitcherDialog: document.getElementById("themeSwitcherDialog"),
+  closeThemeSwitcherButton: document.getElementById("closeThemeSwitcherButton"),
+  themeList: document.getElementById("themeList"),
+  cancelThemeSwitcherButton: document.getElementById("cancelThemeSwitcherButton"),
+  applyThemeSwitcherButton: document.getElementById("applyThemeSwitcherButton"),
   applicationRecovery: document.getElementById("applicationRecovery"),
   applicationRecoveryMessage: document.getElementById("applicationRecoveryMessage"),
   retryApplicationStorageButton: document.getElementById("retryApplicationStorageButton"),
@@ -73,6 +99,10 @@ const els = {
   applicationResetDialog: document.getElementById("applicationResetDialog"),
   cancelApplicationResetButton: document.getElementById("cancelApplicationResetButton"),
   confirmApplicationResetButton: document.getElementById("confirmApplicationResetButton"),
+  settingsDialog: document.getElementById("settingsDialog"),
+  openSettingsButton: document.getElementById("openSettingsButton"),
+  onboardingTourContainer: document.getElementById("onboardingTourContainer"),
+  themeFileInput: document.getElementById("themeFileInput"),
 };
 
 const store = createStore({
@@ -81,6 +111,7 @@ const store = createStore({
   activeId: null,
   filteredIds: [],
   query: "",
+  viewMode: "list",
   dirty: false,
   saveMessage: "Ready",
   savePhase: "idle",
@@ -291,6 +322,30 @@ const listView = createListView({
   formatDate,
 });
 
+function renderViewMode() {
+  if (!els.viewModeButton) return;
+  const viewMode = store.getState().viewMode || "list";
+  els.viewModeButton.textContent = viewMode === "list" ? "Grid view" : "List view";
+  els.viewModeButton.setAttribute("aria-label", viewMode === "list" ? "Switch to grid view" : "Switch to list view");
+}
+
+function toggleViewMode() {
+  const current = store.getState().viewMode || "list";
+  const next = current === "list" ? "grid" : "list";
+  store.setState({ viewMode: next });
+  renderViewMode();
+  renderList();
+
+  const db = store.getState().db;
+  if (db) {
+    getSettings(db, "app")
+      .then((settings) => {
+        putSettings(db, "app", { ...(settings || {}), viewMode: next }).catch(() => {});
+      })
+      .catch(() => {});
+  }
+}
+
 function renderList() {
   const startedAt = performance.now();
   const state = store.getState();
@@ -300,6 +355,7 @@ function renderList() {
     activeId: state.activeId,
     query: state.query,
     emptyPresentation: boardPresentation(state),
+    viewMode: state.viewMode || "list",
   });
   updateMetrics({ renderMs: performance.now() - startedAt });
 }
@@ -314,6 +370,7 @@ function synchronizeSearchInput() {
 function renderAll() {
   synchronizeSearchInput();
   renderTopline();
+  renderViewMode();
   renderEditor();
   renderList();
   renderBacklinks();
@@ -322,6 +379,7 @@ function renderAll() {
 function renderWorkspace(_snapshot, context = {}) {
   synchronizeSearchInput();
   renderTopline();
+  renderViewMode();
   renderList();
   if (context.activeChanged) {
     renderEditor();
@@ -462,6 +520,7 @@ function classifyFailureKind(op, fallback = "edit") {
 function openNoteEditor({ opener = document.activeElement, mode = "edit" } = {}) {
   if (!activeNote() || !noteEditorOverlay) return false;
   noteEditorOverlay.open({ opener, mode });
+  editorToolbar?.syncSelection();
   return true;
 }
 
@@ -591,7 +650,10 @@ noteEditorOverlay = createNoteEditorOverlay({
   modeLabel: els.noteEditorOverlayLabel,
   titleInput: els.titleInput,
   board: els.noteList,
-  beforeClose: () => autosave.flush(),
+  beforeClose: () => {
+    editorToolbar?.hide();
+    return autosave.flush();
+  },
   fallbackFocus: () => (els.newNoteButton.hidden ? els.newJapaneseNoteButton : els.newNoteButton),
 });
 
@@ -738,6 +800,55 @@ function insertCodeBlock() {
   field.selectionStart = field.selectionEnd = before.length + 8;
   field.focus();
   markDirtyAndQueueSave();
+}
+
+function handleToolbarAction(actionId) {
+  const field = els.contentInput;
+  if (!field) return;
+  const value = field.value;
+  const start = field.selectionStart ?? 0;
+  const end = field.selectionEnd ?? 0;
+  let result;
+
+  switch (actionId) {
+    case "bold":
+      result = insertBold(value, start, end);
+      break;
+    case "italic":
+      result = insertItalic(value, start, end);
+      break;
+    case "strikethrough":
+      result = insertStrikethrough(value, start, end);
+      break;
+    case "code":
+      result = insertInlineCode(value, start, end);
+      break;
+    case "link":
+      result = insertLink(value, start, end);
+      break;
+    case "heading":
+      result = cycleHeading(value, start);
+      break;
+    case "task":
+      result = insertTaskItem(value, start);
+      break;
+    case "kanji-draw":
+      executeCommand("notes.kanji-ink", {
+        source: "editor-toolbar",
+        target: field,
+      });
+      return;
+    default:
+      return;
+  }
+
+  if (result) {
+    field.value = result.value;
+    field.selectionStart = result.selectionStart;
+    field.selectionEnd = result.selectionEnd;
+    field.focus();
+    markDirtyAndQueueSave();
+  }
 }
 
 function triggerDownload(blob, filename) {
@@ -924,197 +1035,200 @@ palette = createPalette({
   getContext: commandContext,
 });
 
-const unregisterApplicationCommands = [
-  registerCommand({
-    id: "palette.open",
-    title: "Open command palette",
-    description: "Search available application commands",
-    shortcuts: [{ key: "k", primaryModifier: true }],
-    scope: "global",
-    run: (context) => palette.open(context.opener),
-  }),
-  registerCommand({
-    id: "palette.close",
-    title: "Close command palette",
-    description: "Close the command palette and return focus",
-    shortcuts: [{ key: "Escape" }],
-    scope: "palette",
-    run: () => palette.close(),
-  }),
-  registerCommand({
-    id: "notes.create",
-    title: "New note",
-    description: "Create an ordinary note",
-    shortcuts: [{ key: "n", primaryModifier: true }],
-    isAvailable: (context) => context.workspace === "notes",
-    unavailableReason: () => "Switch to Notes workspace to create an ordinary note",
-    run: (context) => createNote({}, { opener: context.opener }),
-  }),
-  registerCommand({
-    id: "notes.daily",
-    title: "Open daily note",
-    description: "Open or create today’s ordinary daily note",
-    run: () => openDailyNote(),
-  }),
-  registerCommand({
-    id: "notes.search",
-    title: "Focus search",
-    description: "Focus the note search field",
-    shortcuts: [{ key: "/" }],
-    run: () => focusSearch(),
-  }),
-  registerCommand({
-    id: "editor.save",
-    title: "Save note",
-    description: "Flush the active note to local storage",
-    shortcuts: [{ key: "Enter", primaryModifier: true }],
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to save",
-    run: () => autosave.flush(),
-  }),
-  registerCommand({
-    id: "editor.insert-code",
-    title: "Insert code block",
-    description: "Insert a fenced code block into the active editor",
-    scope: "editor",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: () => insertCodeBlock(),
-  }),
-  registerCommand({
-    id: "notes.pin",
-    title: "Toggle pin active note",
-    description: "Pin or unpin the selected note",
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to pin",
-    run: () => mutateActiveNote((note) => ({ ...note, pinned: !note.pinned }), "pin"),
-  }),
-  registerCommand({
-    id: "notes.archive",
-    title: "Archive active note",
-    description: "Archive the selected note without deleting it",
-    isAvailable: () => {
-      const note = activeNote();
-      console.log("NOTE FOR ARCHIVE", note); return note && !note.archived;
+let themeSwitcher;
+if (els.themeSwitcherDialog && els.themeList) {
+  themeSwitcher = createThemeSwitcher({
+    dialog: els.themeSwitcherDialog,
+    listElement: els.themeList,
+    closeButton: els.closeThemeSwitcherButton,
+    cancelButton: els.cancelThemeSwitcherButton,
+    applyButton: els.applyThemeSwitcherButton,
+    dbProvider: () => store.getState().db,
+    onApply: async (theme) => {
+      const db = store.getState().db;
+      if (db) {
+        await putSettings(db, "app", {
+          activeThemeId: theme.id,
+          isCustomTheme: !BUILTIN_THEMES[theme.id],
+        });
+      }
     },
-    unavailableReason: () => "No active note to archive",
-    run: () => mutateActiveNote((note) => ({ ...note, archived: true }), "archive"),
-  }),
-  registerCommand({
-    id: "notes.unarchive",
-    title: "Unarchive active note",
-    description: "Restore the selected note from the archive",
-    isAvailable: () => {
-      const note = activeNote();
-      return note && note.archived;
+  });
+}
+
+let editorToolbar;
+if (els.editorToolbar && els.contentInput) {
+  editorToolbar = createEditorToolbar({
+    container: els.editorToolbar,
+    textarea: els.contentInput,
+    onAction: handleToolbarAction,
+  });
+}
+
+let settingsPanel;
+if (els.settingsDialog) {
+  settingsPanel = createSettingsPanel({
+    dialog: els.settingsDialog,
+    dbProvider: () => store.getState().db,
+    onThemeApply: async (theme) => {
+      const db = store.getState().db;
+      if (db) {
+        await putSettings(db, "app", {
+          activeThemeId: theme.id,
+          isCustomTheme: !BUILTIN_THEMES[theme.id],
+        });
+      }
     },
-    unavailableReason: () => "No archived note is active",
-    run: () => mutateActiveNote((note) => ({ ...note, archived: false }), "unarchive"),
-  }),
-  registerCommand({
-    id: "notes.delete",
-    title: "Delete active note",
-    description: "Delete through the shared lifecycle boundary",
-    shortcuts: [{ key: "Delete" }],
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to delete",
-    run: () => deleteActiveNote(),
-  }),
-  registerCommand({
-    id: "notes.recent",
-    title: "Switch recent note",
-    description: "Switch to the previously active note",
-    shortcuts: [{ key: "Tab", primaryModifier: true }],
-    isAvailable: () => store.getState().recentIds.length >= 2,
-    unavailableReason: () => "No recent note is available",
-    run: () => switchRecentNote(),
-  }),
-  registerCommand({
-    id: "history.undo",
-    title: "Undo last command",
-    description: "Undo the latest application command",
-    shortcuts: [{ key: "z", primaryModifier: true }],
-    isAvailable: () => commandStack.canUndo(),
-    unavailableReason: () => "Nothing to undo",
-    run: () => undoLastCommand(),
-  }),
-  registerCommand({
-    id: "history.redo",
-    title: "Redo last command",
-    description: "Redo the latest undone application command",
-    shortcuts: [
-      { key: "z", primaryModifier: true, shiftKey: true },
-      { key: "y", primaryModifier: true },
-    ],
-    isAvailable: () => commandStack.canRedo(),
-    unavailableReason: () => "Nothing to redo",
-    run: () => redoLastCommand(),
-  }),
-  registerCommand({
-    id: "notes.next",
-    title: "Select next note",
-    description: "Move to the next visible note",
-    shortcuts: [{ key: "j" }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => moveSelection(1),
-  }),
-  registerCommand({
-    id: "notes.previous",
-    title: "Select previous note",
-    description: "Move to the previous visible note",
-    shortcuts: [{ key: "k" }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => moveSelection(-1),
-  }),
-  registerCommand({
-    id: "notes.last",
-    title: "Select last note",
-    description: "Move to the last visible note",
-    shortcuts: [{ key: "g", shiftKey: true }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => jumpBoundary(true),
-  }),
-  registerCommand({
-    id: "notes.first",
-    title: "Select first note",
-    description: "Move to the first visible note",
-    shortcuts: [{ sequence: ["g", "g"] }],
-    isAvailable: () => store.getState().filteredIds.length > 0,
-    unavailableReason: () => "No visible note to select",
-    run: () => jumpBoundary(false),
-  }),
-  registerCommand({
-    id: "editor.focus",
-    title: "Focus editor",
-    description: "Move focus to the note editor",
-    shortcuts: [{ key: "i" }],
-    isAvailable: () => Boolean(activeNote()),
-    unavailableReason: () => "No active note to edit",
-    run: (context) => focusEditor(context.opener),
-  }),
-  registerCommand({
-    id: "export.markdown",
-    title: "Export all as Markdown",
-    description: "Download every note as Markdown",
-    run: () => exportMarkdown(),
-  }),
-  registerCommand({
-    id: "export.json",
-    title: "Export all as JSON",
-    description: "Download every note as JSON",
-    run: () => exportJson(),
-  }),
-  registerCommand({
-    id: "recovery.reset",
-    title: "Reset local database",
-    description: "Clear local note data after explicit confirmation",
-    run: (context) => openResetConfirmation(context.opener),
-  }),
-];
+    getActiveThemeId: () => {
+      return document.documentElement.getAttribute("data-theme-id") || "default-dark";
+    },
+    onImportTheme: importThemeFromFile,
+    dailyGoalsState: async () => {
+      const db = store.getState().db;
+      return (await getSettings(db, "japaneseDailyGoalsState")) || { targetReviewsPerDay: 50, targetNewItemsPerDay: 10 };
+    },
+    onDailyGoalChange: async ({ targetReviewsPerDay, targetNewItemsPerDay }) => {
+      const db = store.getState().db;
+      if (db) {
+        const state = (await getSettings(db, "japaneseDailyGoalsState")) || { reviewsToday: 0, newItemsToday: 0 };
+        state.targetReviewsPerDay = targetReviewsPerDay;
+        state.targetNewItemsPerDay = targetNewItemsPerDay;
+        await putSettings(db, "japaneseDailyGoalsState", state);
+      }
+    },
+    document,
+  });
+
+  if (els.openSettingsButton) {
+    els.openSettingsButton.addEventListener("click", () => {
+      settingsPanel?.open(els.openSettingsButton);
+    });
+  }
+}
+
+let onboardingTour;
+if (els.onboardingTourContainer) {
+  onboardingTour = createOnboardingTour({
+    container: els.onboardingTourContainer,
+    dbProvider: () => store.getState().db,
+    document,
+  });
+}
+
+function importThemeFromFile() {
+  if (!els.themeFileInput) return;
+  els.themeFileInput.value = "";
+  els.themeFileInput.click();
+}
+
+if (els.themeFileInput) {
+  els.themeFileInput.addEventListener("change", async () => {
+    const file = els.themeFileInput.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const theme = importThemeFromJson(text);
+      const db = store.getState().db;
+      if (db) {
+        await saveTheme(db, theme);
+        await putSettings(db, "app", {
+          activeThemeId: theme.id,
+          isCustomTheme: true,
+        });
+      }
+      applyThemeTokens(theme);
+    } catch (error) {
+      console.error("Failed to import theme:", error);
+    }
+  });
+}
+
+async function toggleDarkLightTheme() {
+  const currentThemeId = document.documentElement.getAttribute("data-theme-id") || "default-dark";
+  const isCurrentlyDark = currentThemeId.includes("dark");
+  const targetThemeId = isCurrentlyDark ? "default-light" : "default-dark";
+  const targetTheme = BUILTIN_THEMES[targetThemeId];
+  if (targetTheme) {
+    applyThemeTokens(targetTheme);
+    const db = store.getState().db;
+    if (db) {
+      await putSettings(db, "app", {
+        activeThemeId: targetThemeId,
+        isCustomTheme: false,
+      });
+    }
+  }
+}
+
+function startJapaneseReview() {
+  const btn = document.getElementById("startReviewButton");
+  if (btn && !btn.disabled) {
+    btn.click();
+  }
+}
+
+function startQuickStudy() {
+  const btn = document.getElementById("quickStudy5Button");
+  if (btn && !btn.disabled) {
+    btn.click();
+  }
+}
+
+function openKanjiDraw() {
+  handleToolbarAction("kanji-draw");
+}
+
+function openDailyGoalSettings(opener) {
+  if (settingsPanel) {
+    settingsPanel.open(opener);
+  } else {
+    const dialog = document.getElementById("dailyGoalSettingsDialog");
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }
+}
+
+function toggleEditorToolbar() {
+  if (els.editorToolbar) {
+    els.editorToolbar.hidden = !els.editorToolbar.hidden;
+  }
+}
+
+const unregisterApplicationCommands = registerApplicationCommands({
+  registerCommand,
+  activeNote,
+  handleToolbarAction,
+  palette,
+  themeSwitcher,
+  createNote,
+  openDailyNote,
+  focusSearch,
+  autosave,
+  insertCodeBlock,
+  mutateActiveNote,
+  deleteActiveNote,
+  store,
+  switchRecentNote,
+  commandStack,
+  undoLastCommand,
+  redoLastCommand,
+  moveSelection,
+  jumpBoundary,
+  toggleViewMode,
+  focusEditor,
+  exportMarkdown,
+  exportJson,
+  openResetConfirmation,
+  settingsPanel,
+  importThemeFromFile,
+  toggleDarkLightTheme,
+  startJapaneseReview,
+  startQuickStudy,
+  openKanjiDraw,
+  openDailyGoalSettings,
+  toggleEditorToolbar,
+});
 
 els.searchInput.addEventListener("input", (event) => {
   const query = event.target.value.trim();
@@ -1123,6 +1237,7 @@ els.searchInput.addEventListener("input", (event) => {
 els.newNoteButton.addEventListener("click", () => {
   runAction(() => executeCommand("notes.create", { source: "control", target: els.newNoteButton }));
 });
+els.viewModeButton?.addEventListener("click", toggleViewMode);
 els.refreshButton.addEventListener("click", () => {
   runAction(() => reconcileCurrentView());
 });
@@ -1291,6 +1406,35 @@ async function bootstrap() {
   backlinkIndex.rebuild(loaded);
   setBacklinksFromIndex();
 
+  try {
+    const appSettings = await getSettings(db, "app");
+    const activeThemeId = appSettings?.activeThemeId;
+    if (activeThemeId) {
+      const theme = await getTheme(db, activeThemeId);
+      if (theme) {
+        applyThemeTokens(theme);
+      }
+    }
+    if (appSettings?.viewMode) {
+      store.setState({ viewMode: appSettings.viewMode });
+    }
+    if (appSettings?.typography) {
+      if (appSettings.typography.fontSize) {
+        document.documentElement.style.setProperty("--theme-font-size-base", `${appSettings.typography.fontSize}px`);
+      }
+      if (appSettings.typography.lineHeight) {
+        document.documentElement.style.setProperty("--theme-line-height", appSettings.typography.lineHeight);
+      }
+      if (appSettings.typography.fontFamily) {
+        const resolved = resolveFontFamily(appSettings.typography.fontFamily);
+        document.documentElement.style.setProperty("--theme-font-primary", resolved);
+        document.documentElement.style.setProperty("--mn-font-ui", resolved);
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore persisted settings:", error);
+  }
+
   if (searchUnavailable) {
     store.setState({
       filteredIds: loaded.map((note) => note.id),
@@ -1328,6 +1472,7 @@ async function startApplication() {
       await bootstrap();
       applicationStorageUnavailable = false;
       applicationResetFailed = false;
+      onboardingTour?.start().catch(() => {});
     } catch {
       applicationStorageUnavailable = true;
     } finally {
@@ -1351,6 +1496,10 @@ export const commandRuntime = Object.freeze({
     for (const unregister of unregisterApplicationCommands) unregister();
     japaneseApp?.destroy();
     palette.destroy();
+    themeSwitcher?.destroy();
+    settingsPanel?.destroy();
+    onboardingTour?.destroy();
+    editorToolbar?.destroy();
     noteEditorOverlay.destroy();
     commandRegistry.destroy();
   },

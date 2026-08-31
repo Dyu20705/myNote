@@ -5,8 +5,11 @@ import {
   STORE_REVIEW_STATES,
   STORE_REVIEW_LOGS,
   STORE_STUDY_REVIEWS,
-  STORE_STUDY_ARTIFACTS
+  STORE_STUDY_ARTIFACTS,
+  STORE_SETTINGS
 } from "./storage.js";
+import { updateGamificationState } from "./japaneseGamification.js";
+import { updateDailyGoalsState } from "./japaneseDailyGoals.js";
 
 function requestResult(request) {
   return new Promise((resolve, reject) => {
@@ -147,20 +150,52 @@ export async function getDueCards(db, { date, limit = 50 }) {
   });
 }
 
-export async function commitReviewTransaction(db, nextState, reviewLog) {
+function abortTransaction(transaction) {
+  try {
+    transaction.abort();
+  } catch {
+    // The transaction may already have aborted because an asynchronous request failed.
+  }
+}
+
+async function abortAndSettleTransaction(transaction, done) {
+  abortTransaction(transaction);
+  await done.catch(() => {});
+}
+
+export async function commitReviewTransaction(db, nextState, reviewLog, isNewItem = false) {
   if (nextState.cardId !== reviewLog.cardId) {
     throw new Error(`Referential integrity failed: ReviewLog cardId ${reviewLog.cardId} mismatch with state cardId ${nextState.cardId}`);
   }
 
-  const tx = db.transaction([STORE_REVIEW_STATES, STORE_REVIEW_LOGS], "readwrite");
+  const tx = db.transaction([STORE_REVIEW_STATES, STORE_REVIEW_LOGS, STORE_SETTINGS], "readwrite");
   const done = transactionDone(tx);
 
-  tx.objectStore(STORE_REVIEW_STATES).put(nextState);
-  
-  // Enforce append-only invariant. Duplicate log ID will fail the transaction.
-  tx.objectStore(STORE_REVIEW_LOGS).add(reviewLog);
+  try {
+    tx.objectStore(STORE_REVIEW_STATES).put(nextState);
 
-  await done;
+    const settingsStore = tx.objectStore(STORE_SETTINGS);
+    const [gamificationRecord, dailyGoalsRecord] = await Promise.all([
+      requestResult(settingsStore.get("gamificationState")),
+      requestResult(settingsStore.get("japaneseDailyGoalsState")),
+    ]);
+
+    const currentGamiState = gamificationRecord ? gamificationRecord.value : null;
+    const nextGamiState = updateGamificationState(currentGamiState, reviewLog);
+    settingsStore.put({ key: "gamificationState", value: nextGamiState });
+
+    const currentGoalsState = dailyGoalsRecord ? dailyGoalsRecord.value : null;
+    const nextGoalsState = updateDailyGoalsState(currentGoalsState, reviewLog, isNewItem);
+    settingsStore.put({ key: "japaneseDailyGoalsState", value: nextGoalsState });
+
+    // Enforce append-only invariant. Duplicate log ID will fail the transaction.
+    tx.objectStore(STORE_REVIEW_LOGS).add(reviewLog);
+
+    await done;
+  } catch (error) {
+    await abortAndSettleTransaction(tx, done);
+    throw error;
+  }
 }
 
 export async function migrateV1ReviewsToV2(db) {

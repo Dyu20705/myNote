@@ -48,9 +48,9 @@
   --mn-content-readable: 760px;
   --mn-shell-max: 1440px;
 
-  --mn-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --mn-font-japanese: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
-  --mn-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --mn-font-ui: var(--theme-font-primary, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --mn-font-japanese: var(--theme-font-japanese, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif);
+  --mn-font-mono: var(--theme-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
 
   /* Transitional aliases for selectors outside the #67 visual boundary. */
   --bg: var(--mn-bg-canvas);
@@ -61,6 +61,33 @@
   --text: var(--mn-text-primary);
   --muted: var(--mn-text-muted);
   --focus: var(--mn-focus-ring);
+
+  /* Theme System Contract Tokens */
+  --theme-color-background: var(--mn-bg-canvas);
+  --theme-color-surface: var(--mn-surface-base);
+  --theme-color-surface-hover: var(--mn-surface-hover);
+  --theme-color-text-primary: var(--mn-text-primary);
+  --theme-color-text-secondary: var(--mn-text-secondary);
+  --theme-color-text-muted: var(--mn-text-muted);
+  --theme-color-border: var(--mn-border-default);
+  --theme-color-border-focus: var(--mn-focus-ring);
+  --theme-color-primary: var(--mn-action-primary-bg);
+  --theme-color-primary-hover: var(--mn-action-primary-hover);
+  --theme-color-accent: #7950f2;
+  --theme-color-status-success: var(--mn-success-text);
+  --theme-color-status-warning: var(--mn-warning-text);
+  --theme-color-status-error: var(--mn-danger-text);
+
+  --theme-font-primary: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --theme-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --theme-font-japanese: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
+  --theme-font-size-base: 14px;
+  --theme-line-height: 1.5;
+
+  --theme-metric-spacing-unit: 8px;
+  --theme-metric-border-radius: 6px;
+  --theme-metric-sidebar-width: 288px;
+  --theme-metric-overlay-max-width: 760px;
 }
 
 * {
@@ -79,8 +106,8 @@ body {
   background: var(--mn-bg-canvas);
   color: var(--mn-text-primary);
   font-family: var(--mn-font-ui);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--theme-font-size-base, 14px);
+  line-height: var(--theme-line-height, 1.5);
 }
 
 [lang="ja"] {
@@ -436,6 +463,10 @@ strong {
   margin-top: var(--mn-space-8);
 }
 
+.note-list > .list-spacer + .note-board-section {
+  margin-top: 0;
+}
+
 .note-board-heading {
   margin: 0 0 var(--mn-space-4);
   color: var(--mn-text-muted);
@@ -446,12 +477,35 @@ strong {
 
 .note-board-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: var(--mn-space-4);
 }
 
-.note-list[data-virtualized="true"] .note-board-grid {
+.note-list[data-view-mode="list"] .note-board-grid {
   grid-template-columns: minmax(0, 1fr);
+  gap: var(--mn-space-2);
+}
+
+.note-list[data-view-mode="list"] .note-item {
+  min-height: 88px;
+  height: 88px;
+  max-height: 88px;
+  padding: var(--mn-space-3) var(--mn-space-4);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.note-list[data-view-mode="grid"] .note-board-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: var(--mn-space-4);
+}
+
+.note-list[data-view-mode="grid"] .note-item {
+  min-height: 152px;
+  height: 152px;
+  max-height: 152px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .note-item-container {
@@ -474,11 +528,14 @@ strong {
   background: var(--mn-surface-raised);
   cursor: pointer;
   overflow-wrap: anywhere;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .list-spacer {
   width: 100%;
   pointer-events: none;
+  grid-column: 1 / -1;
 }
 
 .note-item.active {
@@ -498,6 +555,10 @@ strong {
   font-size: 0.95rem;
   font-weight: 600;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .note-item-date {
@@ -509,14 +570,21 @@ strong {
   margin: 0;
   color: var(--mn-text-secondary);
   font-size: 0.88rem;
-  line-height: 1.5;
+  line-height: 1.4;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .note-item-tags {
   color: var(--mn-text-muted);
   font-size: 0.8rem;
   overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-item-delete {
@@ -681,6 +749,95 @@ strong {
   background: var(--mn-surface-hover);
 }
 
+.theme-switcher-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(600px, calc(100vh - 64px));
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-lg);
+  padding: var(--mn-space-6);
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-overlay);
+}
+
+.theme-switcher-dialog::backdrop {
+  background: var(--mn-overlay-scrim);
+}
+
+.theme-switcher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--mn-space-4);
+}
+
+.theme-switcher-header h2 {
+  margin: 0;
+}
+
+.theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mn-space-2);
+  max-height: 340px;
+  overflow-y: auto;
+  margin: var(--mn-space-4) 0;
+  padding: var(--mn-space-1);
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--mn-space-3);
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border-subtle);
+  background: var(--mn-surface-base);
+  color: var(--mn-text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.theme-option:hover,
+.theme-option:focus-visible,
+.theme-option[data-focused="true"] {
+  border-color: var(--mn-focus-ring);
+  background: var(--mn-surface-hover);
+}
+
+.theme-option[aria-selected="true"] {
+  border-color: var(--mn-action-primary-bg);
+  background: var(--mn-surface-selected);
+}
+
+.theme-option-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.theme-option-name {
+  font-weight: 600;
+}
+
+.theme-option-type {
+  font-size: 0.8rem;
+  color: var(--mn-text-secondary);
+}
+
+.theme-preview-swatches {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.theme-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--mn-border-subtle);
+  display: inline-block;
+}
+
 @media (max-width: 900px) {
   .topbar {
     align-items: stretch;
@@ -718,6 +875,79 @@ strong {
 
   .editor-panel {
     padding: var(--mn-space-2);
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    width: 100%;
+    max-width: 100vw;
+    padding: var(--mn-space-2) var(--mn-space-2) 0;
+    gap: var(--mn-space-2);
+  }
+
+  .topbar {
+    gap: var(--mn-space-2);
+    min-height: 48px;
+    padding: var(--mn-space-2);
+    border-radius: var(--mn-radius-md);
+  }
+
+  .identity-navigation {
+    gap: var(--mn-space-2);
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    gap: var(--mn-space-2);
+  }
+
+  .search-box {
+    flex: 1 1 100%;
+    min-width: 0;
+    order: 10;
+  }
+
+  .search-box input {
+    font-size: 16px;
+  }
+
+  .status-line {
+    min-width: auto;
+  }
+
+  .primary-button,
+  .shell-button,
+  .secondary-button,
+  .quiet-button,
+  .destructive-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .panel {
+    border-radius: var(--mn-radius-md);
+  }
+
+  .note-list {
+    padding: var(--mn-space-3);
+  }
+
+  .note-item-delete {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .title-input,
+  .content-input {
+    font-size: 16px;
+  }
+
+  .theme-switcher-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
   }
 }
 

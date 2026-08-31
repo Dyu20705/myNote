@@ -35,6 +35,10 @@
   padding: var(--mn-space-3) var(--mn-space-4);
 }
 
+.application-recovery[hidden] {
+  display: none !important;
+}
+
 .application-recovery p,
 .japanese-availability-status {
   margin: 0;
@@ -94,4 +98,22 @@
 .japanese-availability-status {
   margin: var(--mn-space-3) var(--mn-space-3) 0;
   padding: var(--mn-space-3);
+}
+
+@media (max-width: 767px) {
+  .application-recovery {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--mn-space-2);
+  }
+
+  .application-reset-dialog {
+    width: calc(100vw - 16px);
+    padding: var(--mn-space-4);
+  }
+
+  .empty-state {
+    min-height: 160px;
+    padding: var(--mn-space-4);
+  }
 }

@@ -1,6 +1,6 @@
-import { normalizeNote } from "../core/model.js";
-import { parseDocument } from "../core/parser/index.js";
-import { applyNotePatch, createNotePatch, invertNotePatch } from "../core/notePatch.js";
+import { normalizeNote } from "../../../core/model.js";
+import { parseDocument } from "../../../core/parser/index.js";
+import { applyNotePatch, createNotePatch, invertNotePatch } from "../../../core/notePatch.js";
 
 function assert(condition, message) {
   if (!condition) {

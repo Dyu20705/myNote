@@ -7,6 +7,8 @@ import { compileLearningItem } from "../../core/cardCompiler.js";
 import { schedule } from "../../core/schedulerAdapter.js";
 import { createAutosave } from "../../core/autosave.js";
 import { parseDocument } from "../../core/parser/index.js";
+import { createNoteBoardSections } from "../../ui/notePresentation.js";
+import { createListView } from "../../ui/list.js";
 
 // Budget constraints matching docs/PERFORMANCE_BUDGET.md and Epic #13
 const PERFORMANCE_BUDGET = Object.freeze({
@@ -20,6 +22,8 @@ const PERFORMANCE_BUDGET = Object.freeze({
   max1kCardCompileMs: 100,
   max2kScheduleComputeMs: 50,
   max100ParserMs: 50,
+  max10kVirtualWindowComputeMs: 100,
+  maxKanjiStrokeGuideLoadMs: 50,
 });
 
 /**
@@ -324,5 +328,186 @@ Additional text with *emphasis* and **strong** formatting.
   assert.ok(
     parseDuration < PERFORMANCE_BUDGET.max100ParserMs,
     `100 markdown parses took ${parseDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max100ParserMs}ms)`
+  );
+});
+
+function createMockDomContainer() {
+  const listeners = new Map();
+  function createMockElement(tag) {
+    const el = {
+      tagName: tag.toUpperCase(),
+      className: "",
+      textContent: "",
+      style: {},
+      dataset: {},
+      attributes: new Map(),
+      children: [],
+      setAttribute(k, v) { this.attributes.set(k, v); },
+      removeAttribute(k) { this.attributes.delete(k); },
+      getAttribute(k) { return this.attributes.get(k); },
+      classList: {
+        toggle(cls, force) {
+          if (force) el.className += ` ${cls}`;
+          else el.className = el.className.replace(cls, "");
+        },
+        add(cls) { el.className += ` ${cls}`; },
+        remove(cls) { el.className = el.className.replace(cls, ""); },
+        contains(cls) { return el.className.includes(cls); },
+      },
+      append(...nodes) { this.children.push(...nodes); },
+      appendChild(node) { this.children.push(node); return node; },
+      replaceChildren(...nodes) { this.children = [...nodes]; },
+      querySelector(sel) {
+        const cls = sel.replace(/^\./, "");
+        function find(el) {
+          if (el.classList?.contains?.(cls) || el.className?.includes?.(cls)) return el;
+          for (const child of el.children) {
+            const match = find(child);
+            if (match) return match;
+          }
+          return null;
+        }
+        for (const child of this.children) {
+          const match = find(child);
+          if (match) return match;
+        }
+        return null;
+      },
+      querySelectorAll(sel) {
+        const cls = sel.replace(/^\./, "");
+        const results = [];
+        function collect(el) {
+          if (el.classList?.contains?.(cls) || el.className?.includes?.(cls)) results.push(el);
+          for (const child of el.children) {
+            collect(child);
+          }
+        }
+        for (const child of this.children) {
+          collect(child);
+        }
+        return results;
+      },
+      closest() { return null; },
+      addEventListener(event, fn) {
+        listeners.set(event, fn);
+      },
+      removeEventListener(event) {
+        listeners.delete(event);
+      },
+      remove() {},
+      clientWidth: 1000,
+      clientHeight: 720,
+      scrollTop: 0,
+      scrollHeight: 560000,
+      scrollWidth: 1000,
+    };
+    return el;
+  }
+
+  globalThis.document = {
+    createElement(tag) { return createMockElement(tag); },
+    createDocumentFragment() {
+      return createMockElement("fragment");
+    },
+  };
+
+  globalThis.window = {
+    getComputedStyle() {
+      return {
+        gridTemplateColumns: "300px 300px 300px",
+        height: "152px",
+        rowGap: "16px",
+        gap: "16px",
+        marginBottom: "16px",
+        marginTop: "32px",
+      };
+    },
+  };
+
+  const container = createMockElement("div");
+  return { container, listeners };
+}
+
+test("production createListView large board virtualization settles within performance budget across 10k dataset", () => {
+  const notes10k = generateSyntheticNotes(10000);
+  const notesById = new Map(notes10k.map((n) => [n.id, n]));
+  const orderedIds = notes10k.map((n) => n.id);
+
+  // 1. Board section grouping on 10k items
+  const t0 = performance.now();
+  const sections = createNoteBoardSections({ notesById, orderedIds, query: "" });
+  const sectionDuration = performance.now() - t0;
+  assert.ok(sections.length > 0);
+  assert.ok(
+    sectionDuration < PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs,
+    `10k note section grouping took ${sectionDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs}ms)`
+  );
+
+  // 2. Production createListView rendering path benchmark on 10,000 items
+  const { container, listeners } = createMockDomContainer();
+  const view = createListView({
+    container,
+    onSelect() {},
+    formatDate: () => "Aug 12",
+  });
+
+  const t1 = performance.now();
+  // Initial render in Grid View
+  view.render({
+    notesById,
+    orderedIds,
+    activeId: null,
+    query: "",
+    viewMode: "grid",
+  });
+
+  // Verify production virtualization activated
+  assert.equal(container.dataset.virtualized, "true");
+  assert.equal(container.dataset.viewMode, "grid");
+
+  // Benchmark 50 scroll-triggered production window re-renders
+  const scrollListener = listeners.get("scroll");
+  assert.ok(typeof scrollListener === "function", "scroll listener should be registered by createListView");
+
+  const rowHeight = 168;
+  const cols = 3;
+  const totalRows = Math.ceil(orderedIds.length / cols);
+
+  for (let step = 0; step < 50; step++) {
+    container.scrollTop = (step * 300) % (totalRows * rowHeight);
+    scrollListener();
+  }
+
+  const productionRenderDuration = performance.now() - t1;
+  assert.ok(
+    productionRenderDuration < PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs,
+    `50 production createListView virtualization cycles took ${productionRenderDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs}ms)`
+  );
+});
+
+test("lazy Kanji stroke guide dictionary asset dynamic import resolves within budget", async () => {
+  const t0 = performance.now();
+  const strokeGuide = await import("../../core/kanjiStrokeGuide.js");
+  const loadDuration = performance.now() - t0;
+
+  assert.ok(typeof strokeGuide.renderStrokeGuidance === "function");
+  assert.ok(typeof strokeGuide.getKanjiStrokeMetadata === "function");
+  assert.ok(typeof strokeGuide.getKanjiStrokeDictionary === "function");
+
+  assert.ok(
+    loadDuration < PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs,
+    `Dynamic import of kanjiStrokeGuide took ${loadDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs}ms)`
+  );
+
+  // 10,000 dictionary lookups
+  const t1 = performance.now();
+  for (let i = 0; i < 10000; i++) {
+    const meta = strokeGuide.getKanjiStrokeMetadata("学");
+    assert.equal(meta.strokes, 8);
+  }
+  const lookupDuration = performance.now() - t1;
+  assert.ok(
+    lookupDuration < PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs,
+    `10k dictionary lookups took ${lookupDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs}ms)`
   );
 });

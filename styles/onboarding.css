@@ -1,0 +1,132 @@
+/* Onboarding Tour */
+#onboardingTourContainer {
+  pointer-events: none;
+}
+
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.onboarding-tooltip {
+  position: fixed;
+  z-index: 10001;
+  pointer-events: none;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  padding: var(--mn-space-4);
+  background: var(--mn-surface-overlay);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  color: var(--mn-text-primary);
+  animation: onboarding-appear 200ms ease-out;
+}
+
+.onboarding-tooltip * {
+  pointer-events: none;
+}
+
+.onboarding-tooltip button {
+  pointer-events: auto;
+}
+
+.onboarding-tooltip.reduced-motion {
+  animation: none;
+}
+
+@keyframes onboarding-appear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onboarding-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--mn-space-2);
+}
+
+.onboarding-tooltip-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.onboarding-tooltip-progress {
+  font-size: 0.78rem;
+  color: var(--mn-text-muted);
+}
+
+.onboarding-tooltip-body {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--mn-text-secondary);
+  margin: 0 0 var(--mn-space-3) 0;
+}
+
+.onboarding-tooltip-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--mn-space-2);
+  justify-content: flex-end;
+}
+
+.onboarding-skip {
+  margin-right: auto;
+  padding: var(--mn-space-1) var(--mn-space-2);
+  border: none;
+  background: transparent;
+  color: var(--mn-text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.onboarding-skip:hover {
+  color: var(--mn-text-secondary);
+}
+
+.onboarding-skip:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
+
+.onboarding-prev {
+  padding: var(--mn-space-1) var(--mn-space-3);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-base);
+  color: var(--mn-text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.onboarding-prev:hover {
+  background: var(--mn-surface-selected);
+}
+
+.onboarding-prev:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
+
+.onboarding-next {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .onboarding-tooltip {
+    width: calc(100vw - 24px);
+    left: 12px !important;
+    top: auto !important;
+    bottom: 16px !important;
+  }
+}

@@ -12,7 +12,7 @@ test("app is the single browser composition root for both workspaces", async () 
   const [index, app, japaneseApp, editorChrome] = await Promise.all([
     source("index.html"),
     source("app.js"),
-    source("japaneseApp.js"),
+    source("ui/japaneseApp.js"),
     source("ui/editorChrome.js"),
   ]);
 
@@ -26,7 +26,7 @@ test("app is the single browser composition root for both workspaces", async () 
 });
 
 test("Japanese workspace refresh uses the injected workspace API instead of the DOM list bridge", async () => {
-  const japaneseApp = await source("japaneseApp.js");
+  const japaneseApp = await source("ui/japaneseApp.js");
 
   assert.doesNotMatch(japaneseApp, /getActive(?:Store|SearchClient|CommandStack|History|BacklinkIndex)/);
   assert.doesNotMatch(japaneseApp, /dispatchEvent\s*\(/);
@@ -75,7 +75,7 @@ test("board-first shell has one application header and one shared editor overlay
 test("shell refresh reuses the existing runtime and introduces no duplicate core ownership", async () => {
   const [app, japaneseApp, editorChrome] = await Promise.all([
     source("app.js"),
-    source("japaneseApp.js"),
+    source("ui/japaneseApp.js"),
     source("ui/editorChrome.js"),
   ]);
 

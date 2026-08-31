@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const ROOT = resolve(import.meta.dirname, "..");
+const ROOT = resolve(import.meta.dirname, "../..");
 const FORBIDDEN_PLACEHOLDERS = new RegExp(`\\b(?:${["TO", "DO"].join("")}|${["T", "BD"].join("")})\\b`);
 
 function readRepositoryFile(path) {
@@ -19,7 +19,7 @@ function escapeRegExp(value) {
 }
 
 test("governance defines internal issue relationships and one active work package", () => {
-  const governance = readRepositoryFile("docs/GOVERNANCE.md");
+  const governance = readRepositoryFile("docs/governance/GOVERNANCE.md");
 
   assert.match(governance, /internal personal-development project/i);
   assert.match(governance, /Unsolicited external issues, pull requests/i);
@@ -33,7 +33,7 @@ test("governance defines internal issue relationships and one active work packag
   assert.match(governance, /Only one child issue may be `status\/in-progress`/);
   assert.match(governance, /closed and may be locked, not deleted/i);
   assert.match(governance, /M0 — Governance[\s\S]*M5 — Advanced Platform/);
-  assertNoPlaceholders(governance, "docs/GOVERNANCE.md");
+  assertNoPlaceholders(governance, "docs/governance/GOVERNANCE.md");
 });
 
 test("issue chooser does not expose an external issue form or blank issue", () => {

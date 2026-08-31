@@ -6,9 +6,11 @@
     <title>myNote</title>
     <meta name="description" content="Minimal local note app." />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="command.css" />
-    <link rel="stylesheet" href="editor.css" />
-    <link rel="stylesheet" href="state-recovery.css" />
+    <link rel="stylesheet" href="styles/command.css" />
+    <link rel="stylesheet" href="styles/editor.css" />
+    <link rel="stylesheet" href="styles/state-recovery.css" />
+    <link rel="stylesheet" href="styles/settings.css" />
+    <link rel="stylesheet" href="styles/onboarding.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -43,6 +45,7 @@
             </div>
           </div>
           <button id="refreshButton" class="shell-button" type="button">Refresh</button>
+          <button id="openSettingsButton" class="shell-button" type="button" aria-label="Open settings">Settings</button>
         </div>
       </header>
 
@@ -60,6 +63,7 @@
             <h2 id="noteNavigationTitle">Notes</h2>
             <div class="panel-header-actions">
               <span id="activeNoteLabel">Ready</span>
+              <button id="viewModeButton" class="quiet-button" type="button" aria-label="Switch to grid view">Grid view</button>
               <button id="japaneseStudyDetailsToggle" class="quiet-button" type="button" aria-expanded="false" aria-controls="japaneseDashboard" hidden>Study details</button>
               <button id="japaneseReviewEntryButton" class="japanese-review-entry" type="button" aria-describedby="japaneseReviewEntryReason" hidden>Review <span id="japaneseReviewEntryCount">0</span></button>
               <span id="japaneseReviewEntryReason" class="visually-hidden">No Japanese reviews are due</span>
@@ -131,6 +135,17 @@
               </div>
             </div>
 
+            <div class="gamification-stats">
+              <p>XP: <span id="gamificationXp">0</span></p>
+              <p>Streak: <span id="gamificationStreak">0</span> days</p>
+              <p>Achievements: <span id="gamificationAchievements">0</span></p>
+              <p>Daily Goal: <progress id="dailyGoalProgress" value="0" max="50"></progress> <span id="dailyGoalText">0 / 50</span> <span id="dailyGoalBadge" class="daily-goal-badge" hidden aria-label="Daily goal completed">🎉 Goal reached!</span> <button id="dailyGoalSettingsButton" type="button" class="icon-button" aria-label="Configure Daily Goal">⚙️</button></p>
+            </div>
+            <div class="quick-study-actions">
+              <button id="quickStudy5Button" type="button" class="secondary-button">Quick Study (5)</button>
+              <button id="quickStudy10Button" type="button" class="secondary-button">Quick Study (10)</button>
+              <button id="quickStudy15Button" type="button" class="secondary-button">Quick Study (15)</button>
+            </div>
             <div class="dashboard-grid">
               <article class="dashboard-card" data-dashboard-card>
                 <span>Due reviews</span>
@@ -200,6 +215,7 @@
               <button id="closeNoteEditorButton" class="note-toolbar-button" type="button" aria-label="Close note editor" title="Close note editor"><span aria-hidden="true">×</span></button>
             </div>
           </header>
+          <div id="editorToolbar" class="editor-toolbar" role="toolbar" aria-label="Formatting toolbar" hidden></div>
 
           <textarea id="contentInput" class="content-input" placeholder="Write here."></textarea>
 
@@ -211,9 +227,25 @@
               </div>
               <button id="closeDetailsButton" class="quiet-button" type="button" aria-label="Close details">Close</button>
             </div>
+            <section id="noteStatsRegion" class="inspector-region" aria-labelledby="statsHeading">
+              <h3 id="statsHeading">Statistics</h3>
+              <dl id="noteStatsList" class="metadata-list"></dl>
+            </section>
+            <section id="noteTagsRegion" class="inspector-region" aria-labelledby="tagsHeading" hidden>
+              <h3 id="tagsHeading">Tags</h3>
+              <div id="noteTagsList" class="tags-list"></div>
+            </section>
+            <section id="outgoingLinksRegion" class="inspector-region" aria-labelledby="outgoingLinksHeading" hidden>
+              <h3 id="outgoingLinksHeading">Outgoing links</h3>
+              <div id="outgoingLinksList" class="outgoing-links-list"></div>
+            </section>
             <section id="backlinksRegion" class="inspector-region" aria-labelledby="backlinksHeading" hidden>
               <h3 id="backlinksHeading">Backlinks</h3>
               <div id="backlinksList" class="backlinks-list"></div>
+            </section>
+            <section id="japaneseStudyRegion" class="inspector-region" aria-labelledby="japaneseStudyHeading" hidden>
+              <h3 id="japaneseStudyHeading">Japanese study status</h3>
+              <dl id="japaneseStudyList" class="metadata-list"></dl>
             </section>
             <section id="noteMetadataRegion" class="inspector-region" aria-labelledby="metadataHeading">
               <h3 id="metadataHeading">Metadata</h3>
@@ -269,8 +301,16 @@
       </div>
       <p id="reviewProgress" class="review-progress"></p>
       <p id="reviewStatus" class="review-status">Content hidden until reveal</p>
-      <h3 id="reviewNoteTitle" class="review-note-title"></h3>
-      <pre id="reviewContent" class="review-content" hidden></pre>
+      <div class="flashcard-container">
+        <div class="flashcard" id="flashcardElement">
+          <div class="flashcard-front">
+            <h3 id="reviewNoteTitle" class="review-note-title"></h3>
+          </div>
+          <div class="flashcard-back">
+            <pre id="reviewContent" class="review-content" hidden></pre>
+          </div>
+        </div>
+      </div>
       <button id="revealReviewButton" class="primary-button" type="button">Reveal review content</button>
       <div id="reviewRatings" class="review-ratings" role="group" aria-label="Rate review" hidden>
         <button type="button" data-review-rating="again">Again</button>
@@ -281,9 +321,134 @@
       <p id="reviewComplete" class="review-complete" hidden>Session complete</p>
     </dialog>
 
+    <dialog id="themeSwitcherDialog" class="theme-switcher-dialog" aria-labelledby="themeSwitcherTitle">
+      <div class="theme-switcher-header">
+        <div>
+          <p class="eyebrow">Appearance</p>
+          <h2 id="themeSwitcherTitle">Themes</h2>
+        </div>
+        <button id="closeThemeSwitcherButton" class="secondary-button" type="button" aria-label="Close theme switcher">Close</button>
+      </div>
+      <div id="themeList" class="theme-list" role="listbox" aria-label="Available themes"></div>
+      <div class="dialog-actions">
+        <button id="cancelThemeSwitcherButton" class="secondary-button" type="button">Cancel</button>
+        <button id="applyThemeSwitcherButton" class="primary-button" type="button">Apply</button>
+      </div>
+    </dialog>
+
+    <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
+      <div class="settings-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button id="closeSettingsButton" class="secondary-button" type="button" aria-label="Close settings">Close</button>
+      </div>
+      <div class="settings-tab-bar" role="tablist" aria-label="Settings sections">
+        <button role="tab" data-settings-tab="general" aria-selected="true" aria-controls="settingsPanelGeneral" tabindex="0">General</button>
+        <button role="tab" data-settings-tab="themes" aria-selected="false" aria-controls="settingsPanelThemes" tabindex="-1">Themes</button>
+        <button role="tab" data-settings-tab="japanese" aria-selected="false" aria-controls="settingsPanelJapanese" tabindex="-1">Japanese Learning</button>
+      </div>
+      <div data-settings-panel="general" id="settingsPanelGeneral" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle">
+        <div class="settings-section">
+          <h3>Application</h3>
+          <p>myNote is a minimal local-first note application with Japanese study tools.</p>
+        </div>
+        <div class="settings-section">
+          <h3>View</h3>
+          <p>Toggle between list and grid views using the board header or press Ctrl+Shift+G.</p>
+        </div>
+      </div>
+      <div data-settings-panel="themes" id="settingsPanelThemes" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <h3>Theme Management</h3>
+            <button id="settingsImportThemeButton" class="secondary-button" type="button">Import theme…</button>
+          </div>
+          <p>Choose from built-in themes or import and manage custom themes.</p>
+        </div>
+        <div class="settings-section">
+          <h4>Built-in themes</h4>
+          <div class="settings-theme-list settings-builtin-themes" role="list"></div>
+        </div>
+        <div class="settings-section">
+          <h4>Custom themes</h4>
+          <div class="settings-theme-list settings-custom-themes" role="list"></div>
+        </div>
+        <div class="settings-section">
+          <h4>Typography preferences</h4>
+          <div class="settings-field">
+            <label for="settingsFontFamily">Primary font family</label>
+            <select id="settingsFontFamily">
+              <option value="system">System Default</option>
+              <option value="sans-serif">Sans-Serif</option>
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="settingsFontSize">Base font size</label>
+            <select id="settingsFontSize">
+              <option value="14">14px (Compact)</option>
+              <option value="16" selected>16px (Default)</option>
+              <option value="18">18px (Comfortable)</option>
+              <option value="20">20px (Large)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="settingsLineHeight">Line height</label>
+            <select id="settingsLineHeight">
+              <option value="1.4">1.4 (Tight)</option>
+              <option value="1.5" selected>1.5 (Standard)</option>
+              <option value="1.6">1.6 (Relaxed)</option>
+              <option value="1.8">1.8 (Spacious)</option>
+            </select>
+          </div>
+          <div class="settings-actions">
+            <button id="settingsSaveTypography" class="primary-button" type="button">Save typography</button>
+          </div>
+        </div>
+      </div>
+      <div data-settings-panel="japanese" id="settingsPanelJapanese" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-section">
+          <h3>Daily study goals</h3>
+          <div class="settings-field">
+            <label for="settingsTargetReviews">Target reviews per day</label>
+            <input type="number" id="settingsTargetReviews" min="1" max="1000" value="50" />
+          </div>
+          <div class="settings-field">
+            <label for="settingsTargetNewItems">Target new items per day</label>
+            <input type="number" id="settingsTargetNewItems" min="0" max="1000" value="10" />
+          </div>
+          <div class="settings-actions">
+            <button id="settingsSaveGoals" class="primary-button" type="button">Save goals</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="onboardingTourContainer" hidden></div>
+
+    <input id="themeFileInput" type="file" accept=".json,application/json" hidden aria-hidden="true" />
+
     <button id="saveButton" type="button" hidden aria-hidden="true" tabindex="-1">Save</button>
     <script type="module" src="app.js"></script>
     <script type="module" src="ui/editorChrome.js"></script>
     <script type="module" src="ui/kanjiInkImportCommand.js"></script>
+
+    <dialog id="dailyGoalSettingsDialog" class="modal-dialog" aria-labelledby="dailyGoalSettingsTitle">
+      <form method="dialog" id="dailyGoalSettingsForm">
+        <h2 id="dailyGoalSettingsTitle">Configure Daily Goal</h2>
+        <label>
+          Target Reviews:
+          <input type="number" id="dailyGoalTargetInput" min="1" max="1000" value="50">
+        </label>
+        <label>
+          Target New Items:
+          <input type="number" id="dailyGoalNewItemsTargetInput" min="0" max="1000" value="10">
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="secondary-button" id="dailyGoalSettingsCancel">Cancel</button>
+          <button type="submit" class="primary-button">Save</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>
