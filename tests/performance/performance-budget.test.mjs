@@ -7,6 +7,7 @@ import { compileLearningItem } from "../../core/cardCompiler.js";
 import { schedule } from "../../core/schedulerAdapter.js";
 import { createAutosave } from "../../core/autosave.js";
 import { parseDocument } from "../../core/parser/index.js";
+import { createNoteBoardSections } from "../../ui/notePresentation.js";
 
 // Budget constraints matching docs/PERFORMANCE_BUDGET.md and Epic #13
 const PERFORMANCE_BUDGET = Object.freeze({
@@ -20,6 +21,8 @@ const PERFORMANCE_BUDGET = Object.freeze({
   max1kCardCompileMs: 100,
   max2kScheduleComputeMs: 50,
   max100ParserMs: 50,
+  max10kVirtualWindowComputeMs: 30,
+  maxKanjiStrokeGuideLoadMs: 50,
 });
 
 /**
@@ -325,4 +328,72 @@ Additional text with *emphasis* and **strong** formatting.
     parseDuration < PERFORMANCE_BUDGET.max100ParserMs,
     `100 markdown parses took ${parseDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max100ParserMs}ms)`
   );
+});
+
+test("large board virtualization window calculations settle within performance budget across 10k stress dataset", () => {
+  const notes10k = generateSyntheticNotes(10000);
+  const notesById = new Map(notes10k.map((n) => [n.id, n]));
+  const orderedIds = notes10k.map((n) => n.id);
+
+  // 1. Board section grouping on 10k items
+  const t0 = performance.now();
+  const sections = createNoteBoardSections({ notesById, orderedIds, query: "" });
+  const sectionDuration = performance.now() - t0;
+  assert.ok(sections.length > 0);
+  assert.ok(
+    sectionDuration < PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs,
+    `10k note section grouping took ${sectionDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs}ms)`
+  );
+
+  // 2. Multi-column grid window calculation on 10,000 items (3 columns, 168px row height)
+  const cols = 3;
+  const rowHeight = 168;
+  const overscan = 8;
+  const viewport = 720;
+  const totalRows = Math.ceil(orderedIds.length / cols);
+
+  const t1 = performance.now();
+  for (let scroll = 0; scroll < 100; scroll++) {
+    const scrollTop = (scroll * 150) % (totalRows * rowHeight);
+    const rawStartRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+    const startRow = Math.min(rawStartRow, Math.max(0, totalRows - 1));
+    const visibleRowCount = Math.ceil(viewport / rowHeight) + overscan * 2;
+    const endRow = Math.min(totalRows, startRow + visibleRowCount);
+
+    const startIndex = startRow * cols;
+    const endIndex = Math.min(orderedIds.length, endRow * cols);
+    const visibleIds = orderedIds.slice(startIndex, endIndex);
+
+    assert.ok(visibleIds.length <= visibleRowCount * cols);
+    assert.ok(visibleIds.length > 0);
+  }
+  const windowComputeDuration = performance.now() - t1;
+  assert.ok(
+    windowComputeDuration < PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs,
+    `100 virtual window computations took ${windowComputeDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.max10kVirtualWindowComputeMs}ms)`
+  );
+});
+
+test("lazy Kanji stroke guide dictionary asset dynamic import resolves within budget", async () => {
+  const t0 = performance.now();
+  const strokeGuide = await import("../../core/kanjiStrokeGuide.js");
+  const loadDuration = performance.now() - t0;
+
+  assert.ok(typeof strokeGuide.renderStrokeGuidance === "function");
+  assert.ok(typeof strokeGuide.getKanjiStrokeMetadata === "function");
+  assert.ok(typeof strokeGuide.getKanjiStrokeDictionary === "function");
+
+  assert.ok(
+    loadDuration < PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs,
+    `Dynamic import of kanjiStrokeGuide took ${loadDuration.toFixed(2)}ms (budget: < ${PERFORMANCE_BUDGET.maxKanjiStrokeGuideLoadMs}ms)`
+  );
+
+  // 10,000 dictionary lookups
+  const t1 = performance.now();
+  for (let i = 0; i < 10000; i++) {
+    const meta = strokeGuide.getKanjiStrokeMetadata("学");
+    assert.equal(meta.strokes, 8);
+  }
+  const lookupDuration = performance.now() - t1;
+  assert.ok(lookupDuration < 20, `10k dictionary lookups took ${lookupDuration.toFixed(2)}ms`);
 });

@@ -160,6 +160,7 @@ let liveStroke = null;
 let pointerLimitMessage = "";
 let isReplaying = false;
 let showGuidance = false;
+let strokeGuideModule = null;
 let lastDeletedEntry = null;
 let syncSequence = 0;
 let syncScheduled = false;
@@ -297,52 +298,8 @@ function drawStrokes(context, strokes, width, height, inkColor = KANJI_PAPER_PAT
 
     context.stroke();
     context.restore();
-    if (showGuidance && stroke.tool !== "eraser" && stroke.points.length > 0) {
-      // Draw stroke numbering
-      context.fillStyle = "rgba(0, 100, 255, 0.8)";
-      context.font = "bold 16px sans-serif";
-      const startPt = stroke.points[0];
-      context.fillText((i + 1).toString(), startPt.x * width + 8, startPt.y * height - 8);
-
-      // Draw a circle at the start
-      context.beginPath();
-      context.arc(startPt.x * width, startPt.y * height, 4, 0, 2 * Math.PI);
-      context.fill();
-
-      // Draw an arrowhead at the end or middle to show direction
-      if (stroke.points.length > 3) {
-        const midIdx = Math.floor(stroke.points.length / 2);
-        const pt1 = stroke.points[midIdx - 1];
-        const pt2 = stroke.points[midIdx];
-        const angle = Math.atan2(pt2.y * height - pt1.y * height, pt2.x * width - pt1.x * width);
-        context.save();
-        context.translate(pt2.x * width, pt2.y * height);
-        context.rotate(angle);
-        context.beginPath();
-        context.moveTo(0, 0);
-        context.lineTo(-8, -5);
-        context.lineTo(-8, 5);
-        context.fill();
-        context.restore();
-      }
-
-      // Draw dashed connecting line to the NEXT stroke (air path)
-      if (i < strokes.length - 1) {
-        const nextStroke = normalizedStroke(strokes[i + 1]);
-        if (nextStroke.tool !== "eraser" && nextStroke.points?.length > 0) {
-          const endPt = stroke.points[stroke.points.length - 1];
-          const nextStartPt = nextStroke.points[0];
-          context.save();
-          context.beginPath();
-          context.setLineDash([4, 4]);
-          context.strokeStyle = "rgba(0, 100, 255, 0.4)";
-          context.lineWidth = 1;
-          context.moveTo(endPt.x * width, endPt.y * height);
-          context.lineTo(nextStartPt.x * width, nextStartPt.y * height);
-          context.stroke();
-          context.restore();
-        }
-      }
+    if (showGuidance && strokeGuideModule) {
+      strokeGuideModule.renderStrokeGuidance(context, strokes, i, stroke, { width, height });
     }
     i++;
   }
@@ -857,9 +814,20 @@ elements.replay.addEventListener("click", () => {
   requestAnimationFrame(animate);
 });
 
-elements.guidance.addEventListener("click", () => {
+elements.guidance.addEventListener("click", async () => {
   isReplaying = false;
-  showGuidance = !showGuidance;
+  if (!showGuidance) {
+    try {
+      if (!strokeGuideModule) {
+        strokeGuideModule = await import("../core/kanjiStrokeGuide.js");
+      }
+      showGuidance = true;
+    } catch {
+      showGuidance = false;
+    }
+  } else {
+    showGuidance = false;
+  }
   elements.guidance.setAttribute("aria-pressed", showGuidance ? "true" : "false");
   renderCanvas();
 });

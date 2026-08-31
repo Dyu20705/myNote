@@ -114,6 +114,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     query: "",
     boardIds: [],
     virtualized: false,
+    viewMode: "list",
   };
 
   function projectSections(notesById, orderedIds, query = "") {
@@ -153,22 +154,40 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     container.replaceChildren(...roots);
   }
 
+  function computeGridColumns(viewMode) {
+    if (viewMode !== "grid") return 1;
+    const width = container.clientWidth || scrollOwner.clientWidth || 800;
+    const minCardWidth = 280;
+    const gap = 16;
+    const padding = 48;
+    const availableWidth = Math.max(0, width - padding);
+    const cols = Math.floor((availableWidth + gap) / (minCardWidth + gap));
+    return Math.max(1, cols);
+  }
+
   function renderWindow() {
-    const { notesById, boardIds, query } = currentPayload;
+    const { notesById, boardIds, query, viewMode } = currentPayload;
+    const cols = computeGridColumns(viewMode);
+    const totalItems = boardIds.length;
+    const totalRows = Math.ceil(totalItems / cols);
+
     const scrollTop = scrollOwner.scrollTop;
     const viewport = Math.max(
       scrollOwner.clientHeight || VIRTUAL_ROW_HEIGHT * 6,
       VIRTUAL_ROW_HEIGHT * 6,
     );
 
-    const rawStart = Math.max(
+    const rawStartRow = Math.max(
       0,
       Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN,
     );
-    const maxStart = Math.max(0, boardIds.length - 1);
-    const startIndex = Math.min(rawStart, maxStart);
-    const visibleCount = Math.ceil(viewport / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
-    const endIndex = Math.min(boardIds.length, startIndex + visibleCount);
+    const maxStartRow = Math.max(0, totalRows - 1);
+    const startRow = Math.min(rawStartRow, maxStartRow);
+    const visibleRowCount = Math.ceil(viewport / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+    const endRow = Math.min(totalRows, startRow + visibleRowCount);
+
+    const startIndex = startRow * cols;
+    const endIndex = Math.min(totalItems, endRow * cols);
     const visibleIds = boardIds.slice(startIndex, endIndex);
     const sections = projectSections(notesById, visibleIds, query);
     const retainedIds = new Set();
@@ -176,7 +195,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
 
     const topSpacer = document.createElement("div");
     topSpacer.className = "list-spacer";
-    topSpacer.style.height = `${startIndex * VIRTUAL_ROW_HEIGHT}px`;
+    topSpacer.style.height = `${startRow * VIRTUAL_ROW_HEIGHT}px`;
     fragment.append(topSpacer);
     fragment.append(...createCardNodes(sections, retainedIds));
     pruneCache(retainedIds);
@@ -185,7 +204,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
     bottomSpacer.className = "list-spacer";
     bottomSpacer.style.height = `${Math.max(
       0,
-      (boardIds.length - endIndex) * VIRTUAL_ROW_HEIGHT,
+      (totalRows - endRow) * VIRTUAL_ROW_HEIGHT,
     )}px`;
     fragment.append(bottomSpacer);
 
@@ -222,7 +241,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
 
   function getGridColumnCount() {
     const items = [...container.querySelectorAll(".note-item")];
-    if (items.length < 2) return 1;
+    if (items.length < 2) return computeGridColumns(currentPayload.viewMode);
     const firstTop = items[0].getBoundingClientRect().top;
     let count = 0;
     for (const item of items) {
@@ -288,6 +307,7 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
       query,
       boardIds,
       virtualized,
+      viewMode,
     };
     container.dataset.virtualized = String(virtualized);
     container.dataset.viewMode = viewMode;

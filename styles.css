@@ -496,10 +496,6 @@ strong {
   min-height: 152px;
 }
 
-.note-list[data-virtualized="true"] .note-board-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .note-item-container {
   display: block;
   min-width: 0;
