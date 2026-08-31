@@ -525,3 +525,49 @@
     justify-content: space-between;
   }
 }
+
+@media (max-width: 767px) {
+  .note-editor-overlay {
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+  }
+
+  .editor-panel {
+    padding: var(--mn-space-2);
+    grid-template-rows: auto auto minmax(80px, 1fr);
+    gap: var(--mn-space-2);
+  }
+
+  .editor-panel > .content-input {
+    min-height: 80px;
+  }
+
+  .editor-context-header .title-input {
+    font-size: 16px;
+  }
+
+  .editor-toolbar-button {
+    min-width: 44px;
+    height: 44px;
+  }
+
+  .note-toolbar-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+
+  .editor-context-actions button:not(.note-toolbar-button) {
+    min-height: 44px;
+    padding: var(--mn-space-2) var(--mn-space-3);
+  }
+
+  .note-drawing-region {
+    max-height: min(160px, 20dvh);
+  }
+}
