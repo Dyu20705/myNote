@@ -1,0 +1,190 @@
+/* Settings Panel */
+.settings-dialog {
+  max-width: 640px;
+  width: calc(100vw - 48px);
+  max-height: calc(100dvh - 96px);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-surface-overlay);
+  color: var(--mn-text-primary);
+  padding: 0;
+}
+
+.settings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--mn-space-4) var(--mn-space-5);
+  border-bottom: 1px solid var(--mn-border-default);
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.settings-tab-bar {
+  display: flex;
+  gap: var(--mn-space-1);
+  padding: var(--mn-space-2) var(--mn-space-5);
+  border-bottom: 1px solid var(--mn-border-default);
+}
+
+.settings-tab-bar [role="tab"] {
+  padding: var(--mn-space-2) var(--mn-space-3);
+  border: none;
+  border-radius: var(--mn-radius-sm);
+  background: transparent;
+  color: var(--mn-text-secondary);
+  font-size: 0.88rem;
+  cursor: pointer;
+  position: relative;
+}
+
+.settings-tab-bar [role="tab"][aria-selected="true"] {
+  color: var(--mn-text-primary);
+  background: var(--mn-surface-selected);
+  font-weight: 600;
+}
+
+.settings-tab-bar [role="tab"]:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-panel {
+  padding: var(--mn-space-4) var(--mn-space-5);
+  min-height: 240px;
+  max-height: calc(100dvh - 280px);
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-bottom: var(--mn-space-5);
+}
+
+.settings-section h3 {
+  font-size: 0.92rem;
+  margin: 0 0 var(--mn-space-3) 0;
+  color: var(--mn-text-primary);
+}
+
+.settings-section p {
+  font-size: 0.85rem;
+  color: var(--mn-text-secondary);
+  margin: 0 0 var(--mn-space-2) 0;
+}
+
+/* Theme list in settings */
+.settings-theme-list {
+  display: grid;
+  gap: var(--mn-space-2);
+}
+
+.settings-theme-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--mn-space-3);
+  padding: var(--mn-space-3) var(--mn-space-3);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-base);
+  color: var(--mn-text-primary);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.settings-theme-item:hover {
+  background: var(--mn-surface-selected);
+}
+
+.settings-theme-item:focus-visible {
+  outline: 2px solid var(--mn-focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-theme-active {
+  border-color: var(--mn-focus-ring);
+  box-shadow: inset 3px 0 0 var(--mn-focus-ring);
+}
+
+.settings-theme-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.settings-theme-meta {
+  font-size: 0.78rem;
+  color: var(--mn-text-muted);
+  white-space: nowrap;
+}
+
+.settings-theme-swatches {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--mn-border-default);
+}
+
+/* Japanese learning settings */
+.settings-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--mn-space-3);
+  margin-bottom: var(--mn-space-3);
+}
+
+.settings-field label {
+  font-size: 0.88rem;
+  color: var(--mn-text-primary);
+}
+
+.settings-field input[type="number"] {
+  width: 80px;
+  padding: var(--mn-space-1) var(--mn-space-2);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-sm);
+  background: var(--mn-surface-base);
+  color: var(--mn-text-primary);
+  font-size: 0.88rem;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--mn-space-2);
+  padding-top: var(--mn-space-3);
+  border-top: 1px solid var(--mn-border-default);
+}
+
+@media (max-width: 720px) {
+  .settings-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .settings-tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-theme-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-theme-swatches {
+    display: none;
+  }
+}

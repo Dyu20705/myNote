@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="styles/command.css" />
     <link rel="stylesheet" href="styles/editor.css" />
     <link rel="stylesheet" href="styles/state-recovery.css" />
+    <link rel="stylesheet" href="styles/settings.css" />
+    <link rel="stylesheet" href="styles/onboarding.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -332,6 +334,54 @@
         <button id="applyThemeSwitcherButton" class="primary-button" type="button">Apply</button>
       </div>
     </dialog>
+
+    <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
+      <div class="settings-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button id="closeSettingsButton" class="secondary-button" type="button" aria-label="Close settings">Close</button>
+      </div>
+      <div class="settings-tab-bar" role="tablist" aria-label="Settings sections">
+        <button role="tab" data-settings-tab="general" aria-selected="true" aria-controls="settingsPanelGeneral" tabindex="0">General</button>
+        <button role="tab" data-settings-tab="themes" aria-selected="false" aria-controls="settingsPanelThemes" tabindex="-1">Themes</button>
+        <button role="tab" data-settings-tab="japanese" aria-selected="false" aria-controls="settingsPanelJapanese" tabindex="-1">Japanese Learning</button>
+      </div>
+      <div data-settings-panel="general" id="settingsPanelGeneral" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle">
+        <div class="settings-section">
+          <h3>Application</h3>
+          <p>myNote is a minimal local-first note application with Japanese study tools.</p>
+        </div>
+        <div class="settings-section">
+          <h3>View</h3>
+          <p>Toggle between list and grid views using the board header or press Ctrl+Shift+G.</p>
+        </div>
+      </div>
+      <div data-settings-panel="themes" id="settingsPanelThemes" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-section">
+          <h3>Select theme</h3>
+          <div class="settings-theme-list"></div>
+        </div>
+      </div>
+      <div data-settings-panel="japanese" id="settingsPanelJapanese" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-section">
+          <h3>Daily study goals</h3>
+          <div class="settings-field">
+            <label for="settingsTargetReviews">Target reviews per day</label>
+            <input type="number" id="settingsTargetReviews" min="1" max="1000" value="50" />
+          </div>
+          <div class="settings-field">
+            <label for="settingsTargetNewItems">Target new items per day</label>
+            <input type="number" id="settingsTargetNewItems" min="0" max="1000" value="10" />
+          </div>
+          <div class="settings-actions">
+            <button id="settingsSaveGoals" class="primary-button" type="button">Save goals</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="onboardingTourContainer" hidden></div>
+
+    <input id="themeFileInput" type="file" accept=".json,application/json" hidden aria-hidden="true" />
 
     <button id="saveButton" type="button" hidden aria-hidden="true" tabindex="-1">Save</button>
     <script type="module" src="app.js"></script>

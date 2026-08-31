@@ -31,13 +31,15 @@ import {
 import { migrateV1ReviewsToV2 } from "./core/japaneseV2Storage.js";
 import { BUILTIN_THEMES } from "./core/theme/themeSchema.js";
 import { applyThemeTokens } from "./core/theme/themeEngine.js";
-import { getTheme } from "./core/theme/themeStorage.js";
+import { getTheme, importThemeFromJson, saveTheme } from "./core/theme/themeStorage.js";
 import { createJapaneseApp } from "./ui/japaneseApp.js";
 import { createCommandRegistry } from "./ui/commandRegistry.js";
 import { createListView } from "./ui/list.js";
 import { createNoteEditorOverlay } from "./ui/noteEditorOverlay.js";
 import { createPalette } from "./ui/palette.js";
 import { createThemeSwitcher } from "./ui/themeSwitcher.js";
+import { createSettingsPanel } from "./ui/settingsPanel.js";
+import { createOnboardingTour } from "./ui/onboardingTour.js";
 import { createEditorToolbar } from "./ui/editorToolbar.js";
 import { registerApplicationCommands } from "./ui/applicationCommands.js";
 import {
@@ -97,6 +99,9 @@ const els = {
   applicationResetDialog: document.getElementById("applicationResetDialog"),
   cancelApplicationResetButton: document.getElementById("cancelApplicationResetButton"),
   confirmApplicationResetButton: document.getElementById("confirmApplicationResetButton"),
+  settingsDialog: document.getElementById("settingsDialog"),
+  onboardingTourContainer: document.getElementById("onboardingTourContainer"),
+  themeFileInput: document.getElementById("themeFileInput"),
 };
 
 const store = createStore({
@@ -1059,6 +1064,129 @@ if (els.editorToolbar && els.contentInput) {
   });
 }
 
+let settingsPanel;
+if (els.settingsDialog) {
+  settingsPanel = createSettingsPanel({
+    dialog: els.settingsDialog,
+    dbProvider: () => store.getState().db,
+    onThemeApply: async (theme) => {
+      const db = store.getState().db;
+      if (db) {
+        await putSettings(db, "app", {
+          activeThemeId: theme.id,
+          isCustomTheme: !BUILTIN_THEMES[theme.id],
+        });
+      }
+    },
+    getActiveThemeId: () => {
+      return document.documentElement.getAttribute("data-theme-id") || "default-dark";
+    },
+    dailyGoalsState: async () => {
+      const db = store.getState().db;
+      return (await getSettings(db, "japaneseDailyGoalsState")) || { targetReviewsPerDay: 50, targetNewItemsPerDay: 10 };
+    },
+    onDailyGoalChange: async ({ targetReviewsPerDay, targetNewItemsPerDay }) => {
+      const db = store.getState().db;
+      if (db) {
+        const state = (await getSettings(db, "japaneseDailyGoalsState")) || { reviewsToday: 0, newItemsToday: 0 };
+        state.targetReviewsPerDay = targetReviewsPerDay;
+        state.targetNewItemsPerDay = targetNewItemsPerDay;
+        await putSettings(db, "japaneseDailyGoalsState", state);
+      }
+    },
+    document,
+  });
+}
+
+let onboardingTour;
+if (els.onboardingTourContainer) {
+  onboardingTour = createOnboardingTour({
+    container: els.onboardingTourContainer,
+    dbProvider: () => store.getState().db,
+    document,
+  });
+}
+
+function importThemeFromFile() {
+  if (!els.themeFileInput) return;
+  els.themeFileInput.value = "";
+  els.themeFileInput.click();
+}
+
+if (els.themeFileInput) {
+  els.themeFileInput.addEventListener("change", async () => {
+    const file = els.themeFileInput.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const theme = importThemeFromJson(text);
+      const db = store.getState().db;
+      if (db) {
+        await saveTheme(db, theme);
+        await putSettings(db, "app", {
+          activeThemeId: theme.id,
+          isCustomTheme: true,
+        });
+      }
+      applyThemeTokens(theme);
+    } catch (error) {
+      console.error("Failed to import theme:", error);
+    }
+  });
+}
+
+async function toggleDarkLightTheme() {
+  const currentThemeId = document.documentElement.getAttribute("data-theme-id") || "default-dark";
+  const isCurrentlyDark = currentThemeId.includes("dark");
+  const targetThemeId = isCurrentlyDark ? "default-light" : "default-dark";
+  const targetTheme = BUILTIN_THEMES[targetThemeId];
+  if (targetTheme) {
+    applyThemeTokens(targetTheme);
+    const db = store.getState().db;
+    if (db) {
+      await putSettings(db, "app", {
+        activeThemeId: targetThemeId,
+        isCustomTheme: false,
+      });
+    }
+  }
+}
+
+function startJapaneseReview() {
+  const btn = document.getElementById("startReviewButton");
+  if (btn && !btn.disabled) {
+    btn.click();
+  }
+}
+
+function startQuickStudy() {
+  const btn = document.getElementById("quickStudy5Button");
+  if (btn && !btn.disabled) {
+    btn.click();
+  }
+}
+
+function openKanjiDraw() {
+  handleToolbarAction("kanji-draw");
+}
+
+function openDailyGoalSettings(opener) {
+  if (settingsPanel) {
+    settingsPanel.open(opener);
+  } else {
+    const dialog = document.getElementById("dailyGoalSettingsDialog");
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }
+}
+
+function toggleEditorToolbar() {
+  if (els.editorToolbar) {
+    els.editorToolbar.hidden = !els.editorToolbar.hidden;
+  }
+}
+
 const unregisterApplicationCommands = registerApplicationCommands({
   registerCommand,
   activeNote,
@@ -1084,6 +1212,14 @@ const unregisterApplicationCommands = registerApplicationCommands({
   exportMarkdown,
   exportJson,
   openResetConfirmation,
+  settingsPanel,
+  importThemeFromFile,
+  toggleDarkLightTheme,
+  startJapaneseReview,
+  startQuickStudy,
+  openKanjiDraw,
+  openDailyGoalSettings,
+  toggleEditorToolbar,
 });
 
 els.searchInput.addEventListener("input", (event) => {
@@ -1315,6 +1451,7 @@ async function startApplication() {
       await bootstrap();
       applicationStorageUnavailable = false;
       applicationResetFailed = false;
+      onboardingTour?.start().catch(() => {});
     } catch {
       applicationStorageUnavailable = true;
     } finally {
@@ -1339,6 +1476,8 @@ export const commandRuntime = Object.freeze({
     japaneseApp?.destroy();
     palette.destroy();
     themeSwitcher?.destroy();
+    settingsPanel?.destroy();
+    onboardingTour?.destroy();
     editorToolbar?.destroy();
     noteEditorOverlay.destroy();
     commandRegistry.destroy();
