@@ -271,6 +271,57 @@
   }
 }
 
+@media (max-width: 767px) {
+  .kanji-ink-dialog {
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .kanji-ink-shell {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    padding: var(--mn-space-2);
+  }
+
+  .kanji-ink-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .kanji-icon-button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+
+  .kanji-save-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .kanji-canvas-frame {
+    max-width: 100%;
+    max-height: none;
+  }
+
+  .kanji-ink-status {
+    position: static;
+    margin-top: var(--mn-space-1);
+  }
+
+  .kanji-entry {
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: var(--mn-space-2);
+  }
+
+  .kanji-entry-preview {
+    width: 80px;
+    height: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kanji-ink-dialog,
   .kanji-ink-dialog * {

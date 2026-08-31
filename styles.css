@@ -856,6 +856,79 @@ strong {
   }
 }
 
+@media (max-width: 767px) {
+  .app-shell {
+    width: 100%;
+    max-width: 100vw;
+    padding: var(--mn-space-2) var(--mn-space-2) 0;
+    gap: var(--mn-space-2);
+  }
+
+  .topbar {
+    gap: var(--mn-space-2);
+    min-height: 48px;
+    padding: var(--mn-space-2);
+    border-radius: var(--mn-radius-md);
+  }
+
+  .identity-navigation {
+    gap: var(--mn-space-2);
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    gap: var(--mn-space-2);
+  }
+
+  .search-box {
+    flex: 1 1 100%;
+    min-width: 0;
+    order: 10;
+  }
+
+  .search-box input {
+    font-size: 16px;
+  }
+
+  .status-line {
+    min-width: auto;
+  }
+
+  .primary-button,
+  .shell-button,
+  .secondary-button,
+  .quiet-button,
+  .destructive-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .panel {
+    border-radius: var(--mn-radius-md);
+  }
+
+  .note-list {
+    padding: var(--mn-space-3);
+  }
+
+  .note-item-delete {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .title-input,
+  .content-input {
+    font-size: 16px;
+  }
+
+  .theme-switcher-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

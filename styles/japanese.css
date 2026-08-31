@@ -532,7 +532,7 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
 @media (max-width: 620px) {
   .workspace-switcher {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     width: 100%;
   }
 
@@ -547,6 +547,45 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
   .japanese-actions,
   .review-ratings {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .workspace-switcher button,
+  .japanese-subview-navigation button,
+  .japanese-notes-summary button,
+  .japanese-actions button,
+  .japanese-filters button,
+  .japanese-filter-toolbar button,
+  .japanese-filter-presets button,
+  .japanese-filter-chips button,
+  .japanese-create-menu button,
+  .review-dialog button {
+    min-height: 44px;
+  }
+
+  .japanese-filter-presets button {
+    min-height: 44px;
+    padding-inline: var(--mn-space-3);
+  }
+
+  .japanese-filter-field input,
+  .japanese-filter-field select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .review-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .flashcard-container {
+    min-height: 140px;
+  }
+
+  .japanese-review-entry {
+    min-height: 44px;
   }
 }
 

@@ -103,3 +103,13 @@
     justify-self: start;
   }
 }
+
+@media (max-width: 767px) {
+  .command-input {
+    font-size: 16px;
+  }
+
+  .command-item {
+    min-height: 48px;
+  }
+}
