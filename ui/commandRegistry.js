@@ -8,7 +8,7 @@ const SUPPORTED_SCOPES = new Set([
   "review-modal",
 ]);
 const TEXT_TARGETS = new Set(["input", "textarea", "select", "contenteditable"]);
-const COMMAND_ID_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/;
+const COMMAND_ID_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9-]*)+$/;
 
 function registryError(code) {
   const error = new Error(code);

@@ -27,6 +27,14 @@ export function registerApplicationCommands({
   exportMarkdown,
   exportJson,
   openResetConfirmation,
+  settingsPanel,
+  importThemeFromFile,
+  toggleDarkLightTheme,
+  startJapaneseReview,
+  startQuickStudy,
+  openKanjiDraw,
+  openDailyGoalSettings,
+  toggleEditorToolbar,
 }) {
   return [
     registerCommand({
@@ -104,6 +112,15 @@ export function registerApplicationCommands({
       },
     }),
     registerCommand({
+      id: "editor.toggleToolbar",
+      title: "Toggle formatting toolbar",
+      description: "Show or hide the editor formatting toolbar",
+      scope: "editor",
+      isAvailable: () => Boolean(activeNote()) && typeof toggleEditorToolbar === "function",
+      unavailableReason: () => "No active note to edit",
+      run: () => toggleEditorToolbar(),
+    }),
+    registerCommand({
       id: "palette.open",
       title: "Open command palette",
       description: "Search available application commands",
@@ -126,6 +143,71 @@ export function registerApplicationCommands({
       run: (context) => themeSwitcher?.open(context.opener),
     }),
     registerCommand({
+      id: "theme.import",
+      title: "Import custom theme",
+      description: "Import a theme from a JSON file",
+      isAvailable: () => typeof importThemeFromFile === "function",
+      unavailableReason: () => "Theme import is not available",
+      run: () => importThemeFromFile(),
+    }),
+    registerCommand({
+      id: "theme.toggleDarkLight",
+      title: "Toggle dark/light theme",
+      description: "Switch between dark and light built-in themes",
+      isAvailable: () => typeof toggleDarkLightTheme === "function",
+      unavailableReason: () => "Theme toggle is not available",
+      run: () => toggleDarkLightTheme(),
+    }),
+    registerCommand({
+      id: "settings.open",
+      title: "Open settings",
+      description: "Open the application settings panel",
+      isAvailable: () => Boolean(settingsPanel),
+      unavailableReason: () => "Settings panel is not available",
+      run: (context) => settingsPanel?.open(context.opener),
+    }),
+    registerCommand({
+      id: "japanese.startReview",
+      title: "Start Japanese review",
+      description: "Begin a Japanese SRS flashcard review session",
+      isAvailable: (context) => context.workspace === "japanese" && typeof startJapaneseReview === "function",
+      unavailableReason: (context) =>
+        context.workspace !== "japanese"
+          ? "Switch to Japanese workspace to start a review"
+          : "Review is not available",
+      run: () => startJapaneseReview(),
+    }),
+    registerCommand({
+      id: "japanese.quickStudy",
+      title: "Quick Study session",
+      description: "Start a time-boxed Quick Study session with 5 items",
+      isAvailable: (context) => context.workspace === "japanese" && typeof startQuickStudy === "function",
+      unavailableReason: (context) =>
+        context.workspace !== "japanese"
+          ? "Switch to Japanese workspace for Quick Study"
+          : "Quick Study is not available",
+      run: () => startQuickStudy(),
+    }),
+    registerCommand({
+      id: "japanese.openKanjiDraw",
+      title: "Open kanji drawing canvas",
+      description: "Open the kanji vector drawing canvas for the active note",
+      isAvailable: () => Boolean(activeNote()) && typeof openKanjiDraw === "function",
+      unavailableReason: () =>
+        !activeNote()
+          ? "No active note for kanji drawing"
+          : "Kanji drawing is not available",
+      run: () => openKanjiDraw(),
+    }),
+    registerCommand({
+      id: "japanese.setDailyGoal",
+      title: "Set daily study goal",
+      description: "Configure daily review and new items targets",
+      isAvailable: () => typeof openDailyGoalSettings === "function",
+      unavailableReason: () => "Daily goal settings are not available",
+      run: (context) => openDailyGoalSettings(context.opener),
+    }),
+    registerCommand({
       id: "notes.create",
       title: "New note",
       description: "Create an ordinary note",
@@ -137,7 +219,7 @@ export function registerApplicationCommands({
     registerCommand({
       id: "notes.daily",
       title: "Open daily note",
-      description: "Open or create today’s ordinary daily note",
+      description: "Open or create today's ordinary daily note",
       run: () => openDailyNote(),
     }),
     registerCommand({

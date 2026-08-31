@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="styles/command.css" />
     <link rel="stylesheet" href="styles/editor.css" />
     <link rel="stylesheet" href="styles/state-recovery.css" />
+    <link rel="stylesheet" href="styles/settings.css" />
+    <link rel="stylesheet" href="styles/onboarding.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -43,6 +45,7 @@
             </div>
           </div>
           <button id="refreshButton" class="shell-button" type="button">Refresh</button>
+          <button id="openSettingsButton" class="shell-button" type="button" aria-label="Open settings">Settings</button>
         </div>
       </header>
 
@@ -332,6 +335,98 @@
         <button id="applyThemeSwitcherButton" class="primary-button" type="button">Apply</button>
       </div>
     </dialog>
+
+    <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
+      <div class="settings-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button id="closeSettingsButton" class="secondary-button" type="button" aria-label="Close settings">Close</button>
+      </div>
+      <div class="settings-tab-bar" role="tablist" aria-label="Settings sections">
+        <button role="tab" data-settings-tab="general" aria-selected="true" aria-controls="settingsPanelGeneral" tabindex="0">General</button>
+        <button role="tab" data-settings-tab="themes" aria-selected="false" aria-controls="settingsPanelThemes" tabindex="-1">Themes</button>
+        <button role="tab" data-settings-tab="japanese" aria-selected="false" aria-controls="settingsPanelJapanese" tabindex="-1">Japanese Learning</button>
+      </div>
+      <div data-settings-panel="general" id="settingsPanelGeneral" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle">
+        <div class="settings-section">
+          <h3>Application</h3>
+          <p>myNote is a minimal local-first note application with Japanese study tools.</p>
+        </div>
+        <div class="settings-section">
+          <h3>View</h3>
+          <p>Toggle between list and grid views using the board header or press Ctrl+Shift+G.</p>
+        </div>
+      </div>
+      <div data-settings-panel="themes" id="settingsPanelThemes" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <h3>Theme Management</h3>
+            <button id="settingsImportThemeButton" class="secondary-button" type="button">Import theme…</button>
+          </div>
+          <p>Choose from built-in themes or import and manage custom themes.</p>
+        </div>
+        <div class="settings-section">
+          <h4>Built-in themes</h4>
+          <div class="settings-theme-list settings-builtin-themes" role="list"></div>
+        </div>
+        <div class="settings-section">
+          <h4>Custom themes</h4>
+          <div class="settings-theme-list settings-custom-themes" role="list"></div>
+        </div>
+        <div class="settings-section">
+          <h4>Typography preferences</h4>
+          <div class="settings-field">
+            <label for="settingsFontFamily">Primary font family</label>
+            <select id="settingsFontFamily">
+              <option value="system">System Default</option>
+              <option value="sans-serif">Sans-Serif</option>
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="settingsFontSize">Base font size</label>
+            <select id="settingsFontSize">
+              <option value="14">14px (Compact)</option>
+              <option value="16" selected>16px (Default)</option>
+              <option value="18">18px (Comfortable)</option>
+              <option value="20">20px (Large)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="settingsLineHeight">Line height</label>
+            <select id="settingsLineHeight">
+              <option value="1.4">1.4 (Tight)</option>
+              <option value="1.5" selected>1.5 (Standard)</option>
+              <option value="1.6">1.6 (Relaxed)</option>
+              <option value="1.8">1.8 (Spacious)</option>
+            </select>
+          </div>
+          <div class="settings-actions">
+            <button id="settingsSaveTypography" class="primary-button" type="button">Save typography</button>
+          </div>
+        </div>
+      </div>
+      <div data-settings-panel="japanese" id="settingsPanelJapanese" class="settings-panel" role="tabpanel" aria-labelledby="settingsTitle" hidden>
+        <div class="settings-section">
+          <h3>Daily study goals</h3>
+          <div class="settings-field">
+            <label for="settingsTargetReviews">Target reviews per day</label>
+            <input type="number" id="settingsTargetReviews" min="1" max="1000" value="50" />
+          </div>
+          <div class="settings-field">
+            <label for="settingsTargetNewItems">Target new items per day</label>
+            <input type="number" id="settingsTargetNewItems" min="0" max="1000" value="10" />
+          </div>
+          <div class="settings-actions">
+            <button id="settingsSaveGoals" class="primary-button" type="button">Save goals</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="onboardingTourContainer" hidden></div>
+
+    <input id="themeFileInput" type="file" accept=".json,application/json" hidden aria-hidden="true" />
 
     <button id="saveButton" type="button" hidden aria-hidden="true" tabindex="-1">Save</button>
     <script type="module" src="app.js"></script>
