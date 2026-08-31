@@ -168,13 +168,35 @@ export function createListView({ container, onSelect, onEmptyAction = () => {}, 
 
   function computeGridColumns(viewMode) {
     if (viewMode !== "grid") return 1;
+    if (typeof window !== "undefined" && window.getComputedStyle) {
+      // 1. Inspect existing rendered grid in container
+      const existingGrid = container.querySelector(".note-board-grid");
+      if (existingGrid) {
+        const template = window.getComputedStyle(existingGrid).gridTemplateColumns;
+        if (template && template !== "none") {
+          const cols = template.trim().split(/\s+/).filter(Boolean).length;
+          if (cols > 0) return cols;
+        }
+      }
+
+      // 2. If no grid is mounted yet, measure via a lightweight layout probe inheriting CSS styles
+      const probe = document.createElement("div");
+      probe.className = "note-board-grid";
+      probe.style.visibility = "hidden";
+      probe.style.position = "absolute";
+      probe.style.pointerEvents = "none";
+      container.append(probe);
+      const template = window.getComputedStyle(probe).gridTemplateColumns;
+      probe.remove();
+      if (template && template !== "none") {
+        const cols = template.trim().split(/\s+/).filter(Boolean).length;
+        if (cols > 0) return cols;
+      }
+    }
+
+    // Fallback if computed styles are unavailable (e.g. non-browser environment)
     const width = container.clientWidth || scrollOwner.clientWidth || 800;
-    const minCardWidth = 280;
-    const gap = 16;
-    const padding = 48;
-    const availableWidth = Math.max(0, width - padding);
-    const cols = Math.floor((availableWidth + gap) / (minCardWidth + gap));
-    return Math.max(1, cols);
+    return Math.max(1, Math.floor(width / 300));
   }
 
   function renderWindow() {

@@ -411,6 +411,14 @@ function createMockDomContainer() {
     },
   };
 
+  globalThis.window = {
+    getComputedStyle() {
+      return {
+        gridTemplateColumns: "300px 300px 300px",
+      };
+    },
+  };
+
   const container = createMockElement("div");
   return { container, listeners };
 }
