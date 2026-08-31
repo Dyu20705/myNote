@@ -118,7 +118,7 @@ body[data-workspace="japanese"] #activeNoteLabel {
 }
 
 .japanese-create-menu {
-  position: absolute;
+  grid-column: 1;
   z-index: 30;
   top: calc(100% + var(--mn-space-1));
   right: 0;
@@ -571,4 +571,83 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
 .japanese-filter-field :is(input, select)[aria-invalid="true"] {
   border: 3px double var(--mn-danger-border);
   box-shadow: 0 0 0 2px rgb(244 63 94 / 25%);
+}
+
+/* Flashcard 3D flip */
+.flashcard-container {
+  perspective: 1000px;
+  min-height: 200px;
+  margin: var(--mn-space-3) 0;
+}
+.flashcard {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  width: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flashcard.flipped {
+  transform: rotateY(180deg);
+}
+.flashcard-front, .flashcard-back {
+  width: 100%;
+  backface-visibility: hidden;
+  grid-column: 1;
+  grid-row: 1;
+  
+  background: var(--mn-surface-raised);
+  border: 1px solid var(--mn-border-default);
+  border-radius: var(--mn-radius-lg);
+  padding: var(--mn-space-4);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+.flashcard-back {
+  transform: rotateY(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .flashcard {
+    transition: none;
+  }
+}
+
+.daily-goal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mn-space-1);
+  padding: 2px var(--mn-space-2);
+  border-radius: var(--mn-radius-full, 9999px);
+  background: var(--mn-badge-bg, rgba(34, 197, 94, 0.15));
+  color: var(--mn-badge-text, rgb(22, 163, 74));
+  font-size: var(--mn-font-size-xs, 0.75rem);
+  font-weight: 600;
+  border: 1px solid var(--mn-badge-border, rgba(34, 197, 94, 0.3));
+}
+
+.daily-goal-badge[hidden] {
+  display: none !important;
+}
+
+.daily-goal-badge.celebration {
+  animation: goalCelebration 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes goalCelebration {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-goal-badge.celebration {
+    animation: none;
+  }
 }

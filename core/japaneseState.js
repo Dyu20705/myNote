@@ -161,9 +161,16 @@ function assertExactObject(input, fields) {
   }
 }
 
-function deriveDueQueue(notes, reviews, nowIso) {
+function validateLimit(limit) {
+  if (limit !== undefined && (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 0)) {
+    throw createInvalidStateInputError();
+  }
+}
+
+function deriveDueQueue(notes, reviews, nowIso, limit) {
+  validateLimit(limit);
   const { notesById, reviewsById, statusMap } = analyzeRecords(notes, reviews);
-  const queue = [];
+  let queue = [];
 
   for (const review of reviewsById.values()) {
     const note = notesById.get(review.noteId);
@@ -192,18 +199,23 @@ function deriveDueQueue(notes, reviews, nowIso) {
   return {
     notesById,
     reviewsById,
-    queue: queue.map(({ noteId, notebookType }) => ({ noteId, notebookType })),
+    queue: (limit !== undefined ? queue.slice(0, limit) : queue).map(({ noteId, notebookType }) => ({ noteId, notebookType })),
     ...finalizeStatus(statusMap),
   };
 }
 
 export function buildDueReviewQueue(input) {
   try {
-    assertExactObject(input, ["notes", "reviews", "nowIso"]);
+    if ("limit" in input) {
+      assertExactObject(input, ["notes", "reviews", "nowIso", "limit"]);
+      validateLimit(input.limit);
+    } else {
+      assertExactObject(input, ["notes", "reviews", "nowIso"]);
+    }
     if (!Array.isArray(input.notes) || !Array.isArray(input.reviews)) {
       throw createInvalidStateInputError();
     }
-    const result = deriveDueQueue(input.notes, input.reviews, input.nowIso);
+    const result = deriveDueQueue(input.notes, input.reviews, input.nowIso, input.limit);
     return {
       queue: result.queue,
       status: result.status,
@@ -285,13 +297,20 @@ export function selectWorkspace(state, workspace) {
 export function startReviewSession(state, input) {
   try {
     assertState(state);
-    assertExactObject(input, ["nowIso"]);
-    const result = buildDueReviewQueue({
+    const hasLimit = "limit" in input;
+    if (hasLimit) {
+      assertExactObject(input, ["nowIso", "limit"]);
+    } else {
+      assertExactObject(input, ["nowIso"]);
+    }
+    const buildInput = {
       notes: state.notes,
       reviews: state.studyReviews,
       nowIso: input.nowIso,
-    });
-    const queue = result.queue.map((item) => ({ ...item }));
+    };
+    if (hasLimit) buildInput.limit = input.limit;
+    const result = buildDueReviewQueue(buildInput);
+    let queue = result.queue.map((item) => ({ ...item }));
     return {
       ...state,
       studyStatus: result.status,

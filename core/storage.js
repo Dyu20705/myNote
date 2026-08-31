@@ -1,3 +1,5 @@
+import { updateGamificationState } from "./japaneseGamification.js";
+import { updateDailyGoalsState } from "./japaneseDailyGoals.js";
 import { validateKanjiInkEntry } from "./kanjiInkEntry.js";
 import { validateStudyReview } from "./studyReview.js";
 import { validateTheme } from "./theme/themeSchema.js";
@@ -244,9 +246,12 @@ export async function getStudyReviewFromDb(db, noteId) {
   return review === undefined ? undefined : validateStudyReview(review);
 }
 
-export async function putStudyReviewToDb(db, review) {
+export async function putStudyReviewToDb(db, review, reviewLog, isNewItem = false) {
   const validatedReview = validateStudyReview(review);
-  const tx = db.transaction(STORE_STUDY_REVIEWS, "readwrite");
+  const storeNames = reviewLog
+    ? [STORE_STUDY_REVIEWS, STORE_REVIEW_LOGS, STORE_SETTINGS]
+    : [STORE_STUDY_REVIEWS];
+  const tx = db.transaction(storeNames, "readwrite");
   const done = transactionDone(tx);
 
   try {
@@ -256,12 +261,36 @@ export async function putStudyReviewToDb(db, review) {
       throw createStudyReviewNotFoundError();
     }
     store.put(validatedReview);
+
+    if (reviewLog) {
+      if (typeof reviewLog.id !== "string" || reviewLog.id.length === 0) {
+        throw new TypeError("Invalid review log ID");
+      }
+      tx.objectStore(STORE_REVIEW_LOGS).add(reviewLog);
+
+      const settingsStore = tx.objectStore(STORE_SETTINGS);
+      const [gamificationRecord, dailyGoalsRecord] = await Promise.all([
+        requestResult(settingsStore.get("gamificationState")),
+        requestResult(settingsStore.get("japaneseDailyGoalsState")),
+      ]);
+
+      const currentGamiState = gamificationRecord ? gamificationRecord.value : null;
+      const nextGamiState = updateGamificationState(currentGamiState, reviewLog);
+      settingsStore.put({ key: "gamificationState", value: nextGamiState });
+
+      const currentGoalsState = dailyGoalsRecord ? dailyGoalsRecord.value : null;
+      const nextGoalsState = updateDailyGoalsState(currentGoalsState, reviewLog, isNewItem);
+      settingsStore.put({ key: "japaneseDailyGoalsState", value: nextGoalsState });
+    }
+
     await done;
   } catch (error) {
     await abortAndSettleTransaction(tx, done);
     throw error;
   }
 }
+
+export const commitV1ReviewTransaction = putStudyReviewToDb;
 
 export async function putJapaneseNoteWithReviewToDb(db, note, review) {
   const validatedReview = validateStudyReview(review);

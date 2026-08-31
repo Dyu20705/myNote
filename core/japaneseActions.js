@@ -51,12 +51,13 @@ function readDependencies(input) {
     history,
     createNote = createEmptyNote,
   } = input;
+  const persistReview = persist?.putReview || persist?.commitReview;
   if (typeof getState !== "function" || typeof setState !== "function"
     || typeof commandStack?.execute !== "function"
     || typeof persist?.createPair !== "function"
     || typeof persist?.deleteWithReview !== "function"
     || typeof persist?.restorePair !== "function"
-    || typeof persist?.putReview !== "function"
+    || typeof persistReview !== "function"
     || typeof persist?.putNote !== "function"
     || typeof persist?.deleteNote !== "function"
     || typeof derived?.upsert !== "function"
@@ -304,15 +305,31 @@ export function createJapaneseActions(input) {
   }
 
   async function rateReview(noteId, rating, nowIso) {
+    const gradeMap = { again: 1, hard: 2, good: 3, easy: 4 };
+    const numericGrade = typeof rating === "string" ? (gradeMap[rating.toLowerCase()] || 0) : 0;
+
     const state = getState();
     const previous = state.studyReviews.find((item) => item.noteId === noteId);
     if (!previous) {
       throw createInvalidActionsInputError();
     }
     const next = scheduleReview(previous, rating, nowIso);
+    const initialContext = contextFrom(state, { nowIso });
+    const reviewLog = {
+      id: `${noteId}-${nowIso}`,
+      cardId: noteId,
+      grade: numericGrade,
+      reviewedAt: nowIso,
+      localDate: initialContext.localDate,
+    };
+    const isNewItem = previous.status === "new" || previous.lastReviewedAt === null;
 
     try {
-      await persist.putReview(next);
+      if (typeof persist.putReview === "function") {
+        await persist.putReview(next, reviewLog, isNewItem);
+      } else {
+        await persist.commitReview(next, reviewLog, isNewItem);
+      }
     } catch (error) {
       setState((current) => ({
         reviewSession: {
@@ -344,8 +361,8 @@ export function createJapaneseActions(input) {
     return getState();
   }
 
-  function startReview(nowIso) {
-    setState((state) => startReviewSession(state, { nowIso }));
+  function startReview(nowIso, limit) {
+    setState((state) => startReviewSession(state, limit !== undefined ? { nowIso, limit } : { nowIso }));
     return getState();
   }
 

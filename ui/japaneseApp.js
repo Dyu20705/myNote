@@ -1,4 +1,5 @@
 import { createJapaneseActions } from "../core/japaneseActions.js";
+import { normalizeDailyGoalsState } from "../core/japaneseDailyGoals.js";
 import { JapaneseNoteFilter } from "../core/japaneseFilters.js";
 import { advanceReviewSession } from "../core/japaneseState.js";
 import { createJapaneseWorkspaceCoordinator } from "../core/japaneseWorkspaceCoordinator.js";
@@ -10,8 +11,11 @@ import {
   putNoteToDb,
   putStudyReviewToDb,
   restoreNoteWithReviewToDb,
+  getSettings,
+  putSettings,
 } from "../core/storage.js";
 import { createJapaneseFilterController } from "./japanese-filters.js";
+
 import { presentJapaneseReviewState } from "./statePresentation.js";
 
 function pad(value) {
@@ -209,8 +213,8 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       restorePair(note, review) {
         return restoreNoteWithReviewToDb(persistenceDatabase(), note, review);
       },
-      putReview(review) {
-        return putStudyReviewToDb(persistenceDatabase(), review);
+      putReview(review, reviewLog, isNewItem) {
+        return putStudyReviewToDb(persistenceDatabase(), review, reviewLog, isNewItem);
       },
       putNote(note) {
         return putNoteToDb(persistenceDatabase(), note);
@@ -247,6 +251,43 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   });
 
   function renderDashboard(state = store.getState()) {
+    if (state.workspace === "japanese") {
+      const db = state.db;
+      if (db) {
+        getSettings(db, "gamificationState").then(gamificationState => {
+          gamificationState = gamificationState || { xp: 0, streak: 0, achievements: [] };
+          const xpEl = document.getElementById("gamificationXp");
+          if (xpEl) xpEl.textContent = gamificationState.xp;
+          const streakEl = document.getElementById("gamificationStreak");
+          if (streakEl) streakEl.textContent = gamificationState.streak;
+          const achEl = document.getElementById("gamificationAchievements");
+          if (achEl) achEl.textContent = gamificationState.achievements.length;
+        }).catch(() => undefined);
+        
+        getSettings(db, "japaneseDailyGoalsState").then((rawDailyGoalsState) => {
+          const todayDate = currentContext().localDate;
+          const japaneseDailyGoalsState = normalizeDailyGoalsState(rawDailyGoalsState, todayDate);
+          const progressEl = document.getElementById("dailyGoalProgress");
+          const textEl = document.getElementById("dailyGoalText");
+          const badgeEl = document.getElementById("dailyGoalBadge");
+          if (progressEl && textEl) {
+            progressEl.value = japaneseDailyGoalsState.reviewsToday;
+            progressEl.max = japaneseDailyGoalsState.targetReviewsPerDay;
+            textEl.textContent = `${japaneseDailyGoalsState.reviewsToday} / ${japaneseDailyGoalsState.targetReviewsPerDay}`;
+            const goalReached = japaneseDailyGoalsState.targetReviewsPerDay > 0
+              && japaneseDailyGoalsState.reviewsToday >= japaneseDailyGoalsState.targetReviewsPerDay;
+            if (badgeEl) {
+              badgeEl.hidden = !goalReached;
+              if (goalReached) {
+                badgeEl.classList.add("celebration");
+              } else {
+                badgeEl.classList.remove("celebration");
+              }
+            }
+          }
+        }).catch(() => undefined);
+      }
+    }
     const japanese = state.workspace === "japanese";
     const archive = state.workspace === "archive";
     const unavailable = Boolean(state.studyDataUnavailable);
@@ -501,7 +542,13 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     elements.reviewComplete.hidden = !complete;
     elements.revealReview.hidden = complete;
     elements.reviewRatings.hidden = complete || !session.revealed;
-    elements.reviewContent.hidden = complete || !session.revealed;
+    if (!session.revealed) {
+      document.getElementById("flashcardElement")?.classList.remove("flipped");
+      document.getElementById("reviewContent").hidden = true;
+    } else {
+      document.getElementById("flashcardElement")?.classList.add("flipped");
+      document.getElementById("reviewContent").hidden = complete;
+    }
     if (complete) {
       elements.reviewProgress.textContent = "";
       elements.reviewStatus.textContent = "Review complete";
@@ -530,11 +577,11 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     }
   }
 
-  async function openReview(opener = elements.reviewEntry) {
+  async function openReview(opener = elements.reviewEntry, limit) {
     await coordinator.ready;
     reviewOpener = opener;
-    if (store.getState().reviewSession?.status !== "active") {
-      actions.startReview(currentContext().nowIso);
+    if (store.getState().reviewSession?.status !== "active" || limit !== undefined) {
+      actions.startReview(currentContext().nowIso, limit);
     }
     reviewPhase = "ready";
     renderReview();
@@ -557,8 +604,10 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     reviewPhase = "rating-pending";
     renderReview();
     for (const button of buttons) button.disabled = true;
+
     try {
-      await actions.rateReview(session.currentNoteId, rating, currentContext().nowIso);
+      const now = currentContext().nowIso;
+      await actions.rateReview(session.currentNoteId, rating, now);
       reviewPhase = "ready";
     } catch {
       reviewPhase = "rating-failed";
@@ -567,12 +616,31 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       for (const button of buttons) button.disabled = false;
     }
     renderReview();
-    if (failed) retryButton?.focus();
+    if (failed) {
+      retryButton?.focus();
+    } else {
+      const nextSession = store.getState().reviewSession;
+      if (nextSession?.status === "active") {
+        elements.revealReview.focus();
+      } else {
+        elements.closeReview.focus();
+      }
+    }
   }
 
   elements.startReview.addEventListener("click", () => {
     openReview(elements.startReview).catch(() => undefined);
   });
+  document.getElementById("quickStudy5Button")?.addEventListener("click", (e) => {
+    openReview(e.currentTarget, 5).catch(() => undefined);
+  });
+  document.getElementById("quickStudy10Button")?.addEventListener("click", (e) => {
+    openReview(e.currentTarget, 10).catch(() => undefined);
+  });
+  document.getElementById("quickStudy15Button")?.addEventListener("click", (e) => {
+    openReview(e.currentTarget, 15).catch(() => undefined);
+  });
+
   elements.reviewEntry.addEventListener("click", () => {
     openReview(elements.reviewEntry).catch(() => undefined);
   });
@@ -599,16 +667,75 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     });
   }
   elements.reviewDialog.addEventListener("keydown", (event) => {
-    if (!store.getState().reviewSession?.revealed) return;
-    const ratings = { "1": "again", "2": "hard", "3": "good", "4": "easy" };
-    const rating = ratings[event.key];
-    if (rating) {
+    const session = store.getState().reviewSession;
+    if (!session) return;
+    
+    if (!session.revealed && event.code === "Space") {
       event.preventDefault();
-      submitRating(rating).catch(() => undefined);
+      actions.revealReview();
+      renderReview();
+    elements.reviewRatings.querySelector("button")?.focus();
+      return;
+    }
+    
+    if (session.revealed) {
+      const ratings = { "1": "again", "2": "hard", "3": "good", "4": "easy" };
+      const rating = ratings[event.key];
+      if (rating) {
+        event.preventDefault();
+        submitRating(rating).catch(() => undefined);
+      }
     }
   });
 
   coordinator.ready.then(() => renderDashboard()).catch(() => undefined);
+
+  // Daily Goal Settings
+  const dailyGoalSettingsButton = document.getElementById("dailyGoalSettingsButton");
+  const dailyGoalSettingsDialog = document.getElementById("dailyGoalSettingsDialog");
+  const dailyGoalSettingsCancel = document.getElementById("dailyGoalSettingsCancel");
+  const dailyGoalSettingsForm = document.getElementById("dailyGoalSettingsForm");
+  const dailyGoalTargetInput = document.getElementById("dailyGoalTargetInput");
+  const dailyGoalNewItemsTargetInput = document.getElementById("dailyGoalNewItemsTargetInput");
+
+  if (dailyGoalSettingsButton && dailyGoalSettingsDialog) {
+    dailyGoalSettingsButton.addEventListener("click", async () => {
+      try {
+        const db = store.getState().db;
+        const state = await getSettings(db, "japaneseDailyGoalsState") || { targetReviewsPerDay: 50, targetNewItemsPerDay: 10 };
+        if (dailyGoalTargetInput) dailyGoalTargetInput.value = state.targetReviewsPerDay ?? 50;
+        if (dailyGoalNewItemsTargetInput) dailyGoalNewItemsTargetInput.value = state.targetNewItemsPerDay ?? 10;
+        dailyGoalSettingsDialog.showModal();
+      } catch {
+        // ignore
+      }
+    });
+
+    dailyGoalSettingsCancel?.addEventListener("click", () => {
+      dailyGoalSettingsDialog.close();
+    });
+
+    dailyGoalSettingsForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const newTarget = parseInt(dailyGoalTargetInput?.value, 10);
+      const newItemsTarget = parseInt(dailyGoalNewItemsTargetInput?.value, 10);
+      if (!Number.isNaN(newTarget) && newTarget > 0) {
+        try {
+          const db = store.getState().db;
+          const state = await getSettings(db, "japaneseDailyGoalsState") || { reviewsToday: 0, newItemsToday: 0 };
+          state.targetReviewsPerDay = newTarget;
+          if (!Number.isNaN(newItemsTarget) && newItemsTarget >= 0) {
+            state.targetNewItemsPerDay = newItemsTarget;
+          }
+          await putSettings(db, "japaneseDailyGoalsState", state);
+          dailyGoalSettingsDialog.close();
+          renderDashboard(); // refresh
+        } catch {
+          // ignore
+        }
+      }
+    });
+  }
 
   return {
     ready: coordinator.ready,
@@ -629,3 +756,4 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     },
   };
 }
+
