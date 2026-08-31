@@ -161,7 +161,14 @@ function assertExactObject(input, fields) {
   }
 }
 
+function validateLimit(limit) {
+  if (limit !== undefined && (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 0)) {
+    throw createInvalidStateInputError();
+  }
+}
+
 function deriveDueQueue(notes, reviews, nowIso, limit) {
+  validateLimit(limit);
   const { notesById, reviewsById, statusMap } = analyzeRecords(notes, reviews);
   let queue = [];
 
@@ -201,6 +208,7 @@ export function buildDueReviewQueue(input) {
   try {
     if ("limit" in input) {
       assertExactObject(input, ["notes", "reviews", "nowIso", "limit"]);
+      validateLimit(input.limit);
     } else {
       assertExactObject(input, ["notes", "reviews", "nowIso"]);
     }

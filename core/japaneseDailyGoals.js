@@ -23,18 +23,28 @@ export function updateDailyGoalsState(currentState, reviewLog, isNewItem) {
     lastProcessedLogId: currentState.lastProcessedLogId || null,
   };
 
-  if (reviewLog.id && nextState.lastProcessedLogId === reviewLog.id) {
+  if (reviewLog?.id && nextState.lastProcessedLogId === reviewLog.id) {
     return currentState;
   }
-  nextState.lastProcessedLogId = reviewLog.id;
+  if (reviewLog?.id) {
+    nextState.lastProcessedLogId = reviewLog.id;
+  }
 
-  const dateObj = new Date(reviewLog.reviewedAt);
-  const reviewDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-  
-  if (nextState.currentDate !== reviewDate) {
-    nextState.currentDate = reviewDate;
-    nextState.reviewsToday = 0;
-    nextState.newItemsToday = 0;
+  const reviewDate = typeof reviewLog?.localDate === "string" && reviewLog.localDate.length > 0
+    ? reviewLog.localDate
+    : (() => {
+        const dateObj = new Date(reviewLog?.reviewedAt);
+        return Number.isFinite(dateObj.getTime())
+          ? `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`
+          : null;
+      })();
+
+  if (reviewDate) {
+    if (nextState.currentDate !== reviewDate) {
+      nextState.currentDate = reviewDate;
+      nextState.reviewsToday = 0;
+      nextState.newItemsToday = 0;
+    }
   }
 
   nextState.reviewsToday += 1;

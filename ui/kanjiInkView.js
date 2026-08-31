@@ -293,12 +293,55 @@ function drawStrokes(context, strokes, width, height, inkColor = KANJI_PAPER_PAT
     context.moveTo(stroke.points[0].x * width, stroke.points[0].y * height);
     const ptCount = isLast ? Math.max(1, Math.floor(stroke.points.length * partialStrokeProgress)) : stroke.points.length;
     for (let j = 1; j < ptCount; j++) { context.lineTo(stroke.points[j].x * width, stroke.points[j].y * height); }
+
     context.stroke();
     context.restore();
     if (showGuidance && stroke.tool !== "eraser" && stroke.points.length > 0) {
-      context.fillStyle = "blue";
-      context.font = "14px sans-serif";
-      context.fillText((i + 1).toString(), stroke.points[0].x * width + 5, stroke.points[0].y * height - 5);
+      // Draw stroke numbering
+      context.fillStyle = "rgba(0, 100, 255, 0.8)";
+      context.font = "bold 16px sans-serif";
+      const startPt = stroke.points[0];
+      context.fillText((i + 1).toString(), startPt.x * width + 8, startPt.y * height - 8);
+
+      // Draw a circle at the start
+      context.beginPath();
+      context.arc(startPt.x * width, startPt.y * height, 4, 0, 2 * Math.PI);
+      context.fill();
+
+      // Draw an arrowhead at the end or middle to show direction
+      if (stroke.points.length > 3) {
+        const midIdx = Math.floor(stroke.points.length / 2);
+        const pt1 = stroke.points[midIdx - 1];
+        const pt2 = stroke.points[midIdx];
+        const angle = Math.atan2(pt2.y * height - pt1.y * height, pt2.x * width - pt1.x * width);
+        context.save();
+        context.translate(pt2.x * width, pt2.y * height);
+        context.rotate(angle);
+        context.beginPath();
+        context.moveTo(0, 0);
+        context.lineTo(-8, -5);
+        context.lineTo(-8, 5);
+        context.fill();
+        context.restore();
+      }
+
+      // Draw dashed connecting line to the NEXT stroke (air path)
+      if (i < strokes.length - 1) {
+        const nextStroke = normalizedStroke(strokes[i + 1]);
+        if (nextStroke.tool !== "eraser" && nextStroke.points?.length > 0) {
+          const endPt = stroke.points[stroke.points.length - 1];
+          const nextStartPt = nextStroke.points[0];
+          context.save();
+          context.beginPath();
+          context.setLineDash([4, 4]);
+          context.strokeStyle = "rgba(0, 100, 255, 0.4)";
+          context.lineWidth = 1;
+          context.moveTo(endPt.x * width, endPt.y * height);
+          context.lineTo(nextStartPt.x * width, nextStartPt.y * height);
+          context.stroke();
+          context.restore();
+        }
+      }
     }
     i++;
   }
@@ -788,20 +831,24 @@ elements.exportPng.addEventListener("click", async () => {
 });
 
 elements.replay.addEventListener("click", () => {
-  if (!controller || isReplaying || controller.snapshot().strokes.length === 0) return;
+  if (!controller || controller.snapshot().strokes.length === 0) return;
+  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (prefersReduced) {
+    isReplaying = false;
+    renderCanvas();
+    return;
+  }
   isReplaying = true;
   let progress = 0;
   const animate = () => {
-    progress += 0.02;
+    if (!isReplaying) return;
+    progress += 0.05;
     if (progress > 1.0) {
       isReplaying = false;
       renderCanvas();
       return;
     }
-    const width = elements.canvas.width;
-    const height = elements.canvas.height;
-    const context = elements.canvas.getContext("2d");
-    context.clearRect(0, 0, width, height);
+    const { context, width, height } = configureCanvas();
     drawPaper(context, width, height);
     drawStrokes(context, controller.snapshot().strokes, width, height, KANJI_PAPER_PATTERN.inkColor, progress);
     requestAnimationFrame(animate);
@@ -810,7 +857,9 @@ elements.replay.addEventListener("click", () => {
 });
 
 elements.guidance.addEventListener("click", () => {
+  isReplaying = false;
   showGuidance = !showGuidance;
+  elements.guidance.setAttribute("aria-pressed", showGuidance ? "true" : "false");
   renderCanvas();
 });
 
@@ -931,15 +980,18 @@ async function exportCurrentKanjiPng() {
   if (!controller) return null;
   const snapshot = controller.snapshot();
   if (snapshot.strokes.length === 0) return null;
-  const width = 1024;
-  const height = 1024;
+  const baseWidth = 1024;
+  const baseHeight = 1024;
+  const dpr = window.devicePixelRatio || 1;
   const offscreen = document.createElement("canvas");
-  offscreen.width = width;
-  offscreen.height = height;
+  offscreen.width = baseWidth * dpr;
+  offscreen.height = baseHeight * dpr;
   const context = offscreen.getContext("2d");
+  context.scale(dpr, dpr);
+
   // Transparent background
-  context.clearRect(0, 0, width, height);
-  drawStrokes(context, snapshot.strokes, width, height);
+  context.clearRect(0, 0, baseWidth, baseHeight);
+  drawStrokes(context, snapshot.strokes, baseWidth, baseHeight);
   
   return new Promise((resolve) => {
     offscreen.toBlob((blob) => {

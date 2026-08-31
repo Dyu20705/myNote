@@ -123,6 +123,24 @@ function readRawReviews(database) {
   });
 }
 
+function readRawSetting(database, key) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("settings", "readonly");
+    const request = transaction.objectStore("settings").get(key);
+    request.onsuccess = () => resolve(request.result?.value);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function readRawReviewLogs(database) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("reviewLogs", "readonly");
+    const request = transaction.objectStore("reviewLogs").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 function makePairedNote(id = VALID_REVIEW.noteId) {
   return {
     id,
@@ -560,5 +578,131 @@ describe("study review storage schema", { concurrency: false }, () => {
     }
     assert.deepEqual(await readRawNotes(database), beforeNotes);
     assert.deepEqual(await readRawReviews(database), beforeReviews);
+  });
+
+  describe("putStudyReviewToDb atomic transaction and gamification / daily goals integration", () => {
+    test("atomically commits study review, review log, gamification state, and daily goals", async () => {
+      const database = await openTestDatabase();
+      const initialReview = makeReview("atomic-note-1", { status: "new", lastReviewedAt: null, interval: 0 });
+      await putJapaneseNoteWithReviewToDb(database, makePairedNote("atomic-note-1"), initialReview);
+
+      const reviewLog = {
+        id: "log-1",
+        cardId: "atomic-note-1",
+        grade: 3, // Good -> +10 XP
+        reviewedAt: "2026-07-31T10:00:00.000Z",
+      };
+      const updatedReview = makeReview("atomic-note-1", {
+        status: "review",
+        lastReviewedAt: "2026-07-31T10:00:00.000Z",
+        interval: 1,
+      });
+
+      // Reviewing a new item
+      await putStudyReviewToDb(database, updatedReview, reviewLog, true);
+
+      const savedReview = await readRawReview(database, "atomic-note-1");
+      assert.equal(savedReview.status, "review");
+      assert.equal(savedReview.lastReviewedAt, "2026-07-31T10:00:00.000Z");
+
+      const logs = await readRawReviewLogs(database);
+      assert.equal(logs.length, 1);
+      assert.equal(logs[0].id, "log-1");
+
+      const gami = await readRawSetting(database, "gamificationState");
+      assert.equal(gami.xp, 10);
+      assert.equal(gami.streak, 1);
+      assert.equal(gami.lastReviewDate, "2026-07-31");
+
+      const goals = await readRawSetting(database, "japaneseDailyGoalsState");
+      assert.equal(goals.reviewsToday, 1);
+      assert.equal(goals.newItemsToday, 1);
+      assert.equal(goals.currentDate, "2026-07-31");
+    });
+
+    test("correctly increments reviewsToday but not newItemsToday for existing review items", async () => {
+      const database = await openTestDatabase();
+      const initialReview = makeReview("atomic-note-2", { status: "new", lastReviewedAt: null, interval: 0 });
+      await putJapaneseNoteWithReviewToDb(database, makePairedNote("atomic-note-2"), initialReview);
+
+      // First review (new item)
+      await putStudyReviewToDb(
+        database,
+        makeReview("atomic-note-2", { status: "review", lastReviewedAt: "2026-07-31T10:00:00.000Z", interval: 1 }),
+        { id: "log-2a", cardId: "atomic-note-2", grade: 4, reviewedAt: "2026-07-31T10:00:00.000Z" },
+        true,
+      );
+
+      // Second review (existing item)
+      await putStudyReviewToDb(
+        database,
+        makeReview("atomic-note-2", { status: "review", lastReviewedAt: "2026-07-31T12:00:00.000Z", interval: 2 }),
+        { id: "log-2b", cardId: "atomic-note-2", grade: 3, reviewedAt: "2026-07-31T12:00:00.000Z" },
+        false,
+      );
+
+      const goals = await readRawSetting(database, "japaneseDailyGoalsState");
+      assert.equal(goals.reviewsToday, 2);
+      assert.equal(goals.newItemsToday, 1);
+
+      const gami = await readRawSetting(database, "gamificationState");
+      assert.equal(gami.xp, 15 + 10); // Easy (15) + Good (10)
+    });
+
+    test("rolls back entire transaction on duplicate reviewLog id (ConstraintError)", async () => {
+      const database = await openTestDatabase();
+      const initialReview = makeReview("atomic-note-3", { status: "new", lastReviewedAt: null, interval: 0 });
+      await putJapaneseNoteWithReviewToDb(database, makePairedNote("atomic-note-3"), initialReview);
+
+      // First review succeeds
+      await putStudyReviewToDb(
+        database,
+        makeReview("atomic-note-3", { status: "review", lastReviewedAt: "2026-07-31T10:00:00.000Z", interval: 1 }),
+        { id: "log-dup", cardId: "atomic-note-3", grade: 4, reviewedAt: "2026-07-31T10:00:00.000Z" },
+        true,
+      );
+
+      const gamiBefore = await readRawSetting(database, "gamificationState");
+      const goalsBefore = await readRawSetting(database, "japaneseDailyGoalsState");
+      const reviewBefore = await readRawReview(database, "atomic-note-3");
+
+      // Attempt second review with identical reviewLog.id -> MUST throw ConstraintError and rollback
+      await assert.rejects(
+        () =>
+          putStudyReviewToDb(
+            database,
+            makeReview("atomic-note-3", { status: "review", lastReviewedAt: "2026-07-31T15:00:00.000Z", interval: 5 }),
+            { id: "log-dup", cardId: "atomic-note-3", grade: 4, reviewedAt: "2026-07-31T15:00:00.000Z" },
+            false,
+          ),
+      );
+
+      // Verify no partial mutations were persisted
+      const reviewAfter = await readRawReview(database, "atomic-note-3");
+      assert.deepEqual(reviewAfter, reviewBefore);
+      assert.deepEqual(await readRawSetting(database, "gamificationState"), gamiBefore);
+      assert.deepEqual(await readRawSetting(database, "japaneseDailyGoalsState"), goalsBefore);
+    });
+
+    test("rolls back and does not store log or gamification when study review is not found", async () => {
+      const database = await openTestDatabase();
+      const nonExistentReview = makeReview("non-existent-note");
+
+      await assert.rejects(
+        () =>
+          putStudyReviewToDb(
+            database,
+            nonExistentReview,
+            { id: "log-missing", cardId: "non-existent-note", grade: 3, reviewedAt: "2026-07-31T10:00:00.000Z" },
+            true,
+          ),
+        /Study review not found/,
+      );
+
+      const logs = await readRawReviewLogs(database);
+      assert.equal(logs.length, 0);
+      const gami = await readRawSetting(database, "gamificationState");
+      assert.equal(gami, undefined);
+    });
   });
 });

@@ -97,7 +97,7 @@ export class DailySession {
     const input = { grade, reviewedAt: now, durationMs };
     const { nextState, log } = schedule(reviewState, input, now);
     
-    const isNewItem = reviewState.state === 'new';
+    const isNewItem = reviewState.state === 'new' || reviewState.lastReviewAt === null;
     await commitReviewTransaction(this.db, nextState, log, isNewItem);
 
     this.pendingCards.shift();

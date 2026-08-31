@@ -19,7 +19,7 @@ export function updateGamificationState(currentState, reviewLog) {
   if (!currentState) {
     currentState = getInitialGamificationState();
   }
-  
+
   const nextState = {
     xp: currentState.xp || 0,
     streak: currentState.streak || 0,
@@ -28,39 +28,43 @@ export function updateGamificationState(currentState, reviewLog) {
     lastProcessedLogId: currentState.lastProcessedLogId || null,
   };
 
-  if (reviewLog.id && nextState.lastProcessedLogId === reviewLog.id) {
+  if (reviewLog?.id && nextState.lastProcessedLogId === reviewLog.id) {
     return currentState;
   }
-  nextState.lastProcessedLogId = reviewLog.id;
-  
-  const xp = XP_MAP[reviewLog.grade] || 0;
-  const dateObj = new Date(reviewLog.reviewedAt);
-  const reviewDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-
-  if (!nextState.lastReviewDate) {
-    nextState.streak = 1;
-  } else if (nextState.lastReviewDate !== reviewDate) {
-    const lastDate = new Date(nextState.lastReviewDate);
-    const currDate = new Date(reviewDate);
-    // Setting to midnight to avoid DST issues when calculating difference in days
-    lastDate.setUTCHours(0, 0, 0, 0);
-    currDate.setUTCHours(0, 0, 0, 0);
-    const diffDays = Math.round((currDate - lastDate) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 1) {
-      nextState.streak += 1;
-    } else if (diffDays === 2) {
-      // 24h grace window: streak is preserved but not incremented
-    } else if (diffDays > 2) {
-      // Streak broken
-      nextState.streak = 1;
-    }
+  if (reviewLog?.id) {
+    nextState.lastProcessedLogId = reviewLog.id;
   }
-  
-  nextState.lastReviewDate = reviewDate;
+
+  const xp = XP_MAP[reviewLog?.grade] || 0;
+  const reviewDate = typeof reviewLog?.localDate === "string" && reviewLog.localDate.length > 0
+    ? reviewLog.localDate
+    : (() => {
+        const dateObj = new Date(reviewLog?.reviewedAt);
+        return Number.isFinite(dateObj.getTime())
+          ? `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`
+          : null;
+      })();
+
+  if (reviewDate) {
+    if (!nextState.lastReviewDate) {
+      nextState.streak = 1;
+    } else if (nextState.lastReviewDate !== reviewDate) {
+      const lastTime = Date.parse(`${nextState.lastReviewDate}T00:00:00.000Z`);
+      const currTime = Date.parse(`${reviewDate}T00:00:00.000Z`);
+      const diffDays = Math.round((currTime - lastTime) / 86400000);
+
+      if (diffDays === 1) {
+        nextState.streak += 1;
+      } else if (diffDays > 1) {
+        nextState.streak = 1;
+      }
+    }
+    nextState.lastReviewDate = reviewDate;
+  }
+
   nextState.xp += xp;
-  
-  // Achievements (simple rule-based)
+
+  // Achievements unlocking
   if (nextState.streak >= 3 && !nextState.achievements.includes("3_day_streak")) {
     nextState.achievements.push("3_day_streak");
   }

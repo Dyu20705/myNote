@@ -610,3 +610,40 @@ body[data-workspace="japanese"] :where(.title-input, .content-input) {
     transition: none;
   }
 }
+
+.daily-goal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mn-space-1);
+  padding: 2px var(--mn-space-2);
+  border-radius: var(--mn-radius-full, 9999px);
+  background: var(--mn-badge-bg, rgba(34, 197, 94, 0.15));
+  color: var(--mn-badge-text, rgb(22, 163, 74));
+  font-size: var(--mn-font-size-xs, 0.75rem);
+  font-weight: 600;
+  border: 1px solid var(--mn-badge-border, rgba(34, 197, 94, 0.3));
+}
+
+.daily-goal-badge.celebration {
+  animation: goalCelebration 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes goalCelebration {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-goal-badge.celebration {
+    animation: none;
+  }
+}

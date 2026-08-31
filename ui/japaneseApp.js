@@ -14,8 +14,6 @@ import {
   putSettings,
 } from "../core/storage.js";
 import { createJapaneseFilterController } from "./japanese-filters.js";
-import { updateGamificationState } from "../core/japaneseGamification.js";
-import { updateDailyGoalsState } from "../core/japaneseDailyGoals.js";
 
 import { presentJapaneseReviewState } from "./statePresentation.js";
 
@@ -214,8 +212,8 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       restorePair(note, review) {
         return restoreNoteWithReviewToDb(persistenceDatabase(), note, review);
       },
-      putReview(review) {
-        return putStudyReviewToDb(persistenceDatabase(), review);
+      putReview(review, reviewLog, isNewItem) {
+        return putStudyReviewToDb(persistenceDatabase(), review, reviewLog, isNewItem);
       },
       putNote(note) {
         return putNoteToDb(persistenceDatabase(), note);
@@ -263,18 +261,29 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
           if (streakEl) streakEl.textContent = gamificationState.streak;
           const achEl = document.getElementById("gamificationAchievements");
           if (achEl) achEl.textContent = gamificationState.achievements.length;
-        }).catch(e => console.error(e));
+        }).catch(() => undefined);
         
-        getSettings(db, "japaneseDailyGoalsState").then(japaneseDailyGoalsState => {
+        getSettings(db, "japaneseDailyGoalsState").then((japaneseDailyGoalsState) => {
           japaneseDailyGoalsState = japaneseDailyGoalsState || { reviewsToday: 0, targetReviewsPerDay: 50 };
           const progressEl = document.getElementById("dailyGoalProgress");
           const textEl = document.getElementById("dailyGoalText");
+          const badgeEl = document.getElementById("dailyGoalBadge");
           if (progressEl && textEl) {
             progressEl.value = japaneseDailyGoalsState.reviewsToday;
             progressEl.max = japaneseDailyGoalsState.targetReviewsPerDay;
-            textEl.textContent = japaneseDailyGoalsState.reviewsToday + " / " + japaneseDailyGoalsState.targetReviewsPerDay;
+            textEl.textContent = `${japaneseDailyGoalsState.reviewsToday} / ${japaneseDailyGoalsState.targetReviewsPerDay}`;
+            const goalReached = japaneseDailyGoalsState.targetReviewsPerDay > 0
+              && japaneseDailyGoalsState.reviewsToday >= japaneseDailyGoalsState.targetReviewsPerDay;
+            if (badgeEl) {
+              badgeEl.hidden = !goalReached;
+              if (goalReached) {
+                badgeEl.classList.add("celebration");
+              } else {
+                badgeEl.classList.remove("celebration");
+              }
+            }
           }
-        }).catch(e => console.error(e));
+        }).catch(() => undefined);
       }
     }
     const japanese = state.workspace === "japanese";
@@ -566,11 +575,11 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     }
   }
 
-  async function openReview(opener = elements.reviewEntry) {
+  async function openReview(opener = elements.reviewEntry, limit) {
     await coordinator.ready;
     reviewOpener = opener;
-    if (store.getState().reviewSession?.status !== "active") {
-      actions.startReview(currentContext().nowIso);
+    if (store.getState().reviewSession?.status !== "active" || limit !== undefined) {
+      actions.startReview(currentContext().nowIso, limit);
     }
     reviewPhase = "ready";
     renderReview();
@@ -597,30 +606,7 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
     try {
       const now = currentContext().nowIso;
       await actions.rateReview(session.currentNoteId, rating, now);
-      
-      const db = store.getState().db;
-      if (db) {
-        const logId = session.currentNoteId + "-" + Date.now();
-        const gradeMap = { again: 1, hard: 2, good: 3, easy: 4 };
-        const gradeStr = typeof rating === "string" ? rating.toLowerCase() : "";
-        const numericGrade = gradeMap[gradeStr] || 4;
-        const reviewLog = { id: logId, grade: numericGrade, reviewedAt: now };
-        
-        try {
-          let gamificationState = await getSettings(db, "gamificationState") || { xp: 0, streak: 0, achievements: [] };
-        gamificationState = updateGamificationState(gamificationState, reviewLog);
-        await putSettings(db, "gamificationState", gamificationState);
-        
-        let dailyGoalsState = await getSettings(db, "japaneseDailyGoalsState") || { reviewsToday: 0, targetReviewsPerDay: 50 };
-        dailyGoalsState = updateDailyGoalsState(dailyGoalsState, reviewLog, false);
-        await putSettings(db, "japaneseDailyGoalsState", dailyGoalsState);
-        } catch (err) {
-          console.error("GAMIFICATION ERROR:", err);
-        }
-      }
-      
       reviewPhase = "ready";
-
     } catch {
       reviewPhase = "rating-failed";
       failed = true;
@@ -628,26 +614,29 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
       for (const button of buttons) button.disabled = false;
     }
     renderReview();
-    if (failed) retryButton?.focus();
+    if (failed) {
+      retryButton?.focus();
+    } else {
+      const nextSession = store.getState().reviewSession;
+      if (nextSession?.status === "active") {
+        elements.revealReview.focus();
+      } else {
+        elements.closeReview.focus();
+      }
+    }
   }
 
   elements.startReview.addEventListener("click", () => {
     openReview(elements.startReview).catch(() => undefined);
   });
-  document.getElementById("quickStudy5Button")?.addEventListener("click", () => {
-    actions.startReview(currentContext().nowIso, 5);
-    renderReview();
-    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
+  document.getElementById("quickStudy5Button")?.addEventListener("click", (e) => {
+    openReview(e.currentTarget, 5).catch(() => undefined);
   });
-  document.getElementById("quickStudy10Button")?.addEventListener("click", () => {
-    actions.startReview(currentContext().nowIso, 10);
-    renderReview();
-    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
+  document.getElementById("quickStudy10Button")?.addEventListener("click", (e) => {
+    openReview(e.currentTarget, 10).catch(() => undefined);
   });
-  document.getElementById("quickStudy15Button")?.addEventListener("click", () => {
-    actions.startReview(currentContext().nowIso, 15);
-    renderReview();
-    if (!elements.reviewDialog.open) elements.reviewDialog.showModal();
+  document.getElementById("quickStudy15Button")?.addEventListener("click", (e) => {
+    openReview(e.currentTarget, 15).catch(() => undefined);
   });
 
   elements.reviewEntry.addEventListener("click", () => {
