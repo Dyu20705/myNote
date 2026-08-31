@@ -34,7 +34,7 @@ const TOUR_STEPS = Object.freeze([
   {
     target: "#newNoteButton",
     title: "Start creating",
-    content: "Create your first note with rich Markdown formatting, task lists, and tags. Welcome to myNote!",
+    content: "Create your first note with Markdown styling, task lists, and tags. Welcome to myNote!",
     position: "bottom",
   },
 ]);
