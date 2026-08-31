@@ -1,4 +1,5 @@
 import { createJapaneseActions } from "../core/japaneseActions.js";
+import { normalizeDailyGoalsState } from "../core/japaneseDailyGoals.js";
 import { JapaneseNoteFilter } from "../core/japaneseFilters.js";
 import { advanceReviewSession } from "../core/japaneseState.js";
 import { createJapaneseWorkspaceCoordinator } from "../core/japaneseWorkspaceCoordinator.js";
@@ -263,8 +264,9 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
           if (achEl) achEl.textContent = gamificationState.achievements.length;
         }).catch(() => undefined);
         
-        getSettings(db, "japaneseDailyGoalsState").then((japaneseDailyGoalsState) => {
-          japaneseDailyGoalsState = japaneseDailyGoalsState || { reviewsToday: 0, targetReviewsPerDay: 50 };
+        getSettings(db, "japaneseDailyGoalsState").then((rawDailyGoalsState) => {
+          const todayDate = currentContext().localDate;
+          const japaneseDailyGoalsState = normalizeDailyGoalsState(rawDailyGoalsState, todayDate);
           const progressEl = document.getElementById("dailyGoalProgress");
           const textEl = document.getElementById("dailyGoalText");
           const badgeEl = document.getElementById("dailyGoalBadge");
@@ -694,36 +696,42 @@ export function createJapaneseApp({ runtime, document = globalThis.document }) {
   const dailyGoalSettingsCancel = document.getElementById("dailyGoalSettingsCancel");
   const dailyGoalSettingsForm = document.getElementById("dailyGoalSettingsForm");
   const dailyGoalTargetInput = document.getElementById("dailyGoalTargetInput");
+  const dailyGoalNewItemsTargetInput = document.getElementById("dailyGoalNewItemsTargetInput");
 
   if (dailyGoalSettingsButton && dailyGoalSettingsDialog) {
     dailyGoalSettingsButton.addEventListener("click", async () => {
       try {
         const db = store.getState().db;
-        const state = await getSettings(db, "japaneseDailyGoalsState") || { targetReviewsPerDay: 50 };
-        dailyGoalTargetInput.value = state.targetReviewsPerDay;
+        const state = await getSettings(db, "japaneseDailyGoalsState") || { targetReviewsPerDay: 50, targetNewItemsPerDay: 10 };
+        if (dailyGoalTargetInput) dailyGoalTargetInput.value = state.targetReviewsPerDay ?? 50;
+        if (dailyGoalNewItemsTargetInput) dailyGoalNewItemsTargetInput.value = state.targetNewItemsPerDay ?? 10;
         dailyGoalSettingsDialog.showModal();
-      } catch (e) {
-        console.error(e);
+      } catch {
+        // ignore
       }
     });
-    
-    dailyGoalSettingsCancel.addEventListener("click", () => {
+
+    dailyGoalSettingsCancel?.addEventListener("click", () => {
       dailyGoalSettingsDialog.close();
     });
-    
-    dailyGoalSettingsForm.addEventListener("submit", async (e) => {
+
+    dailyGoalSettingsForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const newTarget = parseInt(dailyGoalTargetInput.value, 10);
-      if (!isNaN(newTarget) && newTarget > 0) {
+      const newTarget = parseInt(dailyGoalTargetInput?.value, 10);
+      const newItemsTarget = parseInt(dailyGoalNewItemsTargetInput?.value, 10);
+      if (!Number.isNaN(newTarget) && newTarget > 0) {
         try {
           const db = store.getState().db;
           const state = await getSettings(db, "japaneseDailyGoalsState") || { reviewsToday: 0, newItemsToday: 0 };
           state.targetReviewsPerDay = newTarget;
+          if (!Number.isNaN(newItemsTarget) && newItemsTarget >= 0) {
+            state.targetNewItemsPerDay = newItemsTarget;
+          }
           await putSettings(db, "japaneseDailyGoalsState", state);
           dailyGoalSettingsDialog.close();
           renderDashboard(); // refresh
-        } catch (err) {
-          console.error(err);
+        } catch {
+          // ignore
         }
       }
     });

@@ -95,21 +95,64 @@ test.describe("Epic 133 Features", () => {
     await expect(page.locator("#gamificationStreak")).toHaveText("1");
     await expect(page.locator("#dailyGoalText")).toHaveText("4 / 4");
     await expect(page.locator("#dailyGoalBadge")).toBeVisible();
+
+    // Test day rollover without review:
+    // When yesterday's state is stored in DB, opening on a new day resets the UI view
+    await page.evaluate(async () => {
+      const openReq = globalThis.indexedDB.open("myNoteDB");
+      const db = await new Promise((res, rej) => {
+        openReq.onsuccess = () => res(openReq.result);
+        openReq.onerror = () => rej(openReq.error);
+      });
+      const tx = db.transaction(["settings"], "readwrite");
+      const store = tx.objectStore("settings");
+      store.put({
+        key: "japaneseDailyGoalsState",
+        value: {
+          currentDate: "2020-01-01",
+          reviewsToday: 4,
+          newItemsToday: 4,
+          targetReviewsPerDay: 4,
+          targetNewItemsPerDay: 2,
+          lastProcessedLogId: "test-log",
+        },
+      });
+      await new Promise((res, rej) => {
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+      });
+      db.close();
+    });
+
+    await page.reload();
+    await page.locator("#japaneseWorkspaceButton").click();
+    await openJapaneseStudyDetails(page);
+
+    // On new day without reviews, progress is 0 / 4 and celebration badge is hidden
+    await expect(page.locator("#dailyGoalProgress")).toHaveAttribute("value", "0");
+    await expect(page.locator("#dailyGoalText")).toHaveText("0 / 4");
+    await expect(page.locator("#dailyGoalBadge")).toBeHidden();
   });
 
   test("Kanji canvas guidance, bounds, and export behaviors", async ({ page }) => {
+    test.setTimeout(60000);
     await page.goto("/");
     await page.locator("#japaneseWorkspaceButton").click();
 
     await createJapaneseNoteFromMenu(page, "Vocabulary");
     await page.locator("#titleInput").fill("Kanji Draw Bounds");
-    await page.locator("#saveState").waitFor({ state: "visible" });
+    await page.locator("#contentInput").press("Control+Enter");
+    await expect(page.locator("#saveState")).toHaveText("Saved");
+    await closeNoteEditor(page);
+
+    await page.locator("#noteList .note-item").first().click();
+    await expect(page.locator("#noteEditorOverlay")).toBeVisible();
 
     await page.locator("#noteActionsButton").click();
     await page.getByRole("menuitem", { name: /Add drawing/ }).click();
 
     const dialog = page.locator("#kanjiInkDialog");
-    await dialog.waitFor({ state: "visible" });
+    await expect(dialog).toBeVisible();
 
     const canvas = page.locator("#kanjiInkCanvas");
     const box = await canvas.boundingBox();
@@ -127,10 +170,10 @@ test.describe("Epic 133 Features", () => {
     await page.locator("#replayKanjiButton").click();
     await page.waitForTimeout(100);
 
-    // Test Guidance Button changes visual behavior
-    // We expect turning guidance ON causes text or blue colors to be drawn
-    // We can evaluate canvas image data
+    // Test Guidance Button changes visual behavior and accessibility state
+    await expect(page.locator("#guidanceKanjiButton")).toHaveAttribute("aria-pressed", "false");
     await page.locator("#guidanceKanjiButton").click();
+    await expect(page.locator("#guidanceKanjiButton")).toHaveAttribute("aria-pressed", "true");
 
     const guidanceHasBlue = await page.evaluate(() => {
       const cvs = globalThis.document.getElementById("kanjiInkCanvas");
@@ -143,6 +186,10 @@ test.describe("Epic 133 Features", () => {
       return hasBlue;
     });
     expect(guidanceHasBlue).toBe(true);
+
+    // Toggle guidance off
+    await page.locator("#guidanceKanjiButton").click();
+    await expect(page.locator("#guidanceKanjiButton")).toHaveAttribute("aria-pressed", "false");
 
     // Test export PNG
     const [download] = await Promise.all([

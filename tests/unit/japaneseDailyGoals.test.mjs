@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { getInitialDailyGoalsState, updateDailyGoalsState } from "../../core/japaneseDailyGoals.js";
+import {
+  getInitialDailyGoalsState,
+  normalizeDailyGoalsState,
+  updateDailyGoalsState,
+} from "../../core/japaneseDailyGoals.js";
 
 describe("Daily Goals", () => {
   it("uses default configuration for targets", () => {
@@ -60,5 +64,51 @@ describe("Daily Goals", () => {
     state = updateDailyGoalsState(state, { id: "1", reviewedAt: "2023-10-01T23:30:00Z", localDate: "2023-10-02" }, true);
     assert.equal(state.currentDate, "2023-10-02");
     assert.equal(state.reviewsToday, 1);
+  });
+
+  describe("normalizeDailyGoalsState", () => {
+    it("returns initial state when passed null/undefined", () => {
+      const normalized = normalizeDailyGoalsState(null, "2026-09-01");
+      assert.equal(normalized.currentDate, "2026-09-01");
+      assert.equal(normalized.reviewsToday, 0);
+      assert.equal(normalized.newItemsToday, 0);
+      assert.equal(normalized.targetReviewsPerDay, 50);
+      assert.equal(normalized.targetNewItemsPerDay, 10);
+    });
+
+    it("preserves counters when currentDate matches todayDate", () => {
+      const state = {
+        currentDate: "2026-08-31",
+        reviewsToday: 4,
+        newItemsToday: 2,
+        targetReviewsPerDay: 4,
+        targetNewItemsPerDay: 2,
+        lastProcessedLogId: "log-1",
+      };
+      const normalized = normalizeDailyGoalsState(state, "2026-08-31");
+      assert.equal(normalized.currentDate, "2026-08-31");
+      assert.equal(normalized.reviewsToday, 4);
+      assert.equal(normalized.newItemsToday, 2);
+      assert.equal(normalized.lastProcessedLogId, "log-1");
+    });
+
+    it("resets counters to 0 on new day without any reviews yet", () => {
+      const state = {
+        currentDate: "2026-08-31",
+        reviewsToday: 4,
+        newItemsToday: 4,
+        targetReviewsPerDay: 4,
+        targetNewItemsPerDay: 2,
+        lastProcessedLogId: "log-1",
+      };
+      // User opens app on September 1st with 0 reviews
+      const normalized = normalizeDailyGoalsState(state, "2026-09-01");
+      assert.equal(normalized.currentDate, "2026-09-01");
+      assert.equal(normalized.reviewsToday, 0);
+      assert.equal(normalized.newItemsToday, 0);
+      assert.equal(normalized.targetReviewsPerDay, 4);
+      assert.equal(normalized.targetNewItemsPerDay, 2);
+      assert.equal(normalized.lastProcessedLogId, "log-1");
+    });
   });
 });

@@ -147,6 +147,7 @@ const elements = {
   exportPng: document.getElementById("exportKanjiPngButton"),
 };
 if (Object.values(elements).some((element) => !element)) throw new Error("KANJI_INK_UI_MISSING_CONTROL");
+elements.guidance.setAttribute("aria-pressed", "false");
 
 let controller = null;
 let dialogOpener = null;

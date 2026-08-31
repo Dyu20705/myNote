@@ -9,27 +9,36 @@ export function getInitialDailyGoalsState() {
   };
 }
 
-export function updateDailyGoalsState(currentState, reviewLog, isNewItem) {
-  if (!currentState) {
-    currentState = getInitialDailyGoalsState();
+export function normalizeDailyGoalsState(state, todayDate) {
+  if (!state) {
+    state = getInitialDailyGoalsState();
+  }
+  const targetReviewsPerDay = state.targetReviewsPerDay ?? 50;
+  const targetNewItemsPerDay = state.targetNewItemsPerDay ?? 10;
+  const lastProcessedLogId = state.lastProcessedLogId || null;
+
+  if (!todayDate || state.currentDate === todayDate) {
+    return {
+      targetReviewsPerDay,
+      targetNewItemsPerDay,
+      currentDate: state.currentDate || todayDate || null,
+      reviewsToday: state.reviewsToday || 0,
+      newItemsToday: state.newItemsToday || 0,
+      lastProcessedLogId,
+    };
   }
 
-  const nextState = {
-    targetReviewsPerDay: currentState.targetReviewsPerDay ?? 50,
-    targetNewItemsPerDay: currentState.targetNewItemsPerDay ?? 10,
-    currentDate: currentState.currentDate || null,
-    reviewsToday: currentState.reviewsToday || 0,
-    newItemsToday: currentState.newItemsToday || 0,
-    lastProcessedLogId: currentState.lastProcessedLogId || null,
+  return {
+    targetReviewsPerDay,
+    targetNewItemsPerDay,
+    currentDate: todayDate,
+    reviewsToday: 0,
+    newItemsToday: 0,
+    lastProcessedLogId,
   };
+}
 
-  if (reviewLog?.id && nextState.lastProcessedLogId === reviewLog.id) {
-    return currentState;
-  }
-  if (reviewLog?.id) {
-    nextState.lastProcessedLogId = reviewLog.id;
-  }
-
+export function updateDailyGoalsState(currentState, reviewLog, isNewItem) {
   const reviewDate = typeof reviewLog?.localDate === "string" && reviewLog.localDate.length > 0
     ? reviewLog.localDate
     : (() => {
@@ -39,18 +48,18 @@ export function updateDailyGoalsState(currentState, reviewLog, isNewItem) {
           : null;
       })();
 
-  if (reviewDate) {
-    if (nextState.currentDate !== reviewDate) {
-      nextState.currentDate = reviewDate;
-      nextState.reviewsToday = 0;
-      nextState.newItemsToday = 0;
-    }
+  const baseState = normalizeDailyGoalsState(currentState, reviewDate);
+
+  if (reviewLog?.id && baseState.lastProcessedLogId === reviewLog.id) {
+    return currentState;
   }
 
-  nextState.reviewsToday += 1;
-  if (isNewItem) {
-    nextState.newItemsToday += 1;
-  }
+  const nextState = {
+    ...baseState,
+    lastProcessedLogId: reviewLog?.id || baseState.lastProcessedLogId,
+    reviewsToday: baseState.reviewsToday + 1,
+    newItemsToday: isNewItem ? baseState.newItemsToday + 1 : baseState.newItemsToday,
+  };
 
   return nextState;
 }
